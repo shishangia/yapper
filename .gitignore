@@ -1,0 +1,61 @@
+# Xcode
+build/
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+
+# Swift Package Manager
+.swiftpm/
+.build/
+Packages/
+
+# Distribution
+dist/
+*.dmg
+*.zip
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Logs
+*.log
+
+# Code coverage / profiling artifacts
+*.profraw
+*.profdata
+
+# Temporary files
+*.swp
+*.tmp
+*~
+
+# Cursor
+.cursor/
+
+# Agent / Codex tooling
+.agents/
+.codex/
+.claude/
+.trae/
+
+# App-specific
+*.app
+
+# Private local artifacts
+*.xcresult/
+*.wav
+*.m4a
+*.opus
+*.mp3
+*.mlmodelc/
+*.safetensors
+*.p12
+*.mobileprovision
+.env
+.env.*
+Config.xcconfig
+local-signing.xcconfig

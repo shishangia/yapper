@@ -1,0 +1,23 @@
+name: Build and test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: xcodebuild -project Yapper.xcodeproj -scheme Yapper -configuration Debug build CODE_SIGNING_ALLOWED=NO
+      - name: Unit tests
+        run: xcodebuild test -project Yapper.xcodeproj -scheme Yapper -configuration Debug -destination 'platform=macOS' -only-testing:YapperTests -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO

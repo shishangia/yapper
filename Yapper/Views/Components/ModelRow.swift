@@ -1,0 +1,216 @@
+import SwiftUI
+
+/// Model details and explicit download, selection, and removal actions.
+struct ModelRow: View {
+    let model: AIModel
+    @Binding var selectedModel: String
+    var isRecommended: Bool = false
+
+    @ObservedObject var downloadService = ModelDownloadService.shared
+    private var transcription: TranscriptionManager { TranscriptionManager.shared }
+
+    @State private var isLoadingModel = false
+    @State private var isDeletingModel = false
+    @State private var showingDeleteConfirmation = false
+    @State private var loadError: String?
+    @State private var loadingStartTime: Date?
+
+    var progress: Double { downloadService.downloadProgress[model.variant] ?? 0 }
+    var isDownloading: Bool { downloadService.isDownloading[model.variant] ?? false }
+    var isDownloaded: Bool { progress >= 1 }
+    var isActive: Bool { selectedModel == model.variant }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 16) {
+                    modelSummary
+                    Spacer(minLength: 12)
+                    actions.fixedSize()
+                }
+                VStack(alignment: .leading, spacing: 12) {
+                    modelSummary
+                    actions
+                }
+            }
+
+            if let warning = model.ramWarning(deviceRAMGB: WhisperService.deviceRAMGB) {
+                note(icon: "exclamationmark.triangle", text: warning, tint: .accentWarning)
+            }
+            if let error = loadError ?? downloadService.downloadError[model.variant] {
+                note(icon: "exclamationmark.circle", text: error, tint: .accentError)
+            }
+            if isLoadingModel { loadingIndicator }
+            if isDownloading { downloadProgressSection }
+        }
+        .padding(16)
+        .background(Color.bgCard)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(isActive ? Color.accentPrimary : Color.border, lineWidth: 1)
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("model.\(model.variant)")
+        .confirmationDialog("Delete \(model.name)?", isPresented: $showingDeleteConfirmation) {
+            Button("Delete Model", role: .destructive, action: deleteModel)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes the downloaded model, not your recordings or transcripts. You can download it again.\(isActive ? " Your dictation model selection will be cleared." : "")")
+        }
+    }
+
+    private var modelSummary: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(model.name)
+                .font(Typography.modelName)
+                .foregroundStyle(Color.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(model.details)
+                .font(Typography.bodySmall)
+                .foregroundStyle(Color.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text("\(model.size) download · \(model.languageSupportLabel)")
+                .font(Typography.caption)
+                .foregroundStyle(Color.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if isActive {
+                Label(isDownloaded ? "Selected for dictation" : "Selected · download needed", systemImage: "checkmark.circle.fill")
+                    .font(Typography.labelSmall)
+                    .foregroundStyle(Color.accentPrimary)
+            } else if isRecommended {
+                Text("Suggested for this Mac")
+                    .font(Typography.labelSmall)
+                    .foregroundStyle(Color.accentPrimary)
+            } else if isDownloaded {
+                Text("Downloaded")
+                    .font(Typography.caption)
+                    .foregroundStyle(Color.textSecondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var actions: some View {
+        HStack(spacing: 8) {
+            if isDownloaded {
+                if !isActive {
+                    Button("Use", action: loadAndSelectModel)
+                        .buttonStyle(.stSecondary)
+                        .disabled(isLoadingModel || isDeletingModel)
+                        .help("Use \(model.name) for dictation")
+                        .accessibilityLabel("Use \(model.name) for dictation")
+                        .accessibilityIdentifier("model.use.\(model.variant)")
+                }
+                Button {
+                    showingDeleteConfirmation = true
+                } label: {
+                    Image(systemName: "trash")
+                        .frame(width: 16, height: 18)
+                }
+                .buttonStyle(.stGhost)
+                .disabled(isLoadingModel || isDeletingModel)
+                .help("Delete \(model.name)")
+                .accessibilityLabel("Delete \(model.name)")
+                .accessibilityIdentifier("model.delete.\(model.variant)")
+            } else if isDownloading {
+                Button("Cancel") {
+                    downloadService.cancelDownload(for: model.variant)
+                }
+                .buttonStyle(.stSecondary)
+                .accessibilityLabel("Cancel \(model.name) download")
+                .accessibilityIdentifier("model.cancel.\(model.variant)")
+            } else {
+                Button {
+                    loadError = nil
+                    downloadService.downloadModel(variant: model.variant)
+                } label: {
+                    Label("Download", systemImage: "arrow.down")
+                }
+                .buttonStyle(.stSecondary)
+                .disabled(isDeletingModel)
+                .accessibilityLabel("Download \(model.name)")
+                .accessibilityIdentifier("model.download.\(model.variant)")
+            }
+        }
+    }
+
+    private var loadingIndicator: some View {
+        HStack(alignment: .top, spacing: 10) {
+            ProgressView()
+                .controlSize(.small)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(transcription.loadingStage.isEmpty ? "Loading model…" : transcription.loadingStage)
+                    .font(Typography.bodySmall)
+                    .foregroundStyle(Color.textSecondary)
+                if let loadingStartTime {
+                    TimelineView(.periodic(from: loadingStartTime, by: 1)) { context in
+                        Text("\(max(0, Int(context.date.timeIntervalSince(loadingStartTime)))) seconds elapsed")
+                            .font(Typography.caption)
+                            .monospacedDigit()
+                            .foregroundStyle(Color.textMuted)
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var downloadProgressSection: some View {
+        let fraction = min(1, max(0, progress))
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Downloading…")
+                Spacer()
+                Text("\(Int(fraction * 100))%")
+                    .monospacedDigit()
+            }
+            .font(Typography.caption)
+            .foregroundStyle(Color.textSecondary)
+            .accessibilityHidden(true)
+
+            ProgressView(value: fraction, total: 1)
+                .tint(Color.accentPrimary)
+                .accessibilityLabel("Downloading \(model.name)")
+                .accessibilityValue("\(Int(fraction * 100)) percent")
+        }
+    }
+
+    private func note(icon: String, text: String, tint: Color) -> some View {
+        Label(text, systemImage: icon)
+            .font(Typography.bodySmall)
+            .foregroundStyle(tint)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func deleteModel() {
+        isDeletingModel = true
+        Task { @MainActor in
+            _ = await downloadService.deleteModel(variant: model.variant)
+            if selectedModel == model.variant { selectedModel = ModelSelection.none }
+            isDeletingModel = false
+        }
+    }
+
+    private func loadAndSelectModel() {
+        isLoadingModel = true
+        loadError = nil
+        loadingStartTime = Date()
+        Task { @MainActor in
+            defer {
+                isLoadingModel = false
+                loadingStartTime = nil
+            }
+            do {
+                try await transcription.loadModel(variant: model.variant)
+                selectedModel = model.variant
+            } catch {
+                loadError = error.localizedDescription
+            }
+        }
+    }
+}
