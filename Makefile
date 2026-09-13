@@ -1,10 +1,13 @@
-.PHONY: build release test run
+.PHONY: build release dmg test run
 
 build:
 	bash scripts/build.sh
 
 release:
 	CONFIGURATION=Release bash scripts/build.sh
+
+dmg: release
+	bash scripts/package-dmg.sh
 
 test:
 	bash scripts/test.sh

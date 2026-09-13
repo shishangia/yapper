@@ -51,6 +51,23 @@ Find installed signing identities with `security find-identity -v -p codesigning
 
 A Release build produces `~/Library/Developer/Xcode/DerivedData/Yapper/Build/Products/Release/Yapper.app`. Quit an older installed copy before replacing it. New app identities or signing certificates may require fresh macOS permission approval.
 
+## Package a downloadable installer
+
+For maintainers, `make dmg` builds a Release app, includes dependency license notices, signs it with Developer ID, and submits it to Apple for notarization. It creates a compressed DMG with an Applications shortcut, setup instructions, and a SHA-256 checksum under `dist/`. Both the app and disk image must pass notarization and Gatekeeper checks before this command succeeds. It does not upload to GitHub or replace an installed app.
+
+First create a Developer ID Application certificate using your Apple Developer account. Store notarization credentials in Keychain with `xcrun notarytool store-credentials`; use its secure password prompt, not a password in a command or source file. Then run:
+
+```sh
+SIGN_IDENTITY="Developer ID Application: Your Name (TEAM_ID)" \
+APPLE_TEAM_ID="YOUR_TEAM_ID" \
+NOTARY_PROFILE="yapper-notary" \
+make dmg
+```
+
+`PACKAGES` can point to an existing Xcode `SourcePackages` directory. To package an already-built Release app, invoke `bash scripts/package-dmg.sh` directly with the same signing variables and optional `APP_PATH`. Packaging uses a temporary directory under DerivedData so macOS privacy restrictions on Documents do not interfere with disk-image creation.
+
+`bash scripts/package-dmg.sh --local-test` makes an explicitly labeled, unnotarized local test image using `SIGN_IDENTITY`. It is not for distribution. Friends should only receive the notarized release: open the DMG, drag Yapper to Applications, and follow the in-app permission and model-download prompts. No Terminal or Xcode is needed on their Macs.
+
 ## Permissions and recording
 
 Microphone access is needed for recording. Accessibility access is needed for global dictation shortcuts and pasting into other apps. File import does not require microphone access.
