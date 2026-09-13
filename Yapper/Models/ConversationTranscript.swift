@@ -14,6 +14,7 @@ struct ConversationTranscript: Codable, Equatable, Sendable {
     var speakerNames: [String: String] = [:]
     var speakerDetectionRequested: Bool
     var warning: String?
+    var singleSpeakerUndo: SpeakerAssignmentSnapshot? = nil
 
     var plainText: String { segments.map(\.text).joined() }
     var speakerIDs: [String] {
@@ -32,49 +33,76 @@ struct ConversationTranscript: Codable, Equatable, Sendable {
     var readingBlocks: [ConversationReadingBlock] {
         var blocks: [ConversationReadingBlock] = []
         var index = 0
+        func isContinuous(_ previous: ConversationSegment, _ next: ConversationSegment) -> Bool {
+            next.start >= previous.start && next.start - previous.end <= 1
+        }
         while index < segments.count {
             let first = segments[index]
-            var block = ConversationReadingBlock(segments: [first], speakerID: first.speakerID)
-            index += 1
-            while index < segments.count {
-                let next = segments[index]
-                guard next.start - (block.segments.last?.end ?? first.end) <= 1 else { break }
-                if !speakerDetectionRequested || next.speakerID == block.speakerID {
-                    block.segments.append(next)
+            if speakerDetectionRequested && first.speakerID == nil {
+                var passage = [first]
+                index += 1
+                while index < segments.count, segments[index].speakerID == nil,
+                      isContinuous(passage[passage.count - 1], segments[index]) {
+                    passage.append(segments[index])
                     index += 1
-                } else if let speaker = block.speakerID, next.speakerID == nil,
-                          next.end - next.start <= 2, index + 1 < segments.count,
-                          segments[index + 1].speakerID == speaker,
-                          segments[index + 1].start - next.end <= 1 {
-                    block.segments.append(next)
+                }
+                let text = passage.map(\.text).joined()
+                let last = passage[passage.count - 1]
+                let isShort = last.end - first.start <= 2 && text.count <= 48
+                    && text.split(whereSeparator: \.isWhitespace).count <= 4
+                if isShort, let previous = blocks.last, previous.speakerID != nil,
+                   let previousEnd = previous.segments.last, isContinuous(previousEnd, first) {
+                    blocks[blocks.count - 1].segments.append(contentsOf: passage)
+                } else if isShort, index < segments.count, let speaker = segments[index].speakerID,
+                          isContinuous(last, segments[index]) {
+                    passage.append(segments[index])
+                    blocks.append(ConversationReadingBlock(segments: passage, speakerID: speaker))
                     index += 1
-                } else { break }
+                } else {
+                    blocks.append(ConversationReadingBlock(segments: passage, speakerID: nil))
+                }
+            } else {
+                if let previous = blocks.last, let last = previous.segments.last,
+                   (!speakerDetectionRequested || previous.speakerID == first.speakerID),
+                   isContinuous(last, first) {
+                    blocks[blocks.count - 1].segments.append(first)
+                } else {
+                    blocks.append(ConversationReadingBlock(segments: [first], speakerID: first.speakerID))
+                }
+                index += 1
             }
-            blocks.append(block)
         }
         return blocks
     }
 
     func readingText(for block: ConversationReadingBlock) -> String {
-        block.segments.map { segment in
-            if speakerDetectionRequested && block.speakerID != nil && segment.speakerID == nil {
-                return " [unassigned: \(segment.text.trimmingCharacters(in: .whitespacesAndNewlines))] "
-            }
-            return segment.text
-        }.joined().trimmingCharacters(in: .whitespacesAndNewlines)
+        block.segments.map(\.text).joined().trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     var formattedText: String {
-        readingBlocks.map { block in
-            let label = speakerDetectionRequested ? " \(speakerName(for: block.speakerID)):" : ""
-            return "[\(Self.timestamp(block.start))]\(label) \(readingText(for: block))"
+        let text = readingBlocks.map { block in
+            let label = speakerDetectionRequested ? " \(block.speakerID.map { speakerName(for: $0) } ?? "Needs review"):" : ""
+            let passage = block.segments.map { segment in
+                guard speakerDetectionRequested && segment.speakerID == nil else { return segment.text }
+                let trailing = String(segment.text.reversed().prefix(while: \.isWhitespace).reversed())
+                return String(segment.text.dropLast(trailing.count)) + "†" + trailing
+            }.joined().trimmingCharacters(in: .whitespacesAndNewlines)
+            return "[\(Self.timestamp(block.start))]\(label) \(passage)"
         }.joined(separator: "\n")
+        return unassignedCount > 0 ? text + "\n\n† Speaker attribution needs review for the marked words." : text
     }
 
     static func timestamp(_ seconds: TimeInterval) -> String {
         let value = seconds.isFinite ? Int(max(0, seconds)) : 0
         return String(format: "%02d:%02d:%02d", value / 3600, value / 60 % 60, value % 60)
     }
+}
+
+struct SpeakerAssignmentSnapshot: Codable, Equatable, Sendable {
+    let segmentIDs: [Int]
+    let speakerIDs: [String?]
+    let speakerNames: [String: String]
+    let speakerDetectionRequested: Bool
 }
 
 struct ConversationReadingBlock: Identifiable {

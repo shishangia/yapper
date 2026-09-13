@@ -60,6 +60,10 @@ struct TranscribeAudioView: View {
                         }
                     }
                     .disabled(session.isBusy)
+                    if session.detectSpeakers && session.singleSpeaker {
+                        Text("One speaker skips speaker detection and word alignment. You still get timestamped passages, without uncertain speaker labels.")
+                            .font(Typography.caption).foregroundStyle(Color.textSecondary)
+                    }
                     Text("Mixed languages and overlapping speech can produce errors. You can edit words and speaker labels after processing.")
                         .font(Typography.bodySmall).foregroundStyle(Color.textSecondary)
                     if session.isBusy || session.phase != .idle {

@@ -22,7 +22,8 @@ final class ConversationAlignmentTests: XCTestCase {
         XCTAssertEqual(result.plainText, words.map(\.text).joined())
         XCTAssertEqual(result.segments.map(\.speakerID), ["1", "2", "1", nil])
         XCTAssertEqual(result.speakerIDs, ["1", "2"])
-        XCTAssertTrue(result.formattedText.contains("Speaker uncertain"))
+        XCTAssertFalse(result.formattedText.contains("Speaker uncertain"))
+        XCTAssertTrue(result.formattedText.contains("†"))
     }
 
     func testSingleSpeakerAndShortReply() {
@@ -116,7 +117,9 @@ final class ConversationAlignmentTests: XCTestCase {
         XCTAssertEqual(transcript.readingBlocks.count, 2)
         XCTAssertEqual(transcript.readingBlocks.flatMap(\.segments), segments)
         XCTAssertEqual(transcript.plainText, "Hello there, friend. Yes.")
-        XCTAssertTrue(transcript.formattedText.contains("[unassigned: there]"))
+        XCTAssertEqual(transcript.readingText(for: transcript.readingBlocks[0]), "Hello there, friend.")
+        XCTAssertTrue(transcript.formattedText.contains(" there†, friend."))
+        XCTAssertFalse(transcript.formattedText.contains("unassigned:"))
         transcript.speakerNames["1"] = "Alice"
         XCTAssertTrue(transcript.formattedText.contains("Alice:"))
         XCTAssertNil(transcript.segments[1].speakerID)
@@ -125,7 +128,7 @@ final class ConversationAlignmentTests: XCTestCase {
     }
 
     func testReadingBlocksDoNotBridgeSpeakerChangesOrLongPauses() {
-        for (nextSpeaker, pause, expected) in [("2", 0.1, 3), ("1", 3.0, 3)] {
+        for (nextSpeaker, pause, expected) in [("2", 0.1, 2), ("1", 3.0, 2)] {
             let transcript = ConversationTranscript(segments: [
                 .init(id: 0, start: 0, end: 1, text: "One", speakerID: "1"),
                 .init(id: 1, start: 1, end: 1.3, text: " unclear", speakerID: nil),
@@ -136,7 +139,47 @@ final class ConversationAlignmentTests: XCTestCase {
         }
         let unknown = ConversationTranscript(segments: [.init(id: 0, start: 0, end: 1, text: "Unknown", speakerID: nil)], speakerDetectionRequested: true)
         XCTAssertEqual(unknown.readingBlocks.count, 1)
-        XCTAssertTrue(unknown.formattedText.contains("Speaker uncertain"))
+        XCTAssertTrue(unknown.formattedText.contains("Needs review"))
+        XCTAssertTrue(unknown.formattedText.contains("Unknown†"))
+    }
+
+    func testBriefUncertaintyAtStartMiddleAndEndKeepsReadingFlow() {
+        let segments: [ConversationSegment] = [
+            .init(id: 0, start: 0, end: 0.2, text: "Well, ", speakerID: nil),
+            .init(id: 1, start: 0.2, end: 1, text: "I think", speakerID: "1"),
+            .init(id: 2, start: 1, end: 1.2, text: " so.", speakerID: nil),
+            .init(id: 3, start: 1.2, end: 2, text: " Yes", speakerID: "2"),
+            .init(id: 4, start: 2, end: 2.2, text: ", exactly.", speakerID: nil)
+        ]
+        let transcript = ConversationTranscript(segments: segments, speakerDetectionRequested: true)
+        XCTAssertEqual(transcript.readingBlocks.count, 2)
+        XCTAssertEqual(transcript.readingBlocks.map(\.speakerID), ["1", "2"])
+        XCTAssertEqual(transcript.readingBlocks.flatMap(\.segments), segments)
+        XCTAssertEqual(transcript.readingBlocks.map { transcript.readingText(for: $0) }, ["Well, I think so.", "Yes, exactly."])
+        XCTAssertEqual(transcript.segments.map(\.speakerID), [nil, "1", nil, "2", nil])
+        XCTAssertTrue(transcript.formattedText.contains("Well,† I think so.†"))
+        XCTAssertFalse(transcript.formattedText.contains("Needs review:"))
+    }
+
+    func testLongUnknownPassageStaysSeparateAndTextRemainsExact() {
+        let segments: [ConversationSegment] = [
+            .init(id: 0, start: 0, end: 1, text: "Hello", speakerID: "1"),
+            .init(id: 1, start: 1, end: 6, text: " नमस्ते ગુજરાતી 你好 unsure passage here", speakerID: nil),
+            .init(id: 2, start: 6, end: 7, text: " again", speakerID: "2")
+        ]
+        let transcript = ConversationTranscript(segments: segments, speakerDetectionRequested: true)
+        XCTAssertEqual(transcript.readingBlocks.count, 3)
+        XCTAssertEqual(transcript.readingBlocks.flatMap(\.segments), segments)
+        XCTAssertEqual(transcript.plainText, segments.map(\.text).joined())
+        XCTAssertTrue(transcript.formattedText.contains("Needs review:"))
+    }
+
+    func testSingleSpeakerDecodeSkipsWordAlignmentButKeepsSegmentTimes() {
+        let options = WhisperService.conversationDecodingOptions(wordTimestamps: false)
+        XCTAssertFalse(options.wordTimestamps)
+        XCTAssertFalse(options.withoutTimestamps)
+        XCTAssertTrue(options.detectLanguage)
+        XCTAssertEqual(options.task, .transcribe)
     }
 
     func testConversationUsesAutomaticLanguageAndWordTimestamps() {

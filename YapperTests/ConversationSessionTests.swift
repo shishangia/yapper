@@ -9,7 +9,7 @@ private final class WaitingProcessor: ConversationProcessing {
 
     init(started: XCTestExpectation) { self.started = started }
 
-    func transcribe(_ url: URL, variant: String, language: String, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord] {
+    func transcribe(_ url: URL, variant: String, language: String, wordTimestamps: Bool, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord] {
         await withCheckedContinuation {
             continuation = $0
             started.fulfill()

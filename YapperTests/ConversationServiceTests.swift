@@ -13,8 +13,10 @@ private final class ControlledConversationProcessor: ConversationProcessing {
     var holdDiarization = false
     var release: CheckedContinuation<Void, Never>?
     var diarizationCount = 0
+    var requestedWordTimestamps: [Bool] = []
 
-    func transcribe(_ url: URL, variant: String, language: String, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord] {
+    func transcribe(_ url: URL, variant: String, language: String, wordTimestamps: Bool, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord] {
+        requestedWordTimestamps.append(wordTimestamps)
         transcriptionStarted?.fulfill()
         if holdTranscription { await withCheckedContinuation { release = $0 } }
         if let transcribeError { throw transcribeError }
@@ -46,6 +48,7 @@ final class ConversationServiceTests: XCTestCase {
         XCTAssertFalse(unlabeled.speakerDetectionRequested)
         XCTAssertEqual(unlabeled.plainText, result.plainText)
         XCTAssertEqual(processor.diarizationCount, 1)
+        XCTAssertEqual(processor.requestedWordTimestamps, [true, false])
     }
 
     func testSpeakerFailurePreservesUnlabeledTranscript() async throws {
@@ -119,6 +122,8 @@ final class ConversationServiceTests: XCTestCase {
         XCTAssertEqual(result.segments.map(\.speakerID), ["1", "1"])
         XCTAssertEqual(processor.diarizationCount, 0)
         XCTAssertTrue(result.speakerDetectionRequested)
+        XCTAssertEqual(result.unassignedCount, 0)
+        XCTAssertEqual(processor.requestedWordTimestamps, [false])
     }
 
     func testMissingModelsFailWithoutDownload() async throws {
@@ -126,7 +131,7 @@ final class ConversationServiceTests: XCTestCase {
         XCTAssertFalse(LocalConversationProcessor.transcriptionModelsReady(variant: "openai_whisper-large-v3_turbo"))
         let processor = LocalConversationProcessor()
         do {
-            _ = try await processor.transcribe(audio, variant: "openai_whisper-large-v3_turbo", language: "auto") { _ in }
+            _ = try await processor.transcribe(audio, variant: "openai_whisper-large-v3_turbo", language: "auto", wordTimestamps: true) { _ in }
             XCTFail("Missing models must not trigger a download")
         } catch { XCTAssertEqual(error.localizedDescription, ConversationError.modelsMissing.localizedDescription) }
     }

@@ -302,7 +302,7 @@ class WhisperService {
     }
 
     @MainActor
-    func transcribeConversation(audioFile: URL, language: String = "auto", progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord] {
+    func transcribeConversation(audioFile: URL, language: String = "auto", wordTimestamps: Bool = true, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord] {
         guard let pipe, isInitialized else { throw TranscriptionError.notInitialized }
         isTranscribing = true
         defer { isTranscribing = false }
@@ -320,15 +320,20 @@ class WhisperService {
                 config: VadSegmentationConfig(minSpeechDuration: 0.15, minSilenceDuration: 0.5,
                     maxSpeechDuration: 10, speechPadding: 0.15))
         }.value
-        let ranges = ConversationAlignment.speechChunks(
-            speech.map { $0.startSample(sampleRate: 16000)..<$0.endSample(sampleRate: 16000) },
-            sampleCount: samples.count, maxSamples: 12 * 16000)
+        let ranges: [Range<Int>]
+        if !wordTimestamps && language != "mixed" {
+            ranges = speech.isEmpty ? [] : [0..<samples.count]
+        } else {
+            ranges = ConversationAlignment.speechChunks(
+                speech.map { $0.startSample(sampleRate: 16000)..<$0.endSample(sampleRate: 16000) },
+                sampleCount: samples.count, maxSamples: 12 * 16000)
+        }
         var output: [ConversationWord] = []
         for (index, range) in ranges.enumerated() {
             let audio = Array(samples[range])
             let offset = Double(range.lowerBound) / 16000
             let end = Double(range.upperBound) / 16000
-            var options = Self.conversationDecodingOptions()
+            var options = Self.conversationDecodingOptions(wordTimestamps: wordTimestamps)
             if AIModel.availableModels.first(where: { $0.variant == currentModelVariant })?.isEnglishOnly == true {
                 options.language = "en"
                 options.detectLanguage = false
@@ -343,8 +348,12 @@ class WhisperService {
             }
             let results = try await pipe.transcribe(audioArray: audio, decodeOptions: options)
             for result in results where !result.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                let words = result.segments.flatMap { segment in
-                    ConversationAlignment.preservingText(segment.text,
+                let words = result.segments.flatMap { segment -> [ConversationWord] in
+                    if !wordTimestamps {
+                        return [ConversationWord(text: segment.text, start: offset + Double(segment.start),
+                            end: offset + Double(segment.end), hasReliableTiming: false)]
+                    }
+                    return ConversationAlignment.preservingText(segment.text,
                         words: (segment.words ?? []).map {
                             ConversationWord(text: $0.word, start: offset + Double($0.start), end: offset + Double($0.end))
                         }, start: offset + Double(segment.start), end: offset + Double(segment.end))
@@ -362,12 +371,12 @@ class WhisperService {
         return output
     }
 
-    static func conversationDecodingOptions() -> DecodingOptions {
+    static func conversationDecodingOptions(wordTimestamps: Bool = true) -> DecodingOptions {
         var options = DecodingOptions()
         options.task = .transcribe
         options.language = nil
         options.detectLanguage = true
-        options.wordTimestamps = true
+        options.wordTimestamps = wordTimestamps
         options.skipSpecialTokens = true
         options.withoutTimestamps = false
         options.concurrentWorkerCount = 1

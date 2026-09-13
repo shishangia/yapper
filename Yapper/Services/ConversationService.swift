@@ -6,7 +6,7 @@ import WhisperKit
 
 @MainActor
 protocol ConversationProcessing {
-    func transcribe(_ url: URL, variant: String, language: String, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord]
+    func transcribe(_ url: URL, variant: String, language: String, wordTimestamps: Bool, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord]
     func diarize(_ url: URL, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationSpeakerTurn]
 }
 
@@ -52,10 +52,10 @@ final class LocalConversationProcessor: ConversationProcessing {
         }
     }
 
-    func transcribe(_ url: URL, variant: String, language: String, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord] {
+    func transcribe(_ url: URL, variant: String, language: String, wordTimestamps: Bool, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord] {
         guard Self.transcriptionModelsReady(variant: variant) else { throw ConversationError.modelsMissing }
         return try await TranscriptionManager.shared.transcribeConversationWhileLocked(
-            audioFile: url, variant: variant, language: language, progress: progress)
+            audioFile: url, variant: variant, language: language, wordTimestamps: wordTimestamps, progress: progress)
     }
 
     func diarize(_ url: URL, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationSpeakerTurn] {
@@ -134,7 +134,8 @@ final class ConversationService {
             try checkCancellation()
             let modelName = AIModel.availableModels.first { $0.variant == variant }?.name ?? variant
             report(id: id, stage: "Transcribing with \(modelName)", progress: 0)
-            let words = try await processor.transcribe(url, variant: variant, language: language) { value in
+            let words = try await processor.transcribe(url, variant: variant, language: language,
+                wordTimestamps: detectSpeakers && !singleSpeaker) { value in
                 Task { @MainActor in self.report(id: id, stage: "Transcribing in the spoken language", progress: value) }
             }
             try checkCancellation()

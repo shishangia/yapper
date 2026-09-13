@@ -10,5 +10,5 @@ protocol SpeechToTextEngine: AnyObject {
     func loadModel(variant: String) async throws
     func unload() async
     func transcribe(audioFile: URL, language: String) async throws -> String
-    func transcribeConversation(audioFile: URL, language: String, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord]
+    func transcribeConversation(audioFile: URL, language: String, wordTimestamps: Bool, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord]
 }

@@ -14,6 +14,8 @@ struct ConversationTranscriptView: View {
     @State private var mergeTarget = ""
     @State private var error: String?
     @State private var reviewing = false
+    @State private var confirmingSingleSpeaker = false
+    @State private var singleSpeakerID = "1"
 
     private var conversation: ConversationTranscript? {
         historyService.items.first { $0.id == itemID }?.conversation
@@ -24,7 +26,7 @@ struct ConversationTranscriptView: View {
             if let conversation {
                 if conversation.unassignedCount > 0 {
                     HStack {
-                        Label("\(conversation.unassignedCount) unassigned passages · marked inline", systemImage: "person.crop.circle.badge.questionmark")
+                        Label("Underlined words need speaker review", systemImage: "person.crop.circle.badge.questionmark")
                             .font(Typography.caption).foregroundStyle(Color.textSecondary)
                         Spacer()
                         Button(reviewing ? "Reading view" : "Review") { reviewing.toggle() }
@@ -37,6 +39,19 @@ struct ConversationTranscriptView: View {
                     }
                 }
                 HStack {
+                    if conversation.singleSpeakerUndo != nil {
+                        Button("Undo one-speaker correction") {
+                            if !historyService.undoSingleSpeaker(itemID: itemID) { error = "This correction can no longer be undone." }
+                        }
+                        .buttonStyle(.stSecondary).accessibilityIdentifier("undoSingleSpeaker")
+                    } else if !conversation.segments.isEmpty && (conversation.unassignedCount > 0 || conversation.speakerIDs.count > 1) {
+                        Button("One speaker…") {
+                            singleSpeakerID = conversation.speakerIDs.first ?? "1"
+                            error = nil
+                            confirmingSingleSpeaker = true
+                        }
+                        .buttonStyle(.stSecondary).accessibilityIdentifier("confirmSingleSpeaker")
+                    }
                     if conversation.unassignedCount == 0 {
                         Button(reviewing ? "Reading view" : "Edit turns") { reviewing.toggle() }
                             .buttonStyle(.stSecondary).accessibilityIdentifier("reviewSpeakers")
@@ -77,15 +92,17 @@ struct ConversationTranscriptView: View {
                                         .accessibilityLabel("Rename \(conversation.speakerName(for: id))")
                                         .accessibilityIdentifier("renameSpeaker-\(id)")
                                     } else {
-                                        Text("Unassigned passage").foregroundStyle(Color.textSecondary)
+                                        Text("Needs review").foregroundStyle(Color.textSecondary)
                                     }
                                 }
                                 Spacer()
                             }
                             .font(Typography.labelSmall)
-                            Text(conversation.readingText(for: block))
+                            Text(readingText(block, markUncertainty: conversation.speakerDetectionRequested))
                                 .font(Typography.bodyMedium).foregroundStyle(Color.textPrimary)
                                 .textSelection(.enabled).lineSpacing(5)
+                                .help(block.segments.contains { $0.speakerID == nil } && conversation.speakerDetectionRequested
+                                    ? "Underlined words have uncertain speaker attribution. Review to correct them." : "")
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 6)
@@ -193,6 +210,38 @@ struct ConversationTranscriptView: View {
             }
             .padding(24).frame(width: 520)
         }
+        .sheet(isPresented: $confirmingSingleSpeaker) {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("This recording has one speaker").font(Typography.headlineMedium)
+                Text("Only confirm if one person speaks throughout. Every passage will use the selected speaker, including words that need review. The text and timestamps will not change.")
+                    .font(Typography.bodySmall).foregroundStyle(Color.textSecondary)
+                if let conversation {
+                    Picker("Speaker", selection: $singleSpeakerID) {
+                        if conversation.speakerIDs.isEmpty { Text("Speaker 1").tag("1") }
+                        ForEach(conversation.speakerIDs, id: \.self) { id in
+                            Text(conversation.speakerName(for: id)).tag(id)
+                        }
+                    }
+                    .accessibilityIdentifier("singleSpeakerSelection")
+                }
+                Text("You can undo this correction until you change a speaker name or assignment.")
+                    .font(Typography.caption).foregroundStyle(Color.textSecondary)
+                errorMessage
+                HStack {
+                    Spacer()
+                    Button("Cancel") { confirmingSingleSpeaker = false }.keyboardShortcut(.cancelAction)
+                    Button("Confirm one speaker") {
+                        guard historyService.confirmSingleSpeaker(itemID: itemID, speakerID: singleSpeakerID) else {
+                            error = "Select an existing speaker and try again."
+                            return
+                        }
+                        confirmingSingleSpeaker = false
+                    }
+                    .keyboardShortcut(.defaultAction).accessibilityIdentifier("applySingleSpeaker")
+                }
+            }
+            .padding(24).frame(width: 460)
+        }
         .sheet(isPresented: $merging) {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Merge Speakers").font(Typography.headlineMedium)
@@ -222,6 +271,16 @@ struct ConversationTranscriptView: View {
                 }
             }
             .padding(24).frame(width: 420)
+        }
+    }
+
+    private func readingText(_ block: ConversationReadingBlock, markUncertainty: Bool) -> AttributedString {
+        block.segments.reduce(into: AttributedString()) { output, segment in
+            var text = AttributedString(segment.text)
+            if markUncertainty && segment.speakerID == nil {
+                text.underlineStyle = .single
+            }
+            output += text
         }
     }
 

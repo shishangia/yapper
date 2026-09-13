@@ -94,7 +94,7 @@ class ParakeetEngine: SpeechToTextEngine {
         try await result(audioFile: audioFile, language: language) { _ in }.text
     }
 
-    func transcribeConversation(audioFile: URL, language: String, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord] {
+    func transcribeConversation(audioFile: URL, language: String, wordTimestamps: Bool = true, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord] {
         let duration = try await ConversationAudioStorage.duration(audioFile)
         let result = try await result(audioFile: audioFile, language: language, progress: progress)
         return Self.words(from: result, duration: duration)

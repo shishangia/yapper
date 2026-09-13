@@ -19,7 +19,7 @@ private final class StubSpeechEngine: SpeechToTextEngine {
     }
     func unload() async { isInitialized = false; currentModelVariant = "" }
     func transcribe(audioFile: URL, language: String) async throws -> String { "raw words" }
-    func transcribeConversation(audioFile: URL, language: String, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord] {
+    func transcribeConversation(audioFile: URL, language: String, wordTimestamps: Bool, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord] {
         structuredCalls += 1
         return [.init(text: " raw words", start: 0, end: 1)]
     }

@@ -125,6 +125,7 @@ class HistoryService: ObservableObject {
 
         let savedName = trimmedName.isEmpty ? nil : trimmedName
         guard conversation.speakerNames[speakerID] != savedName else { return true }
+        conversation.singleSpeakerUndo = nil
         conversation.speakerNames[speakerID] = savedName
         items[index].conversation = conversation
         saveHistory()
@@ -147,6 +148,7 @@ class HistoryService: ObservableObject {
             let trailing = String(previous.reversed().prefix(while: { $0.isWhitespace }).reversed())
             transcript.segments[segmentIndex].text = leading + text.trimmingCharacters(in: .whitespacesAndNewlines) + trailing
         }
+        if transcript.segments[segmentIndex].speakerID != speakerID { transcript.singleSpeakerUndo = nil }
         transcript.segments[segmentIndex].speakerID = speakerID
         items[itemIndex].conversation = transcript
         saveHistory()
@@ -163,6 +165,7 @@ class HistoryService: ObservableObject {
         var number = 1
         while transcript.speakerIDs.contains(String(number)) { number += 1 }
         let id = String(number)
+        transcript.singleSpeakerUndo = nil
         transcript.speakerNames[id] = name
         transcript.speakerDetectionRequested = true
         items[index].conversation = transcript
@@ -176,10 +179,43 @@ class HistoryService: ObservableObject {
               let index = items.firstIndex(where: { $0.id == itemID }),
               var transcript = items[index].conversation,
               transcript.speakerIDs.contains(sourceID), transcript.speakerIDs.contains(targetID) else { return false }
+        transcript.singleSpeakerUndo = nil
         for segment in transcript.segments.indices where transcript.segments[segment].speakerID == sourceID {
             transcript.segments[segment].speakerID = targetID
         }
         transcript.speakerNames.removeValue(forKey: sourceID)
+        items[index].conversation = transcript
+        saveHistory()
+        return true
+    }
+
+    @discardableResult
+    func confirmSingleSpeaker(itemID: UUID, speakerID: String) -> Bool {
+        guard let index = items.firstIndex(where: { $0.id == itemID }),
+              var transcript = items[index].conversation, !transcript.segments.isEmpty,
+              transcript.singleSpeakerUndo == nil,
+              transcript.speakerIDs.contains(speakerID) || (transcript.speakerIDs.isEmpty && speakerID == "1") else { return false }
+        transcript.singleSpeakerUndo = SpeakerAssignmentSnapshot(
+            segmentIDs: transcript.segments.map(\.id), speakerIDs: transcript.segments.map(\.speakerID),
+            speakerNames: transcript.speakerNames, speakerDetectionRequested: transcript.speakerDetectionRequested)
+        for segment in transcript.segments.indices { transcript.segments[segment].speakerID = speakerID }
+        transcript.speakerNames = transcript.speakerNames.filter { $0.key == speakerID }
+        transcript.speakerDetectionRequested = true
+        items[index].conversation = transcript
+        saveHistory()
+        return true
+    }
+
+    @discardableResult
+    func undoSingleSpeaker(itemID: UUID) -> Bool {
+        guard let index = items.firstIndex(where: { $0.id == itemID }),
+              var transcript = items[index].conversation, let snapshot = transcript.singleSpeakerUndo,
+              transcript.segments.map(\.id) == snapshot.segmentIDs,
+              transcript.segments.count == snapshot.speakerIDs.count else { return false }
+        for segment in transcript.segments.indices { transcript.segments[segment].speakerID = snapshot.speakerIDs[segment] }
+        transcript.speakerNames = snapshot.speakerNames
+        transcript.speakerDetectionRequested = snapshot.speakerDetectionRequested
+        transcript.singleSpeakerUndo = nil
         items[index].conversation = transcript
         saveHistory()
         return true

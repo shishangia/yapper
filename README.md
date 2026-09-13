@@ -75,7 +75,9 @@ An interrupted copy can be retried. Existing destination files must match exactl
 
 Whisper supports many languages, but support does not guarantee accuracy. Rapid Hindi-English-Gujarati switching remains experimental and can produce omissions, repetition, transliteration, or unintended translation. Select the known language when appropriate and check important passages against the audio.
 
-Automatic speaker labels can split one voice or confuse short replies and overlap. Sortformer supports at most four speakers. Choose One speaker for a known single-person recording, or correct and merge labels after transcription. The reading view groups short continuations and marks unassigned words inline; Review shows the original timestamped segments for editing. Grouping does not change speaker assignments, and copied text retains uncertainty markers.
+Automatic speaker labels can split one voice or confuse short replies and overlap. Sortformer supports at most four speakers. Short uncertain passages stay within the reading flow, with underlined words instead of extra speaker headings. Review shows the original timestamped segments for correction. Grouping does not change speaker assignments; copied text uses a small footnote marker for uncertain words.
+
+Choose One speaker before processing a known single-person recording to skip speaker detection and Whisper word alignment. Segment timestamps remain available. For an existing result, One speaker lets you confirm a recording-wide assignment without transcribing again. You can undo that correction after reopening the app, until you change a speaker name or assignment. Text edits and statistics are preserved.
 
 Transcripts are drafts, especially for medical, legal, or other consequential use. Yapper preserves original transcript text when you edit a turn. Corrections do not create duplicate history or statistics entries.
 

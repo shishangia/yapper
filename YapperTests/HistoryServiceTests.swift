@@ -197,6 +197,46 @@ final class HistoryServiceTests: XCTestCase {
         XCTAssertNil(service.addSpeaker(itemID: item.id, name: ""))
     }
 
+    func testSingleSpeakerCorrectionAndUndoSurviveRestartWithoutChangingStats() async throws {
+        let original = ConversationTranscript(segments: [
+            .init(id: 3, start: 0, end: 1, text: " Hello", speakerID: "1"),
+            .init(id: 7, start: 1, end: 2, text: " there", speakerID: nil),
+            .init(id: 9, start: 2, end: 3, text: " reply", speakerID: "2")
+        ], speakerNames: ["1": "Alice", "2": "Bob"], speakerDetectionRequested: true)
+        let item = try XCTUnwrap(service.addConversation(original, duration: 3))
+        let other = try XCTUnwrap(service.addConversation(original, duration: 3))
+        let stats = defaults.data(forKey: "history_stats_entries")
+        XCTAssertFalse(service.confirmSingleSpeaker(itemID: item.id, speakerID: "missing"))
+        XCTAssertTrue(service.confirmSingleSpeaker(itemID: item.id, speakerID: "1"))
+        let reopened = HistoryService(defaults: defaults)
+        let changed = try XCTUnwrap(reopened.items.first { $0.id == item.id })
+        XCTAssertEqual(changed.conversation?.segments.map(\.speakerID), ["1", "1", "1"])
+        XCTAssertEqual(changed.conversation?.plainText, original.plainText)
+        XCTAssertEqual(changed.conversation?.segments.map(\.start), original.segments.map(\.start))
+        XCTAssertEqual(changed.date, item.date)
+        XCTAssertEqual(reopened.items.first { $0.id == other.id }?.conversation, original)
+        XCTAssertEqual(defaults.data(forKey: "history_stats_entries"), stats)
+        XCTAssertTrue(reopened.undoSingleSpeaker(itemID: item.id))
+        let reopenedAfterUndo = HistoryService(defaults: defaults)
+        XCTAssertEqual(reopenedAfterUndo.items.first { $0.id == item.id }?.conversation, original)
+        XCTAssertEqual(defaults.data(forKey: "history_stats_entries"), stats)
+    }
+
+    func testSingleSpeakerUndoPreservesTextEditsAndInvalidatesAfterSpeakerChanges() throws {
+        let original = ConversationTranscript(segments: [.init(id: 0, start: 0, end: 1, text: " Original", speakerID: nil)], speakerDetectionRequested: true)
+        let item = try XCTUnwrap(service.addConversation(original, duration: 1))
+        XCTAssertTrue(service.confirmSingleSpeaker(itemID: item.id, speakerID: "1"))
+        XCTAssertTrue(service.updateSegment(itemID: item.id, segmentID: 0, text: "Corrected", speakerID: "1"))
+        XCTAssertTrue(service.undoSingleSpeaker(itemID: item.id))
+        XCTAssertEqual(service.items[0].conversation?.plainText, " Corrected")
+        XCTAssertNil(service.items[0].conversation?.segments[0].speakerID)
+        XCTAssertEqual(service.items[0].conversation?.segments[0].originalText, " Original")
+        XCTAssertTrue(service.confirmSingleSpeaker(itemID: item.id, speakerID: "1"))
+        XCTAssertTrue(service.renameSpeaker(itemID: item.id, speakerID: "1", name: "Alice"))
+        XCTAssertFalse(service.undoSingleSpeaker(itemID: item.id))
+        XCTAssertEqual(service.items[0].conversation?.speakerName(for: "1"), "Alice")
+    }
+
     func testStatsPersistenceUsesSeparateStore() {
         service.addItem(transcript: "Persistent stats entry", duration: 5.0)
 

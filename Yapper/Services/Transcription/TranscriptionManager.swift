@@ -64,10 +64,11 @@ class TranscriptionManager {
 
     // ConversationService already holds this non-reentrant gate for the whole native job.
     func transcribeConversationWhileLocked(audioFile: URL, variant: String, language: String,
-        progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord] {
+        wordTimestamps: Bool = true, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord] {
         try Self.validate(variant: variant, language: language)
         try await prepare(variant: variant)
-        return try await activeEngine.transcribeConversation(audioFile: audioFile, language: language, progress: progress)
+        return try await activeEngine.transcribeConversation(audioFile: audioFile, language: language,
+            wordTimestamps: wordTimestamps, progress: progress)
     }
 
     enum ModelError: LocalizedError {
