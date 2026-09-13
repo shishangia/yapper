@@ -12,16 +12,10 @@ class ClipboardService {
         let dataByType: [NSPasteboard.PasteboardType: Data]
     }
 
-    // Dependency injection for license checking
-    private var licenseManager: LicenseManager {
-        return LicenseManager.shared
-    }
-
     private init() {}
 
-    // Copy text to system clipboard with optional promotional wrapper
     func copy(text: String) {
-        let finalText = wrapTextIfNeeded(text)
+        let finalText = text
 
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
@@ -44,7 +38,7 @@ class ClipboardService {
 
     func restore(_ snapshot: ClipboardSnapshot, ifCurrentStringMatches expectedText: String) {
         let pasteboard = NSPasteboard.general
-        let expectedFinalText = wrapTextIfNeeded(expectedText)
+        let expectedFinalText = expectedText
 
         guard pasteboard.string(forType: .string) == expectedFinalText else {
             print("Skipping clipboard restore because pasteboard changed after paste")
@@ -52,12 +46,6 @@ class ClipboardService {
         }
 
         restore(snapshot)
-    }
-
-    // Wrap text with promotional message for free users
-    private func wrapTextIfNeeded(_ text: String) -> String {
-        // License check disabled - always allow unwrapped text
-        return text
     }
 
     private func currentSnapshot() -> ClipboardSnapshot {

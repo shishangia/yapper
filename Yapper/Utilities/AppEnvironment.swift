@@ -21,9 +21,6 @@ enum AppEnvironment {
 
     static var usesIsolatedStorage: Bool { isDevelopment || isRunningTests }
     static var globalHotkeysEnabled: Bool { !isDevelopment && !isRunningTests }
-    // This personal fork has no upstream licensing integration.
-    static var startupLicenseValidationEnabled: Bool { false }
-
     static var updatesEnabled: Bool {
         #if DEBUG || LOCAL_BUILD
             return false
@@ -39,8 +36,6 @@ enum AppEnvironment {
         if isRunningTests { return "com.shishangia.yapper.tests.\(ProcessInfo.processInfo.processIdentifier)" }
         return isDevelopment ? "com.shishangia.yapper.dev" : "com.shishangia.yapper"
     }
-
-    static var keychainService: String { "\(defaultsDomain).license" }
 
     /// Resolving a path does not create it or read production data.
     static var applicationSupportDirectory: URL {

@@ -463,7 +463,7 @@ struct StatCard: View {
                 .foregroundStyle(Color.textMuted)
 
             Text(value)
-                .font(.system(size: 32, weight: .light, design: .serif))
+                .font(.system(size: 32, weight: .light, design: .rounded))
                 .foregroundStyle(Color.textPrimary)
 
             Text(label)

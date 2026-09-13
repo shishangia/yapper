@@ -226,7 +226,7 @@ struct HistoryCard: View {
                     // Date badge
                     VStack(alignment: .center, spacing: 2) {
                         Text(item.date.formatted(.dateTime.day()))
-                            .font(.system(size: 18, weight: .semibold, design: .serif))
+                            .font(.system(size: 18, weight: .semibold, design: .rounded))
                             .foregroundStyle(Color.textPrimary)
                         Text(item.date.formatted(.dateTime.month(.abbreviated)))
                             .font(Typography.captionSmall)

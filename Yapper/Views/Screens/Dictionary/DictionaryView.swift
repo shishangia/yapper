@@ -92,10 +92,10 @@ struct DictionaryView: View {
                     Text("Add Rule")
                 }
                 .font(Typography.labelMedium)
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.btnPrimaryFg)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(Color.accentBlue)
+                .background(Color.btnPrimaryBg)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
             }
             .buttonStyle(.plain)
@@ -159,10 +159,10 @@ struct DictionaryView: View {
                     Text("Add Rule")
                 }
                 .font(Typography.labelMedium)
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.btnPrimaryFg)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 9)
-                .background(Color.accentBlue)
+                .background(Color.btnPrimaryBg)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
             }
             .buttonStyle(.plain)
@@ -371,10 +371,10 @@ private struct DictionaryEntryEditor: View {
                 Button("Save") { save() }
                     .buttonStyle(.plain)
                     .font(Typography.labelMedium)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.btnPrimaryFg)
                     .padding(.horizontal, 18)
                     .padding(.vertical, 8)
-                    .background(isValid ? Color.accentBlue : Color.accentBlue.opacity(0.4))
+                    .background(isValid ? Color.btnPrimaryBg : Color.bgHover)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .disabled(!isValid)
             }

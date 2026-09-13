@@ -32,12 +32,6 @@ struct YapperApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @State private var conversation = ConversationSession.shared
 
-    // License Manager
-    @StateObject private var licenseManager = LicenseManager.shared
-
-    // Trial Manager
-    @StateObject private var trialManager = TrialManager.shared
-
     init() {
         // For UI testing: bypass onboarding automatically
         if ProcessInfo.processInfo.arguments.contains("--uitesting") {
@@ -60,8 +54,6 @@ struct YapperApp: App {
                 }
             }
             .environment(conversation)
-            .environmentObject(licenseManager)
-            .environmentObject(trialManager)
             .preferredColorScheme(appTheme.colorScheme)
             .tint(Color.navyInk)
         }
@@ -76,7 +68,7 @@ struct YapperApp: App {
         // to prevent SwiftUI from auto-opening the main dashboard on activation.
 
         // Menu Bar Extra (Always running listener)
-        MenuBarExtra(AppEnvironment.displayName, systemImage: "waveform", isInserted: $showMenuBarIcon) {
+        MenuBarExtra(isInserted: $showMenuBarIcon) {
             ThemeProvider {
                 VStack(spacing: 12) {
                     if !legacyImportOffered && LegacyImportService.shared.canImport {
@@ -98,6 +90,10 @@ struct YapperApp: App {
                 }
             }
             .preferredColorScheme(appTheme.colorScheme)
+        } label: {
+            Image(systemName: "text.bubble.fill")
+                .accessibilityLabel(AppEnvironment.displayName)
+                .help(AppEnvironment.displayName)
         }
         .menuBarExtraStyle(.window)
     }

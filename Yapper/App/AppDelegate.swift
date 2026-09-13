@@ -17,6 +17,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard !AppEnvironment.isRunningTests else { return }
+        updateAppearance()
+        NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.updateAppearance() }
+            .store(in: &cancellables)
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["YAPPER_RECORDER_PREVIEW"] != nil {
+            miniRecorderController = MiniRecorderWindowController()
+            miniRecorderController?.showIdleRecorder()
+        }
+        #endif
 
         if !LegacyImportService.shared.canImport { configureDictation() }
         NotificationCenter.default.publisher(for: .legacyLibraryImported)
@@ -37,6 +48,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.showUpdateWindow()
             }
             .store(in: &cancellables)
+    }
+
+    private func updateAppearance() {
+        let theme = AppTheme(rawValue: UserDefaults.standard.string(forKey: "appTheme") ?? "") ?? .system
+        let name: NSAppearance.Name?
+        switch theme {
+        case .light: name = .aqua
+        case .dark: name = .darkAqua
+        case .system: name = nil
+        }
+        if NSApp.appearance?.name != name { NSApp.appearance = name.flatMap(NSAppearance.init(named:)) }
     }
 
     private func configureDictation() {

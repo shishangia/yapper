@@ -67,7 +67,7 @@ struct WelcomePage: View {
                     .tracking(2.5)
 
                 Text("Yapper")
-                    .font(.system(size: 48, weight: .regular, design: .serif))
+                    .font(.system(size: 48, weight: .regular, design: .rounded))
                     .foregroundStyle(Color.textPrimary)
                     .tracking(-0.5)
 
@@ -77,7 +77,7 @@ struct WelcomePage: View {
                         .foregroundStyle(Color.textSecondary)
 
                     Text(" Private. Fast. Offline.")
-                        .font(.system(size: 16, weight: .regular, design: .serif))
+                        .font(.system(size: 16, weight: .regular, design: .rounded))
                         .italic()
                         .foregroundStyle(Color.textSecondary)
                 }
@@ -164,7 +164,7 @@ struct PermissionsPage: View {
                     .tracking(2)
 
                 Text("Permissions")
-                    .font(.system(size: 40, weight: .regular, design: .serif))
+                    .font(.system(size: 40, weight: .regular, design: .rounded))
                     .foregroundStyle(Color.textPrimary)
 
                 Text("Grant these permissions to unlock the full experience.")
@@ -328,7 +328,7 @@ struct FeatureCard: View {
 
             // Title in serif
             Text(title)
-                .font(.system(size: 16, weight: .medium, design: .serif))
+                .font(.system(size: 16, weight: .medium, design: .rounded))
                 .foregroundStyle(Color.textPrimary)
 
             Spacer()
@@ -501,7 +501,7 @@ struct GlobeKeyOptimizationPage: View {
                     .tracking(2)
 
                 Text("The Globe Key")
-                    .font(.system(size: 40, weight: .regular, design: .serif))
+                    .font(.system(size: 40, weight: .regular, design: .rounded))
                     .foregroundStyle(Color.textPrimary)
 
                 Text(

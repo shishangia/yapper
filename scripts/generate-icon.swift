@@ -34,15 +34,6 @@ func render(size: Int) throws -> Data {
     mouth.fill()
     pink.setFill()
     NSBezierPath(ovalIn: NSRect(x: 464, y: 361, width: 126, height: 60)).fill()
-    blue.setStroke()
-    for (x, y, dx) in [(126.0, 510.0, -38.0), (850.0, 585.0, 45.0), (847.0, 702.0, 33.0)] {
-        let line = NSBezierPath()
-        line.move(to: NSPoint(x: x, y: y))
-        line.line(to: NSPoint(x: x + dx, y: y + 24))
-        line.lineWidth = 23
-        line.lineCapStyle = .round
-        line.stroke()
-    }
     NSGraphicsContext.restoreGraphicsState()
     return bitmap.representation(using: .png, properties: [:])!
 }

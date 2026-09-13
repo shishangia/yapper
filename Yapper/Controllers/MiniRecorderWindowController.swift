@@ -163,6 +163,8 @@ class MiniRecorderWindowController: NSObject {
         }
         p.minSize = fixedSize
         p.maxSize = fixedSize
+        p.title = "Yapper Recorder"
+        p.identifier = NSUserInterfaceItemIdentifier("yapper.recorder")
         p.titleVisibility = .hidden
         p.titlebarAppearsTransparent = true
         p.isMovableByWindowBackground = false  // stay put — always screen-centered

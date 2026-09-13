@@ -18,11 +18,11 @@ struct WaveformView: View {
             ZStack(alignment: .leading) {
                 // Background waveform (light blue)
                 waveformPath(in: geometry.size, samples: samples)
-                    .stroke(Color.blue.opacity(0.3), lineWidth: 1.5)
+                    .stroke(Color.accentPrimary.opacity(0.3), lineWidth: 1.5)
 
                 // Progress waveform (solid blue)
                 waveformPath(in: geometry.size, samples: samples)
-                    .stroke(Color.blue, lineWidth: 1.5)
+                    .stroke(Color.accentPrimary, lineWidth: 1.5)
                     .frame(width: geometry.size.width * progress)
                     .clipped()
             }

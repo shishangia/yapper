@@ -65,7 +65,7 @@ enum Typography {
 
     // MARK: - Sidebar
 
-    static let sidebarLogo = Font.system(size: 20, weight: .semibold)
+    static let sidebarLogo = Font.system(size: 20, weight: .semibold, design: .rounded)
     static let sidebarItem = Font.system(size: 14)
     static let sidebarItemActive = Font.system(size: 14, weight: .semibold)
     static let sidebarBadge = badge
