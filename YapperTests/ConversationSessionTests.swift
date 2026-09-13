@@ -9,7 +9,7 @@ private final class WaitingProcessor: ConversationProcessing {
 
     init(started: XCTestExpectation) { self.started = started }
 
-    func transcribe(_ url: URL, language: String, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord] {
+    func transcribe(_ url: URL, variant: String, language: String, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord] {
         await withCheckedContinuation {
             continuation = $0
             started.fulfill()
@@ -28,22 +28,26 @@ final class ConversationSessionTests: XCTestCase {
         let suite = "Yapper-Session-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set("openai_whisper-large-v3_turbo", forKey: ModelSelection.defaultsKey)
         let history = HistoryService(defaults: defaults)
         let started = expectation(description: "processing started")
         let processor = WaitingProcessor(started: started)
-        let session = ConversationSession(service: ConversationService(processor: processor, gate: NativeInferenceGate()), history: history)
+        let session = ConversationSession(service: ConversationService(processor: processor, gate: NativeInferenceGate()), history: history, defaults: defaults)
         let audio = try makeAudio()
         defer { try? FileManager.default.removeItem(at: audio) }
         session.importFile(audio)
         await fulfillment(of: [started], timeout: 3)
         XCTAssertTrue(session.isBusy)
         XCTAssertEqual(session.phase, .processing)
+        defaults.set("openai_whisper-tiny", forKey: ModelSelection.defaultsKey)
+        XCTAssertEqual(session.activeModel, "openai_whisper-large-v3_turbo")
         processor.continuation?.resume()
         await session.waitUntilFinished()
         XCTAssertEqual(session.phase, .completed)
         XCTAssertEqual(history.items.count, 1)
         XCTAssertEqual(history.statsEntries.count, 1)
         let item = try XCTUnwrap(history.items.first)
+        XCTAssertEqual(item.modelUsed, "Whisper Large v3 Turbo")
         history.addConversation(try XCTUnwrap(item.conversation), duration: 1, id: item.id)
         XCTAssertEqual(history.items.count, 1)
         XCTAssertEqual(history.statsEntries.count, 1)
@@ -54,10 +58,11 @@ final class ConversationSessionTests: XCTestCase {
         let suite = "Yapper-Session-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set("openai_whisper-large-v3_turbo", forKey: ModelSelection.defaultsKey)
         let history = HistoryService(defaults: defaults)
         let started = expectation(description: "processing started")
         let processor = WaitingProcessor(started: started)
-        let session = ConversationSession(service: ConversationService(processor: processor, gate: NativeInferenceGate()), history: history)
+        let session = ConversationSession(service: ConversationService(processor: processor, gate: NativeInferenceGate()), history: history, defaults: defaults)
         let audio = try makeAudio()
         defer { try? FileManager.default.removeItem(at: audio) }
         session.importFile(audio)

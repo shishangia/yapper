@@ -192,9 +192,11 @@ class WhisperService {
                 modelFolder = legacyFolder
             }
 
-            if variant == LocalConversationProcessor.variant {
-                _ = try await AutoTokenizerWrapper.from(modelFolder: LocalConversationProcessor.tokenizerDirectory)
+            guard ModelStorage.transcriptionModelReady(variant),
+                  let tokenizer = ModelStorage.tokenizerDirectory(for: variant) else {
+                throw ConversationError.modelsMissing
             }
+            _ = try await AutoTokenizerWrapper.from(modelFolder: tokenizer)
 
             // Use WhisperKitConfig with optimized settings.
             // `downloadBase` keeps any tokenizer configs WhisperKit fetches out of
@@ -203,8 +205,7 @@ class WhisperService {
                 model: variant,
                 downloadBase: ModelStorage.whisperKitBase,
                 modelFolder: modelFolder.path,
-                tokenizerFolder: (AppEnvironment.usesIsolatedStorage || variant == "openai_whisper-large-v3")
-                    ? ModelStorage.whisperKitBase : ModelStorage.legacyBase,
+                tokenizerFolder: ModelStorage.whisperKitBase,
                 computeOptions: ModelComputeOptions(),  // Uses GPU + Neural Engine
                 verbose: false,
                 logLevel: .error,
@@ -328,7 +329,10 @@ class WhisperService {
             let offset = Double(range.lowerBound) / 16000
             let end = Double(range.upperBound) / 16000
             var options = Self.conversationDecodingOptions()
-            if language == "mixed" {
+            if AIModel.availableModels.first(where: { $0.variant == currentModelVariant })?.isEnglishOnly == true {
+                options.language = "en"
+                options.detectLanguage = false
+            } else if language == "mixed" {
                 let detected = try await pipe.detectLangauge(audioArray: audio)
                 options.language = detected.langProbs.filter { ["en", "hi", "gu"].contains($0.key) }
                     .max(by: { $0.value < $1.value })?.key

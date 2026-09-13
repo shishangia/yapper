@@ -117,6 +117,20 @@ class ModelDownloadService: ObservableObject {
     @Published var isDownloading: [String: Bool] = [:]
     
     private var activeTasks: [String: Task<Void, Never>] = [:] // Track running download tasks
+
+    @MainActor
+    func downloadAndWait(variant: String, progress: @escaping @Sendable (Double) -> Void) async throws {
+        guard AIModel.availableModels.contains(where: { $0.variant == variant }) else {
+            throw TranscriptionManager.ModelError.noSelection
+        }
+        if ModelStorage.transcriptionModelReady(variant) { progress(1); return }
+        downloadModel(variant: variant)
+        guard let task = activeTasks[variant] else { throw ConversationError.modelsMissing }
+        let observation = $downloadProgress.sink { progress($0[variant] ?? 0) }
+        defer { observation.cancel() }
+        await task.value
+        guard ModelStorage.transcriptionModelReady(variant) else { throw ConversationError.modelsMissing }
+    }
     
     private init() {
         // Move any models left in the legacy ~/Documents/huggingface location into
@@ -140,8 +154,6 @@ class ModelDownloadService: ObservableObject {
         // NOTE: WhisperKit.fetchAvailableModels() returns ALL remote models, not local ones
         // We ONLY rely on disk-based verification to check what's actually downloaded
         
-        let fileManager = FileManager.default
-
         // Verify models actually exist on disk with proper size validation.
         // Scan the current Application Support location plus the legacy Documents
         // location (in case a migration move failed or hasn't run yet).
@@ -155,9 +167,7 @@ class ModelDownloadService: ObservableObject {
         for variant in ParakeetCatalog.variants {
             let version = ParakeetCatalog.version(for: variant)
             let cacheDir = ModelStorage.parakeetCacheDirectory(for: version)
-            if fileManager.fileExists(atPath: cacheDir.path),
-               let contents = try? fileManager.contentsOfDirectory(atPath: cacheDir.path),
-               !contents.isEmpty {
+            if AsrModels.modelsExist(at: cacheDir, version: version) {
                 foundModels.insert(variant)
                 print("✅ Parakeet model \(variant) found in cache")
             }
@@ -277,7 +287,9 @@ class ModelDownloadService: ObservableObject {
                     }
                 })
                 
-                // Check if task was cancelled before declaring success
+                if Task.isCancelled { return }
+                guard let model = ModelStorage.whisperVariant(for: variant) else { throw ConversationError.modelsMissing }
+                _ = try await ModelUtilities.loadTokenizer(for: model, tokenizerFolder: ModelStorage.whisperKitBase)
                 if Task.isCancelled { return }
                 
                 print("Model downloaded successfully")
@@ -323,7 +335,10 @@ class ModelDownloadService: ObservableObject {
                          })
                          
                          if Task.isCancelled { return }
-                         
+                         guard let model = ModelStorage.whisperVariant(for: variant) else { throw ConversationError.modelsMissing }
+                         _ = try await ModelUtilities.loadTokenizer(for: model, tokenizerFolder: ModelStorage.whisperKitBase)
+                         if Task.isCancelled { return }
+
                          print("✅ Model downloaded successfully after cleanup")
                          
                          DispatchQueue.main.async {
@@ -404,7 +419,15 @@ class ModelDownloadService: ObservableObject {
     }
 
     // Aggressively deletes any potential cache for this variant
+    @MainActor
     func deleteModel(variant: String) async -> String {
+        await NativeInferenceGate.shared.run {
+            await TranscriptionManager.shared.unloadWhileLocked(variant: variant)
+            return await removeModelFiles(variant: variant)
+        }
+    }
+
+    private func removeModelFiles(variant: String) async -> String {
         // Parakeet models are managed by FluidAudio in its own cache directory.
         if AIModel.engineKind(for: variant) == .parakeet {
             let version = ParakeetCatalog.version(for: variant)

@@ -8,8 +8,35 @@
 
 import Foundation
 import FluidAudio
+import WhisperKit
 
 enum ModelStorage {
+    static func whisperVariant(for variant: String) -> ModelVariant? {
+        let name = variant.replacingOccurrences(of: "openai_whisper-", with: "")
+            .replacingOccurrences(of: "_turbo", with: "")
+        return ModelVariant.allCases.first { $0.description == name }
+    }
+
+    static func tokenizerDirectory(for variant: String) -> URL? {
+        guard let model = whisperVariant(for: variant) else { return nil }
+        return whisperKitBase.appendingPathComponent("models/openai/whisper-\(model.description)")
+    }
+
+    static func transcriptionModelReady(_ variant: String) -> Bool {
+        guard let model = AIModel.availableModels.first(where: { $0.variant == variant }) else { return false }
+        if model.engine == .parakeet {
+            let version = ParakeetCatalog.version(for: variant)
+            return AsrModels.modelsExist(at: parakeetCacheDirectory(for: version), version: version)
+        }
+        guard let tokenizer = tokenizerDirectory(for: variant) else { return false }
+        let root = whisperKitModelsDir.appendingPathComponent(variant)
+        return ["AudioEncoder.mlmodelc", "TextDecoder.mlmodelc", "MelSpectrogram.mlmodelc", "config.json"].allSatisfy {
+            FileManager.default.fileExists(atPath: root.appendingPathComponent($0).path)
+        } && ["tokenizer.json", "tokenizer_config.json"].allSatisfy {
+            FileManager.default.fileExists(atPath: tokenizer.appendingPathComponent($0).path)
+        }
+    }
+
     /// WhisperKit models and tokenizer configs both live below this base.
     static var whisperKitBase: URL { AppEnvironment.applicationSupportDirectory }
 

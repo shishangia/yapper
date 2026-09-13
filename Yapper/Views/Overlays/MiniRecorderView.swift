@@ -89,22 +89,13 @@ struct MiniRecorderView: View {
 
     // MARK: - State for Escape key cancellation
     @State private var cancelCommit = false
+    @State private var recordingModel = ModelSelection.none
+    @State private var recordingLanguage = "auto"
     @State private var globalEscapeMonitor: Any?
     @State private var localEscapeMonitor: Any?
 
-    @Environment(\.colorScheme) private var colorScheme
-    // The pill window follows the system appearance, which can disagree with the
-    // in-app theme override — so resolve "dark" from the app theme first.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("appTheme") private var appTheme: AppTheme = .system
-
-    /// Whether the glass pill should use its dark treatment.
-    private var pillIsDark: Bool {
-        switch appTheme {
-        case .dark: return true
-        case .light: return false
-        case .system: return colorScheme == .dark
-        }
-    }
 
     // MARK: - State for Animation
     @State private var phase: CGFloat = 0
@@ -143,11 +134,12 @@ struct MiniRecorderView: View {
         HStack(spacing: 5) {
             Image(systemName: icon).font(.system(size: 11, weight: .semibold))
             Text(text).font(.system(size: 11, weight: .semibold))
-            DoubleChevronIcon(color: .white.opacity(0.45))
+            DoubleChevronIcon(color: .textSecondary)
         }
+        .foregroundStyle(Color.textPrimary)
         .padding(.horizontal, 9)
         .padding(.vertical, 5)
-        .background(Capsule().fill(Color.white.opacity(0.12)))
+        .background(Capsule().fill(Color.bgHover))
     }
 
     private var languageControl: some View {
@@ -176,7 +168,7 @@ struct MiniRecorderView: View {
         }
         .menuIndicator(.hidden)
         .menuStyle(.borderlessButton)
-        .tint(.white.opacity(0.9))
+        .tint(Color.textPrimary)
         .fixedSize()
         .help(spokenLanguageHelpText)
     }
@@ -205,7 +197,7 @@ struct MiniRecorderView: View {
         }
         .menuIndicator(.hidden)
         .menuStyle(.borderlessButton)
-        .tint(.white.opacity(0.9))
+        .tint(Color.textPrimary)
         .fixedSize()
         .help(inputDeviceHelpText)
         .transition(.opacity.combined(with: .scale(scale: 0.9)))
@@ -238,7 +230,7 @@ struct MiniRecorderView: View {
         }
         .menuIndicator(.hidden)
         .menuStyle(.borderlessButton)
-        .tint(.white.opacity(0.9))
+        .tint(Color.textPrimary)
         .fixedSize()
         .help("Recording mode")
         .transition(.opacity.combined(with: .scale(scale: 0.9)))
@@ -264,6 +256,16 @@ struct MiniRecorderView: View {
     private enum RecorderPhase { case idle, warming, processing, recording }
 
     private var displayPhase: RecorderPhase {
+        #if DEBUG
+        if let preview = ProcessInfo.processInfo.environment["YAPPER_RECORDER_PREVIEW"] {
+            switch preview {
+            case "recording": return .recording
+            case "processing": return .processing
+            case "warming": return .warming
+            default: return .idle
+            }
+        }
+        #endif
         if isWarmingUp || transcription.isLoading { return .warming }
         if isProcessing { return .processing }
         if isListening { return .recording }
@@ -296,16 +298,11 @@ struct MiniRecorderView: View {
         HStack(spacing: 3) {
             ForEach(Array(Self.idleBarScale.enumerated()), id: \.offset) { _, scale in
                 Capsule(style: .continuous)
-                    .fill(Color.white)
+                    .fill(Color.accentPrimary)
                     .frame(width: 2.5, height: 12 * scale)
             }
         }
         .frame(height: 24)
-        // Adapt to whatever shows through the glass: a difference blend renders the
-        // bars subtly dark over a light backdrop and light over a dark one, so they
-        // never just blend into white. Softened so it reads gentle, not harsh.
-        .blendMode(.difference)
-        .opacity(0.85)
         .transition(.opacity.combined(with: .scale(scale: 0.6)))
     }
 
@@ -313,10 +310,10 @@ struct MiniRecorderView: View {
         HStack(spacing: 8) {
             ProgressView()
                 .controlSize(.small)
-                .colorScheme(.dark)
+                .tint(Color.accentPrimary)
             Text("Warming up model...")
                 .font(Typography.pillLabel)
-                .foregroundColor(.white.opacity(0.9))
+                .foregroundColor(Color.textPrimary)
         }
         .transition(.opacity)
     }
@@ -324,7 +321,7 @@ struct MiniRecorderView: View {
     private var processingContent: some View {
         Text(statusMessage)
             .font(Typography.pillLabel)
-            .foregroundColor(.white)
+            .foregroundStyle(Color.textPrimary)
             .lineLimit(1)
             .transition(.opacity)
     }
@@ -366,7 +363,7 @@ struct MiniRecorderView: View {
                         width: Self.waveBarWidth, height: barHeight)
                     context.fill(
                         Path(roundedRect: rect, cornerRadius: Self.waveBarWidth / 2),
-                        with: .color(.white.opacity(0.9)))
+                        with: .color(Color.textPrimary))
                 }
             }
             .frame(height: 22)
@@ -376,7 +373,7 @@ struct MiniRecorderView: View {
             TimelineView(.periodic(from: .now, by: 0.5)) { context in
                 Text(elapsedString(context.date))
                     .font(Typography.pillTime)
-                    .foregroundColor(.white.opacity(0.6))
+                    .foregroundColor(Color.textSecondary)
             }
 
             // Mic + mode + language: revealed inline on hover only, to keep
@@ -417,8 +414,8 @@ struct MiniRecorderView: View {
             radius: displayPhase == .idle ? 8 : 14,
             x: 0,
             y: displayPhase == .idle ? 3 : 5)
-        .animation(.spring(response: 0.45, dampingFraction: 0.90), value: displayPhase)
-        .animation(.spring(response: 0.40, dampingFraction: 0.92), value: expanded)
+        .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.92), value: displayPhase)
+        .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.92), value: expanded)
         .onHover { hovering in
             guard displayPhase == .recording else { return }
             expanded = hovering
@@ -438,6 +435,7 @@ struct MiniRecorderView: View {
             pillView
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .preferredColorScheme(appTheme.colorScheme)
         .onReceive(NotificationCenter.default.publisher(for: .recordingStartRequested)) { _ in
             startRecording()
         }
@@ -481,7 +479,7 @@ struct MiniRecorderView: View {
                 withAnimation(.linear(duration: 2).repeatForever(autoreverses: false)) {
                     phase = .pi * 4
                 }
-                withAnimation(.easeOut(duration: 1.4).repeatForever(autoreverses: false)) {
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 1.4).repeatForever(autoreverses: false)) {
                     dotPulse = true
                 }
             } else {
@@ -539,81 +537,10 @@ struct MiniRecorderView: View {
             .help("Recording — click or press your hotkey to stop")
     }
 
-    @ViewBuilder
     private func backgroundView(cornerRadius: CGFloat) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        if displayPhase == .idle {
-            if pillIsDark {
-                // Dark mode: a near-black premium pill rendered PURELY in SwiftUI.
-                // We deliberately avoid a behind-window NSVisualEffectView here: as
-                // a freshly-inserted AppKit view it crossfades its material in on
-                // the light→dark switch (under the system's appearance-transition),
-                // so the pill took ~a second to darken while dark→light (SwiftUI
-                // glass) was instant. An opaque SwiftUI fill flips with `colorScheme`
-                // immediately in both directions. This mirrors the active-HUD look
-                // below (`Color(white: 0.05)`), plus a faint top sheen for edge
-                // definition. We also skip Liquid Glass in dark: its material paints
-                // a luminous edge that reads as a white frost ring no matter the tint.
-                ZStack {
-                    shape.fill(Color(white: 0.06))
-                    shape.strokeBorder(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.09),
-                                Color.white.opacity(0.01),
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom),
-                        lineWidth: 0.75)
-                }
-            } else if #available(macOS 26.0, *) {
-                // Light mode: native Liquid Glass — frosted, refractive, gorgeous.
-                Color.clear
-                    .glassEffect(.regular, in: shape)
-                    .overlay {
-                        // Soft frost hugging the inside edge; clear center.
-                        ZStack {
-                            shape
-                                .stroke(Color.white.opacity(0.14), lineWidth: 6)
-                                .blur(radius: 4)
-                            shape.strokeBorder(
-                                LinearGradient(
-                                    colors: [
-                                        Color.white.opacity(0.35),
-                                        Color.white.opacity(0.06),
-                                    ],
-                                    startPoint: .top,
-                                    endPoint: .bottom),
-                                lineWidth: 1)
-                        }
-                        .clipShape(shape)
-                    }
-            } else {
-                // Light mode on macOS 14–15 (no Liquid Glass): behind-window blur.
-                ZStack {
-                    VisualEffectBlur(
-                        material: .hudWindow,
-                        blendingMode: .behindWindow,
-                        cornerRadius: cornerRadius)
-                    shape.strokeBorder(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.55),
-                                Color.white.opacity(0.08),
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom),
-                        lineWidth: 1)
-                }
-            }
-        } else {
-            // Active HUD: deep, opaque near-black so warming/recording/processing
-            // text stays fully legible over any backdrop.
-            ZStack {
-                shape.fill(Color(white: 0.05))
-                shape.strokeBorder(Color.white.opacity(0.10), lineWidth: 0.8)
-            }
-        }
+        return shape.fill(displayPhase == .idle ? Color.bgSelected : Color.bgSurface)
+            .overlay(shape.strokeBorder(Color.border, lineWidth: 1))
     }
 
     @ViewBuilder
@@ -734,8 +661,7 @@ struct MiniRecorderView: View {
         }
 
         // Check if model is downloaded
-        let progress = ModelDownloadService.shared.downloadProgress[selectedModel] ?? 0
-        guard progress >= 1.0 else {
+        guard ModelStorage.transcriptionModelReady(selectedModel) else {
             debugLog("Model not downloaded - showing error")
             isProcessing = true
             statusMessage = "Model not downloaded"
@@ -748,6 +674,19 @@ struct MiniRecorderView: View {
             return
         }
 
+        do { try TranscriptionManager.validate(variant: selectedModel, language: transcriptionLanguage) }
+        catch {
+            isProcessing = true
+            statusMessage = "Choose a model for this language"
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(3))
+                isProcessing = false
+                onCancel?()
+            }
+            return
+        }
+        recordingModel = selectedModel
+        recordingLanguage = transcriptionLanguage
         cancelCommit = false
 
         debugLog("Starting recording...")
@@ -794,8 +733,8 @@ struct MiniRecorderView: View {
             return
         }
 
-        // Check if model is selected
-        guard !selectedModel.isEmpty else {
+        // The model is captured before microphone recording starts.
+        guard !recordingModel.isEmpty else {
             debugLog("No model selected - cannot transcribe")
             Task { @MainActor in
                 isListening = false
@@ -875,34 +814,13 @@ struct MiniRecorderView: View {
     private func processRecording(url: URL) async {
         debugLog("processRecording started with url: \(url.lastPathComponent)")
         do {
-            // Ensure model is loaded before transcribing
-            if !transcription.isInitialized || transcription.currentModelVariant != selectedModel
-            {
-                debugLog("Loading model: \(selectedModel)")
-                await MainActor.run { statusMessage = "Warming up model — first use is slower..." }
-                do {
-                    try await transcription.loadModel(variant: selectedModel)
-                    debugLog("Model loaded successfully")
-                } catch {
-                    debugLog("Model load failed: \(error.localizedDescription)")
-                    await MainActor.run {
-                        statusMessage = "Model load failed"
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                            self.isProcessing = false
-                            self.onCancel?()
-                        }
-                    }
-                    return
-                }
-            }
-
             debugLog("Starting transcription...")
             // If user has already cancelled (pressed Escape), skip transcription UI updates
             // but still run the transcription in the background to save to history
             if !cancelCommit {
                 await MainActor.run { statusMessage = "Transcribing..." }
             }
-            let text = try await transcription.transcribe(audioFile: url, language: transcriptionLanguage)
+            let text = try await transcription.transcribe(audioFile: url, variant: recordingModel, language: recordingLanguage)
             debugLog("Transcription result: \(text.prefix(50))...")
 
             guard !text.isEmpty else {
@@ -919,8 +837,8 @@ struct MiniRecorderView: View {
 
             let duration = await getAudioDuration(url: url)
             let modelName =
-                AIModel.availableModels.first(where: { $0.variant == selectedModel })?.name
-                ?? selectedModel
+                AIModel.availableModels.first(where: { $0.variant == recordingModel })?.name
+                ?? recordingModel
             HistoryService.shared.addItem(
                 transcript: text,
                 duration: duration,

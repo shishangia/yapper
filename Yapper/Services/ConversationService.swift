@@ -6,17 +6,15 @@ import WhisperKit
 
 @MainActor
 protocol ConversationProcessing {
-    func transcribe(_ url: URL, language: String, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord]
+    func transcribe(_ url: URL, variant: String, language: String, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord]
     func diarize(_ url: URL, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationSpeakerTurn]
 }
 
 @MainActor
 final class LocalConversationProcessor: ConversationProcessing {
-    static let variant = "openai_whisper-large-v3"
     static let speakerModelName = "SortformerNvidiaLow_v2.1.mlmodelc"
     static var diarizerDirectory: URL { ModelStorage.whisperKitBase.appendingPathComponent("SpeakerModels") }
     static var speakerModelURL: URL { diarizerDirectory.appendingPathComponent("sortformer/\(speakerModelName)") }
-    static var tokenizerDirectory: URL { ModelStorage.whisperKitBase.appendingPathComponent("models/openai/whisper-large-v3") }
     static var speechModelURL: URL {
         ModelStorage.whisperKitBase.appendingPathComponent("SpeechModels/silero-vad/\(ModelNames.VAD.sileroVadFile)")
     }
@@ -27,13 +25,9 @@ final class LocalConversationProcessor: ConversationProcessing {
         }
     }
 
-    static var transcriptionModelsReady: Bool {
-        let model = ModelStorage.whisperKitModelsDir.appendingPathComponent(variant)
-        return ["AudioEncoder.mlmodelc", "TextDecoder.mlmodelc", "MelSpectrogram.mlmodelc"].allSatisfy {
-            FileManager.default.fileExists(atPath: model.appendingPathComponent($0).path)
-        } && ["tokenizer.json", "tokenizer_config.json"].allSatisfy {
-            FileManager.default.fileExists(atPath: tokenizerDirectory.appendingPathComponent($0).path)
-        } && speechModelReady
+    static func transcriptionModelsReady(variant: String) -> Bool {
+        ModelStorage.transcriptionModelReady(variant)
+            && (AIModel.engineKind(for: variant) == .parakeet || speechModelReady)
     }
 
     static var speakerModelsReady: Bool {
@@ -42,15 +36,11 @@ final class LocalConversationProcessor: ConversationProcessing {
         }
     }
 
-    static func downloadModels(speakers: Bool, progress: @escaping @Sendable (String, Double) -> Void) async throws {
-        if !transcriptionModelsReady {
-            _ = try await WhisperKit.download(variant: variant, downloadBase: ModelStorage.whisperKitBase) {
-                progress("Downloading Whisper Large v3", $0.fractionCompleted)
-            }
-            progress("Downloading language tokenizer", 0)
-            _ = try await ModelUtilities.loadTokenizer(for: .largev3, tokenizerFolder: ModelStorage.whisperKitBase)
+    static func downloadModels(variant: String, speakers: Bool, progress: @escaping @Sendable (String, Double) -> Void) async throws {
+        try await ModelDownloadService.shared.downloadAndWait(variant: variant) { value in
+            progress("Downloading transcription model", value)
         }
-        if !speechModelReady {
+        if AIModel.engineKind(for: variant) == .whisper && !speechModelReady {
             try await DownloadUtils.downloadRepo(.vad, to: ModelStorage.whisperKitBase.appendingPathComponent("SpeechModels")) {
                 progress("Downloading speech detection model", $0.fractionCompleted)
             }
@@ -62,18 +52,10 @@ final class LocalConversationProcessor: ConversationProcessing {
         }
     }
 
-    func transcribe(_ url: URL, language: String, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord] {
-        guard Self.transcriptionModelsReady else { throw ConversationError.modelsMissing }
-        let whisper = WhisperService()
-        do {
-            try await whisper.loadModel(variant: Self.variant)
-            let words = try await whisper.transcribeConversation(audioFile: url, language: language, progress: progress)
-            await whisper.unload()
-            return words
-        } catch {
-            await whisper.unload()
-            throw error
-        }
+    func transcribe(_ url: URL, variant: String, language: String, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord] {
+        guard Self.transcriptionModelsReady(variant: variant) else { throw ConversationError.modelsMissing }
+        return try await TranscriptionManager.shared.transcribeConversationWhileLocked(
+            audioFile: url, variant: variant, language: language, progress: progress)
     }
 
     func diarize(_ url: URL, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationSpeakerTurn] {
@@ -105,7 +87,7 @@ enum ConversationError: LocalizedError {
         switch self {
         case .busy: return "Another recording is still being processed."
         case .cancelled: return "Canceled. No transcript was saved."
-        case .modelsMissing: return "Download the conversation models before transcribing."
+        case .modelsMissing: return "The selected model or its support files are missing. Download the required files before transcribing."
         case .invalidSpeakerModels: return "The speaker models are incomplete or damaged."
         case .invalidAudio: return "The file does not contain a readable audio track."
         }
@@ -134,26 +116,25 @@ final class ConversationService {
         stage = "Canceling. Waiting for the current operation to finish…"
     }
 
-    func downloadModels(speakers: Bool) async throws {
+    func downloadModels(variant: String, speakers: Bool) async throws {
         let id = try begin()
         defer { finish() }
-        try await gate.run {
-            try checkCancellation()
-            try await LocalConversationProcessor.downloadModels(speakers: speakers) { stage, value in
-                Task { @MainActor in self.report(id: id, stage: stage, progress: value) }
-            }
-            try checkCancellation()
+        try checkCancellation()
+        try await LocalConversationProcessor.downloadModels(variant: variant, speakers: speakers) { stage, value in
+            Task { @MainActor in self.report(id: id, stage: stage, progress: value) }
         }
+        try checkCancellation()
         await ModelDownloadService.shared.refreshDownloadedModels()
     }
 
-    func process(_ url: URL, detectSpeakers: Bool, singleSpeaker: Bool = false, language: String = "auto") async throws -> ConversationTranscript {
+    func process(_ url: URL, variant: String, detectSpeakers: Bool, singleSpeaker: Bool = false, language: String = "auto") async throws -> ConversationTranscript {
         let id = try begin()
         defer { finish() }
         return try await gate.run {
             try checkCancellation()
-            report(id: id, stage: "Loading and transcribing with Whisper Large v3", progress: 0)
-            let words = try await processor.transcribe(url, language: language) { value in
+            let modelName = AIModel.availableModels.first { $0.variant == variant }?.name ?? variant
+            report(id: id, stage: "Transcribing with \(modelName)", progress: 0)
+            let words = try await processor.transcribe(url, variant: variant, language: language) { value in
                 Task { @MainActor in self.report(id: id, stage: "Transcribing in the spoken language", progress: value) }
             }
             try checkCancellation()
@@ -173,9 +154,7 @@ final class ConversationService {
                     }
                     try checkCancellation()
                     transcript = ConversationAlignment.align(words: words, turns: turns, detectSpeakers: true)
-                    let speakerWarning = transcript.segments.contains(where: { $0.speakerID == nil })
-                        ? "Some words have an uncertain speaker assignment. This does not indicate an additional person. Use Edit to assign them, or choose One speaker before recording." : nil
-                    transcript.warning = [languageWarning, speakerWarning].compactMap { $0 }.joined(separator: " ")
+                    transcript.warning = languageWarning
                 } catch {
                     try checkCancellation()
                     transcript.warning = [languageWarning, "Speaker detection failed. The full unlabeled transcript was kept. \(error.localizedDescription)"].compactMap { $0 }.joined(separator: " ")

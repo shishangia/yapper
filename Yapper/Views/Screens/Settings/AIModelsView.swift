@@ -51,7 +51,7 @@ struct AIModelsView: View {
     private var currentSelection: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Dictation model")
+                Text("Your transcription model")
                     .font(Typography.labelMedium)
                     .foregroundStyle(Color.textSecondary)
 
@@ -61,13 +61,13 @@ struct AIModelsView: View {
                     .accessibilityIdentifier("models.dictationSelection")
 
                 if let model = selectedModelObject {
-                    if (downloadService.downloadProgress[model.variant] ?? 0) < 1 {
+                    if !ModelStorage.transcriptionModelReady(model.variant) {
                         Text("Download this model below before using dictation.")
                             .font(Typography.bodySmall)
                             .foregroundStyle(Color.textSecondary)
                     }
                 } else {
-                    Text("Download a model, then choose Use to select it for dictation.")
+                    Text("Download a model, then choose Use to select it for dictation and conversations.")
                         .font(Typography.bodySmall)
                         .foregroundStyle(Color.textSecondary)
                 }
@@ -76,7 +76,7 @@ struct AIModelsView: View {
             Divider()
 
             Label {
-                Text("Conversation transcription uses the full Whisper Large v3 model, regardless of your dictation selection. You can download it below.")
+                Text("One selection for dictation, microphone conversations, and imported files. Changes apply to the next recording. Speaker detection uses a separate local model.")
                     .fixedSize(horizontal: false, vertical: true)
             } icon: {
                 Image(systemName: "person.2")
@@ -108,7 +108,7 @@ struct AIModelsView: View {
                 .font(Typography.labelMedium)
                 .foregroundStyle(Color.textPrimary)
 
-            Text("Based on an estimated fit for your Mac (\(capability.summary)), not a measured benchmark. Changing this preference does not change your selected model.")
+            Text("Speed and accuracy bars are relative estimates, not benchmarks or accuracy percentages. Suggestions consider your Mac (\(capability.summary)); changing this preference does not select a model.")
                 .font(Typography.bodySmall)
                 .foregroundStyle(Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)

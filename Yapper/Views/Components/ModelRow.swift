@@ -17,7 +17,7 @@ struct ModelRow: View {
 
     var progress: Double { downloadService.downloadProgress[model.variant] ?? 0 }
     var isDownloading: Bool { downloadService.isDownloading[model.variant] ?? false }
-    var isDownloaded: Bool { progress >= 1 }
+    var isDownloaded: Bool { progress >= 1 && ModelStorage.transcriptionModelReady(model.variant) }
     var isActive: Bool { selectedModel == model.variant }
 
     var body: some View {
@@ -33,6 +33,12 @@ struct ModelRow: View {
                     actions
                 }
             }
+
+            HStack(spacing: 24) {
+                metric("Speed", value: model.speed, tint: .accentBlue)
+                metric("Accuracy", value: model.accuracy, tint: .accentPrimary)
+            }
+            .frame(maxWidth: 420)
 
             if let warning = model.ramWarning(deviceRAMGB: WhisperService.deviceRAMGB) {
                 note(icon: "exclamationmark.triangle", text: warning, tint: .accentWarning)
@@ -56,8 +62,24 @@ struct ModelRow: View {
             Button("Delete Model", role: .destructive, action: deleteModel)
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This removes the downloaded model, not your recordings or transcripts. You can download it again.\(isActive ? " Your dictation model selection will be cleared." : "")")
+            Text("This removes the downloaded model, not your recordings or transcripts. You can download it again.\(isActive ? " Your model selection will be cleared." : "")")
         }
+    }
+
+    private func metric(_ label: String, value: Double, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label).font(Typography.caption).foregroundStyle(Color.textSecondary)
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.bgHover)
+                    Capsule().fill(tint).frame(width: geometry.size.width * min(1, max(0, value / 10)))
+                }
+            }
+            .frame(height: 5)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(label), relative estimate \(value.formatted()) out of 10, not a benchmark")
+        .accessibilityIdentifier("model.metric.\(label.lowercased()).\(model.variant)")
     }
 
     private var modelSummary: some View {
@@ -78,7 +100,7 @@ struct ModelRow: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             if isActive {
-                Label(isDownloaded ? "Selected for dictation" : "Selected · download needed", systemImage: "checkmark.circle.fill")
+                Label(isDownloaded ? "Selected for all transcription" : "Selected · download needed", systemImage: "checkmark.circle.fill")
                     .font(Typography.labelSmall)
                     .foregroundStyle(Color.accentPrimary)
             } else if isRecommended {
@@ -101,8 +123,8 @@ struct ModelRow: View {
                     Button("Use", action: loadAndSelectModel)
                         .buttonStyle(.stSecondary)
                         .disabled(isLoadingModel || isDeletingModel)
-                        .help("Use \(model.name) for dictation")
-                        .accessibilityLabel("Use \(model.name) for dictation")
+                        .help("Use \(model.name) for all transcription")
+                        .accessibilityLabel("Use \(model.name) for all transcription")
                         .accessibilityIdentifier("model.use.\(model.variant)")
                 }
                 Button {
@@ -112,7 +134,7 @@ struct ModelRow: View {
                         .frame(width: 16, height: 18)
                 }
                 .buttonStyle(.stGhost)
-                .disabled(isLoadingModel || isDeletingModel)
+                .disabled(isLoadingModel || isDeletingModel || ConversationSession.shared.isBusy)
                 .help("Delete \(model.name)")
                 .accessibilityLabel("Delete \(model.name)")
                 .accessibilityIdentifier("model.delete.\(model.variant)")
@@ -206,7 +228,9 @@ struct ModelRow: View {
                 loadingStartTime = nil
             }
             do {
-                try await transcription.loadModel(variant: model.variant)
+                if !ConversationSession.shared.isBusy {
+                    try await transcription.loadModel(variant: model.variant)
+                }
                 selectedModel = model.variant
             } catch {
                 loadError = error.localizedDescription

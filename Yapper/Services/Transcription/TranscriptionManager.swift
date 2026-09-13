@@ -1,113 +1,84 @@
 import Foundation
 
-/// Unified entry point the UI uses for model loading and transcription.
-///
-/// It routes each call to the correct `SpeechToTextEngine` based on the
-/// selected model's `TranscriptionEngineKind`, so views are fully decoupled
-/// from any specific backend (Whisper today, Parakeet next).
-///
-/// Display-state properties mirror the active engine. In Phase 1 the only
-/// engine is Whisper, so this is a behavior-preserving pass-through; Phase 2
-/// adds the Parakeet engine and switches the state accessors on `activeKind`.
+@MainActor
 @Observable
 class TranscriptionManager {
     static let shared = TranscriptionManager()
-
-    // MARK: - Engines
-
-    private let whisper = WhisperService.shared
-    private let parakeet = ParakeetEngine.shared
-
-    /// Which backend currently owns the loaded model. Drives display state.
+    private let whisper: any SpeechToTextEngine
+    private let parakeet: any SpeechToTextEngine
+    private let gate: NativeInferenceGate
     private(set) var activeKind: TranscriptionEngineKind = .whisper
 
-    private init() {}
-
-    /// Resolve the engine responsible for a given engine kind.
-    private func engine(for kind: TranscriptionEngineKind) -> any SpeechToTextEngine {
-        switch kind {
-        case .whisper:
-            return whisper
-        case .parakeet:
-            return parakeet
-        }
+    init(whisper: (any SpeechToTextEngine)? = nil, parakeet: (any SpeechToTextEngine)? = nil,
+         gate: NativeInferenceGate? = nil) {
+        self.whisper = whisper ?? WhisperService.shared
+        self.parakeet = parakeet ?? ParakeetEngine.shared
+        self.gate = gate ?? .shared
     }
 
-    // MARK: - Display state
-    //
-    // These switch on `activeKind` and read the concrete `@Observable` engine
-    // directly so SwiftUI observation tracks the active backend's state.
+    private var activeEngine: any SpeechToTextEngine { activeKind == .whisper ? whisper : parakeet }
+    var isInitialized: Bool { activeEngine.isInitialized }
+    var isLoading: Bool { activeEngine.isLoading }
+    var isTranscribing: Bool { activeEngine.isTranscribing }
+    var loadingStage: String { activeEngine.loadingStage }
+    var currentModelVariant: String { activeEngine.currentModelVariant }
 
-    var isInitialized: Bool {
-        switch activeKind {
-        case .whisper: return whisper.isInitialized
-        case .parakeet: return parakeet.isInitialized
-        }
-    }
-    var isLoading: Bool {
-        switch activeKind {
-        case .whisper: return whisper.isLoading
-        case .parakeet: return parakeet.isLoading
-        }
-    }
-    var isTranscribing: Bool {
-        switch activeKind {
-        case .whisper: return whisper.isTranscribing
-        case .parakeet: return parakeet.isTranscribing
-        }
-    }
-    var loadingStage: String {
-        switch activeKind {
-        case .whisper: return whisper.loadingStage
-        case .parakeet: return parakeet.loadingStage
-        }
-    }
-    var currentModelVariant: String {
-        switch activeKind {
-        case .whisper: return whisper.currentModelVariant
-        case .parakeet: return parakeet.currentModelVariant
-        }
-    }
-
-    // MARK: - Actions
-
-    /// Load the engine's saved/default model (mirrors `WhisperService.initialize`).
-    ///
-    /// Whisper restores its previously selected model; Parakeet is always
-    /// loaded explicitly via `loadModel`, so there is nothing to restore for it.
     func initialize() async throws {
-        try await NativeInferenceGate.shared.run {
-            if activeKind == .whisper {
-                try await whisper.initialize()
-            }
-        }
+        try await loadModel(variant: UserDefaults.standard.string(forKey: ModelSelection.defaultsKey) ?? "")
     }
 
-    /// Load a specific model variant, routing to its owning engine.
     func loadModel(variant: String) async throws {
-        try await NativeInferenceGate.shared.run {
-            let kind = AIModel.engineKind(for: variant)
-            try await engine(for: kind).loadModel(variant: variant)
-            activeKind = kind
+        try await gate.run { try await prepare(variant: variant) }
+    }
+
+    func unloadWhileLocked(variant: String) async {
+        if currentModelVariant == variant { await activeEngine.unload() }
+    }
+
+    private func prepare(variant: String) async throws {
+        guard let model = AIModel.availableModels.first(where: { $0.variant == variant }) else {
+            throw ModelError.noSelection
+        }
+        if activeKind == model.engine, currentModelVariant == variant, isInitialized { return }
+        await activeEngine.unload()
+        activeKind = model.engine
+        do { try await activeEngine.loadModel(variant: variant) }
+        catch { await activeEngine.unload(); throw error }
+    }
+
+    static func validate(variant: String, language: String) throws {
+        guard let model = AIModel.availableModels.first(where: { $0.variant == variant }) else {
+            throw ModelError.noSelection
+        }
+        guard model.supports(language: language) else { throw ModelError.unsupportedLanguage(model.name) }
+    }
+
+    func transcribe(audioFile: URL, variant: String, language: String = "auto") async throws -> String {
+        try Self.validate(variant: variant, language: language)
+        return try await gate.run {
+            try await prepare(variant: variant)
+            let text = try await activeEngine.transcribe(audioFile: audioFile, language: language)
+            return DictionaryService.apply(to: text)
         }
     }
 
-    /// Transcribe an audio file with the currently active engine.
-    ///
-    /// The raw engine output is passed through the user's dictionary rules so
-    /// custom replacements and spoken snippets apply uniformly regardless of
-    /// which backend produced the text.
-    func transcribe(audioFile: URL, language: String = "auto") async throws -> String {
-        try await NativeInferenceGate.shared.run {
-            let kind = AIModel.engineKind(for: currentModelVariant)
-            let text = try await engine(for: kind).transcribe(audioFile: audioFile, language: language)
-            return DictionaryService.apply(to: text)
+    // ConversationService already holds this non-reentrant gate for the whole native job.
+    func transcribeConversationWhileLocked(audioFile: URL, variant: String, language: String,
+        progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord] {
+        try Self.validate(variant: variant, language: language)
+        try await prepare(variant: variant)
+        return try await activeEngine.transcribeConversation(audioFile: audioFile, language: language, progress: progress)
+    }
+
+    enum ModelError: LocalizedError {
+        case noSelection, unsupportedLanguage(String)
+        var errorDescription: String? {
+            switch self {
+            case .noSelection: return "Choose a model in AI Models before recording or importing audio."
+            case .unsupportedLanguage(let name): return "\(name) does not support this language. Choose a compatible model in AI Models. Your selection has not been changed."
+            }
         }
     }
 }
 
-// MARK: - WhisperService conformance
-
-/// `WhisperService` already exposes the full `SpeechToTextEngine` surface, so
-/// conformance requires no changes to the Whisper code path.
 extension WhisperService: SpeechToTextEngine {}

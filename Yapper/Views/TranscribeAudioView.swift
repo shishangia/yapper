@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 struct TranscribeAudioView: View {
     @Environment(ConversationSession.self) private var session
     @ObservedObject private var history = HistoryService.shared
+    @AppStorage(ModelSelection.defaultsKey) private var selectedModel = ModelSelection.none
     @State private var showImporter = false
     @State private var isDropTargeted = false
     @State private var importError: String?
@@ -24,7 +25,7 @@ struct TranscribeAudioView: View {
                         Image(systemName: "waveform").font(.title2).foregroundStyle(Color.accentPrimary)
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Local conversation transcription").font(Typography.headlineMedium)
-                            Text("Whisper Large v3 · on your Mac · no dictionary replacements")
+                            Text("\(session.modelName) · on your Mac · no dictionary replacements")
                                 .font(Typography.bodySmall).foregroundStyle(Color.textSecondary)
                         }
                     }
@@ -71,8 +72,11 @@ struct TranscribeAudioView: View {
                                     .buttonStyle(.stPrimary).accessibilityIdentifier("importConversation")
                                 Button("Record microphone", systemImage: "mic", action: session.startRecording)
                                     .buttonStyle(.stSecondary).accessibilityIdentifier("startConversationRecording")
+                            } else if selectedModel.isEmpty {
+                                Text("Choose a model in AI Models to get started.")
+                                    .font(Typography.bodySmall).foregroundStyle(Color.textSecondary)
                             } else {
-                                Button("Download conversation models", systemImage: "arrow.down.circle", action: session.downloadModels)
+                                Button("Download required models", systemImage: "arrow.down.circle", action: session.downloadModels)
                                     .buttonStyle(.stPrimary)
                             }
                         }
@@ -120,6 +124,7 @@ struct TranscribeAudioView: View {
             }
         }
         .onAppear { session.refreshModels() }
+        .onChange(of: selectedModel) { session.refreshModels() }
         .onChange(of: session.detectSpeakers) { session.refreshModels() }
         .onChange(of: session.singleSpeaker) { session.refreshModels() }
     }

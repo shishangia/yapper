@@ -11,10 +11,6 @@ struct DashboardView: View {
     private var transcription: TranscriptionManager { TranscriptionManager.shared }
     @State private var leftColumnHeight: CGFloat = 0
 
-    // Trial & License
-    @EnvironmentObject var trialManager: TrialManager
-    @EnvironmentObject var licenseManager: LicenseManager
-
     @AppStorage(ModelSelection.defaultsKey) private var selectedModel: String = ModelSelection.none
     @AppStorage("transcriptionLanguage") private var transcriptionLanguage: String = "auto"
     @State private var showFileImporter = false
@@ -72,11 +68,6 @@ struct DashboardView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                // Trial Banner - Hidden (logic kept for future use)
-                // if !licenseManager.isPro {
-                //     TrialBanner(status: trialManager.trialStatus)
-                // }
-
                 // Two horizontal boxes: Stats + Activity Chart
                 HStack(alignment: .top, spacing: 20) {
                     // Left: Stats Card
@@ -245,18 +236,18 @@ struct DashboardView: View {
     }
 
     private func startTranscription(url: URL) {
+        let variant = selectedModel
+        let language = transcriptionLanguage
         Task {
             isTranscribing = true
             transcriptionStatus = "Transcribing..."
 
             do {
-                if !transcription.isInitialized { try? await transcription.initialize() }
-
-                let text = try await transcription.transcribe(audioFile: url, language: transcriptionLanguage)
+                let text = try await transcription.transcribe(audioFile: url, variant: variant, language: language)
                 let duration = try await getAudioDuration(url: url)
                 let modelName =
-                    AIModel.availableModels.first(where: { $0.variant == selectedModel })?.name
-                    ?? selectedModel
+                    AIModel.availableModels.first(where: { $0.variant == variant })?.name
+                    ?? variant
 
                 DispatchQueue.main.async {
                     historyService.addItem(
@@ -311,7 +302,7 @@ struct StatsCard: View {
 
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     Text("\(wordCount)")
-                        .font(.system(size: 64, weight: .light, design: .serif))
+                        .font(.system(size: 64, weight: .light, design: .rounded))
                         .foregroundStyle(Color.textPrimary)
 
                     Text("words transcribed")
@@ -449,7 +440,7 @@ struct StatBlock: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(value)
-                    .font(.system(size: 24, weight: .medium, design: .serif))
+                    .font(.system(size: 24, weight: .medium, design: .rounded))
                     .foregroundStyle(Color.textPrimary)
 
                 Text(label)

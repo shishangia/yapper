@@ -1,20 +1,13 @@
 import Foundation
 import FluidAudio
+import CoreML
 
-/// Maps Yapper catalog variants to FluidAudio model versions.
-///
-/// Keeping this in one place lets both the engine (loading) and the model
-/// store (download / delete / existence checks) agree on which FluidAudio
-/// model a given catalog variant refers to.
 enum ParakeetCatalog {
     static let v3Variant = "parakeet-tdt-0.6b-v3"
     static let v2Variant = "parakeet-tdt-0.6b-v2"
     static let ctc110mVariant = "parakeet-tdt-ctc-110m"
-
-    /// All Parakeet variants Yapper ships.
     static let variants = [v3Variant, v2Variant, ctc110mVariant]
 
-    /// FluidAudio model version for a given catalog variant.
     static func version(for variant: String) -> AsrModelVersion {
         switch variant {
         case v2Variant: return .v2
@@ -24,75 +17,96 @@ enum ParakeetCatalog {
     }
 }
 
-/// Speech-to-text engine backed by NVIDIA Parakeet, run on-device via
-/// FluidAudio (CoreML / Apple Neural Engine).
-///
-/// Conforms to `SpeechToTextEngine` so `TranscriptionManager` can use it
-/// interchangeably with `WhisperService`. State mirrors the Whisper engine's
-/// surface so the existing UI works unchanged.
+@MainActor
 @Observable
 class ParakeetEngine: SpeechToTextEngine {
     static let shared = ParakeetEngine()
-
     var isInitialized = false
     var isTranscribing = false
     var isLoading = false
     var loadingStage = ""
     var currentModelVariant = ""
-
-    /// FluidAudio's actor that owns the loaded CoreML models.
     private var manager: AsrManager?
-
     private init() {}
 
     func loadModel(variant: String) async throws {
-        // Already loaded this exact model.
         if isInitialized, currentModelVariant == variant, manager != nil { return }
-
+        guard ModelStorage.transcriptionModelReady(variant) else { throw ConversationError.modelsMissing }
+        await unload()
         isLoading = true
-        isInitialized = false
-        loadingStage = "Preparing Parakeet model…"
-        defer { isLoading = false }
-
-        // Release any previously loaded model before loading a new one.
-        if let manager {
-            await manager.cleanup()
-        }
-        manager = nil
-
-        let version = ParakeetCatalog.version(for: variant)
         loadingStage = "Loading Parakeet model…"
-
-        // Downloads from Hugging Face on first use, then loads from cache.
-        let models = try await AsrModels.downloadAndLoad(
-            to: ModelStorage.parakeetCacheDirectory(for: version), version: version)
+        defer { isLoading = false; loadingStage = "" }
+        let version = ParakeetCatalog.version(for: variant)
+        let directory = ModelStorage.parakeetCacheDirectory(for: version)
+        let models = try await Task.detached(priority: .userInitiated) {
+            // FluidAudio's convenience loader can download optional CTC weights even from a populated cache.
+            let config = MLModelConfiguration()
+            config.computeUnits = .cpuAndNeuralEngine
+            func load(_ name: String, cpu: Bool = false) throws -> MLModel {
+                let settings = MLModelConfiguration()
+                settings.computeUnits = cpu ? .cpuOnly : config.computeUnits
+                return try MLModel(contentsOf: directory.appendingPathComponent(name), configuration: settings)
+            }
+            let data = try Data(contentsOf: directory.appendingPathComponent(ModelNames.ASR.vocabularyFile))
+            let json = try JSONSerialization.jsonObject(with: data)
+            let vocabulary: [Int: String]
+            if let array = json as? [String] { vocabulary = Dictionary(uniqueKeysWithValues: array.enumerated().map { ($0.offset, $0.element) }) }
+            else if let values = json as? [String: String] {
+                vocabulary = Dictionary(uniqueKeysWithValues: values.compactMap { key, value in Int(key).map { ($0, value) } })
+            } else { throw ASRError.modelLoadFailed }
+            return try AsrModels(
+                encoder: version.hasFusedEncoder ? nil : load(version == .v3 ? ParakeetEncoderPrecision.int8.encoderFileName : ModelNames.ASR.encoderFile),
+                preprocessor: load(ModelNames.ASR.preprocessorFile, cpu: !version.hasFusedEncoder),
+                decoder: load(ModelNames.ASR.decoderFile),
+                joint: load(version == .v3 ? ModelNames.ASR.jointV3File : ModelNames.ASR.jointFile),
+                configuration: config, vocabulary: vocabulary, version: version)
+        }.value
         let manager = AsrManager(config: .default)
         try await manager.loadModels(models)
-
         self.manager = manager
         currentModelVariant = variant
         isInitialized = true
-        loadingStage = ""
+    }
+
+    func unload() async {
+        await manager?.cleanup()
+        manager = nil
+        isInitialized = false
+        currentModelVariant = ""
+    }
+
+    private func result(audioFile: URL, language: String, progress: @escaping @Sendable (Double) -> Void) async throws -> ASRResult {
+        guard let manager else { throw ASRError.notInitialized }
+        isTranscribing = true
+        defer { isTranscribing = false }
+        let stream = await manager.transcriptionProgressStream
+        let updates = Task {
+            do { for try await value in stream { progress(value) } } catch {}
+        }
+        defer { updates.cancel() }
+        var state = try TdtDecoderState(decoderLayers: ParakeetCatalog.version(for: currentModelVariant).decoderLayers)
+        let result = try await manager.transcribe(audioFile, decoderState: &state, language: Language(rawValue: language))
+        progress(1)
+        return result
     }
 
     func transcribe(audioFile: URL, language: String) async throws -> String {
-        guard let manager else { throw ASRError.notInitialized }
+        try await result(audioFile: audioFile, language: language) { _ in }.text
+    }
 
-        isTranscribing = true
-        defer { isTranscribing = false }
+    func transcribeConversation(audioFile: URL, language: String, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord] {
+        let duration = try await ConversationAudioStorage.duration(audioFile)
+        let result = try await result(audioFile: audioFile, language: language, progress: progress)
+        return Self.words(from: result, duration: duration)
+    }
 
-        // One-shot (batch) transcription: a fresh decoder state per file.
-        // The decoder state must match the model's decoder-layer count — the
-        // TDT-CTC 110M model has 1 layer while the 0.6B models have 2 — or
-        // transcription fails. `language: nil` lets the model auto-detect.
-        let version = ParakeetCatalog.version(for: currentModelVariant)
-        do {
-            var decoderState = try TdtDecoderState(decoderLayers: version.decoderLayers)
-            let result = try await manager.transcribe(audioFile, decoderState: &decoderState)
-            return result.text
-        } catch {
-            print("❌ Parakeet transcription failed (\(currentModelVariant)): \(error)")
-            throw error
+    static func words(from result: ASRResult, duration: TimeInterval) -> [ConversationWord] {
+        // FluidAudio's chunked results report duration zero despite valid token timestamps.
+        let tokens = (result.tokenTimings ?? []).map {
+            ConversationWord(text: $0.token, start: $0.startTime, end: $0.endTime,
+                hasReliableTiming: $0.startTime.isFinite && $0.endTime.isFinite && $0.startTime >= 0
+                    && $0.endTime > $0.startTime && $0.endTime <= duration + 0.2)
         }
+        return ConversationAlignment.preservingText(result.text, words: tokens, start: 0, end: duration)
     }
 }

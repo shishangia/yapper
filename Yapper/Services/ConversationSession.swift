@@ -22,6 +22,16 @@ final class ConversationSession {
     private(set) var retainedAudioURL: URL?
     private(set) var startedAt: Date?
     private(set) var modelsReady = false
+    private(set) var activeModel: String?
+    private var jobLanguage = "auto"
+    private var jobDetectSpeakers = true
+    private var jobSingleSpeaker = false
+    @ObservationIgnored private let defaults: UserDefaults
+    var selectedModel: String { defaults.string(forKey: ModelSelection.defaultsKey) ?? ModelSelection.none }
+    var modelName: String {
+        let variant = isBusy ? (activeModel ?? selectedModel) : selectedModel
+        return AIModel.availableModels.first { $0.variant == variant }?.name ?? "No model selected"
+    }
     let service: ConversationService
 
     @ObservationIgnored private var task: Task<Void, Never>?
@@ -30,9 +40,10 @@ final class ConversationSession {
     @ObservationIgnored private var recorderObservation: AnyCancellable?
     @ObservationIgnored private let suppliedHistory: HistoryService?
 
-    init(service: ConversationService? = nil, history: HistoryService? = nil) {
+    init(service: ConversationService? = nil, history: HistoryService? = nil, defaults: UserDefaults = .standard) {
         self.service = service ?? ConversationService()
         self.suppliedHistory = history
+        self.defaults = defaults
     }
 
     var isBusy: Bool {
@@ -58,7 +69,7 @@ final class ConversationSession {
     }
 
     func refreshModels() {
-        modelsReady = LocalConversationProcessor.transcriptionModelsReady
+        modelsReady = LocalConversationProcessor.transcriptionModelsReady(variant: selectedModel)
             && (!detectSpeakers || singleSpeaker || LocalConversationProcessor.speakerModelsReady)
     }
 
@@ -120,10 +131,11 @@ final class ConversationSession {
     func downloadModels() {
         guard let id = begin(name: "Conversation models") else { return }
         phase = .processing
-        let speakers = detectSpeakers && !singleSpeaker
+        let speakers = jobDetectSpeakers && !jobSingleSpeaker
+        let variant = activeModel ?? selectedModel
         task = Task {
             do {
-                if phase != .canceling { try await service.downloadModels(speakers: speakers) }
+                if phase != .canceling { try await service.downloadModels(variant: variant, speakers: speakers) }
                 guard activeID == id else { return }
                 if phase == .canceling { finishCanceled(id: id) }
                 else { phase = .idle; clearJob(id: id) }
@@ -154,6 +166,12 @@ final class ConversationSession {
 
     private func begin(name: String) -> UUID? {
         guard !isBusy else { return nil }
+        do { try TranscriptionManager.validate(variant: selectedModel, language: language) }
+        catch { phase = .failed; message = error.localizedDescription; return nil }
+        activeModel = selectedModel
+        jobLanguage = language
+        jobDetectSpeakers = detectSpeakers
+        jobSingleSpeaker = singleSpeaker
         let id = UUID()
         activeID = id
         phase = .preparing
@@ -175,12 +193,14 @@ final class ConversationSession {
             if phase == .canceling { finishCanceled(id: id); return }
             phase = .processing
             let start = Date()
-            let transcript = try await service.process(audio, detectSpeakers: detectSpeakers,
-                singleSpeaker: singleSpeaker, language: language)
+            let variant = activeModel ?? selectedModel
+            let transcript = try await service.process(audio, variant: variant, detectSpeakers: jobDetectSpeakers,
+                singleSpeaker: jobSingleSpeaker, language: jobLanguage)
             guard activeID == id else { return }
             if phase == .canceling { finishCanceled(id: id); return }
             guard let item = history.addConversation(transcript, duration: duration, audioFileURL: audio,
-                modelUsed: "Whisper Large v3", transcriptionTime: Date().timeIntervalSince(start), id: id) else {
+                modelUsed: AIModel.availableModels.first { $0.variant == variant }?.name ?? variant,
+                transcriptionTime: Date().timeIntervalSince(start), id: id) else {
                 keepAudio = true
                 retainedAudioURL = audio
                 finishFailure(SessionError.noSpeech, audio: audio, id: id)

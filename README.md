@@ -10,18 +10,20 @@ Yapper transcribes microphone recordings and imported audio on your Mac. Use a h
 
 - Hotkey dictation with hold and toggle recording modes, clipboard restoration, and a compact recorder.
 - Local Whisper and Parakeet models, managed from AI Models.
-- Conversation transcription with full Whisper Large v3, speech detection, and Sortformer speaker labels for up to four people.
+- Conversation transcription with your selected Whisper or Parakeet model and optional Sortformer speaker labels for up to four people.
 - Editable transcript turns, recording-specific speaker names, reassignment, and speaker merging.
 - History with audio playback, a personal dictionary, statistics, input-device selection, and light/dark appearance.
 - Explicit cancellation that waits for active native inference to finish before another job starts.
 
-The model selected in AI Models controls dictation. Conversation transcription uses full Large v3 separately and does not apply personal dictionary replacements or dictation cleanup.
+The model selected in AI Models controls dictation, microphone conversations, and imported files. Each job keeps the model selected when it starts. Conversation transcripts bypass personal dictionary replacements and dictation cleanup. Speaker detection uses a separate local model.
+
+Speed and accuracy bars are relative estimates, not measured benchmarks or accuracy percentages. English-only models cannot transcribe other languages; Parakeet v3 supports 25 European languages, not Hindi, Gujarati, or Chinese. Choose a multilingual Whisper model for those languages.
 
 ## Requirements
 
 - macOS 14 or newer on Apple Silicon.
 - Xcode 26 or newer to build this source tree.
-- Space for the models you choose. Conversation models require roughly 3.2 GB of downloads, plus working storage.
+- Space for the models you choose, plus working storage. Full Large v3 and its conversation support models require roughly 3.2 GB; smaller model choices need less.
 - Enough memory for the chosen model. Full Large v3 is recommended for Macs with at least 16 GB RAM.
 
 This repository publishes source. It does not currently provide a notarized download or a binary release.
@@ -73,7 +75,7 @@ An interrupted copy can be retried. Existing destination files must match exactl
 
 Whisper supports many languages, but support does not guarantee accuracy. Rapid Hindi-English-Gujarati switching remains experimental and can produce omissions, repetition, transliteration, or unintended translation. Select the known language when appropriate and check important passages against the audio.
 
-Automatic speaker labels can split one voice or confuse short replies and overlap. Sortformer supports at most four speakers. Choose One speaker for a known single-person recording, or correct and merge labels after transcription. An uncertain assignment does not mean another person was detected.
+Automatic speaker labels can split one voice or confuse short replies and overlap. Sortformer supports at most four speakers. Choose One speaker for a known single-person recording, or correct and merge labels after transcription. The reading view groups short continuations and marks unassigned words inline; Review shows the original timestamped segments for editing. Grouping does not change speaker assignments, and copied text retains uncertainty markers.
 
 Transcripts are drafts, especially for medical, legal, or other consequential use. Yapper preserves original transcript text when you edit a turn. Corrections do not create duplicate history or statistics entries.
 
@@ -83,7 +85,7 @@ Transcripts are drafts, especially for medical, legal, or other consequential us
 make test
 ```
 
-Unit tests cover history compatibility, corrections, speech/timestamp alignment, cancellation, session completion, and migration. They use isolated preferences and temporary files. Clipboard tests restore the prior clipboard afterward.
+Unit tests cover history compatibility, corrections, speech/timestamp alignment, reading groups, model selection, cancellation, session completion, and migration. They use isolated preferences and temporary files. Clipboard tests restore the prior clipboard afterward. The optional native-model smoke test requires `TEST_RUNNER_YAPPER_NATIVE_TESTS=1` and populated development caches; it copies its models and synthetic audio into temporary test storage.
 
 The UI suite requires an unlocked desktop, model downloads in the development library, and a synthetic `conversation.wav` fixture under `~/Library/Application Support/Yapper-Dev/TestAudio`. It exercises importing, changing tabs during processing, renaming, editing, copying, and reopening history. Run it with Xcode's test navigator or `xcodebuild -only-testing:YapperUITests` alongside the usual project, scheme, destination, and signing arguments. Private recordings and test-result bundles must stay local.
 

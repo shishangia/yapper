@@ -27,10 +27,47 @@ struct ConversationTranscript: Codable, Equatable, Sendable {
         return speakerNames[id] ?? "Speaker \(id)"
     }
 
+    var unassignedCount: Int { speakerDetectionRequested ? segments.filter { $0.speakerID == nil }.count : 0 }
+
+    var readingBlocks: [ConversationReadingBlock] {
+        var blocks: [ConversationReadingBlock] = []
+        var index = 0
+        while index < segments.count {
+            let first = segments[index]
+            var block = ConversationReadingBlock(segments: [first], speakerID: first.speakerID)
+            index += 1
+            while index < segments.count {
+                let next = segments[index]
+                guard next.start - (block.segments.last?.end ?? first.end) <= 1 else { break }
+                if !speakerDetectionRequested || next.speakerID == block.speakerID {
+                    block.segments.append(next)
+                    index += 1
+                } else if let speaker = block.speakerID, next.speakerID == nil,
+                          next.end - next.start <= 2, index + 1 < segments.count,
+                          segments[index + 1].speakerID == speaker,
+                          segments[index + 1].start - next.end <= 1 {
+                    block.segments.append(next)
+                    index += 1
+                } else { break }
+            }
+            blocks.append(block)
+        }
+        return blocks
+    }
+
+    func readingText(for block: ConversationReadingBlock) -> String {
+        block.segments.map { segment in
+            if speakerDetectionRequested && block.speakerID != nil && segment.speakerID == nil {
+                return " [unassigned: \(segment.text.trimmingCharacters(in: .whitespacesAndNewlines))] "
+            }
+            return segment.text
+        }.joined().trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     var formattedText: String {
-        segments.map { segment in
-            let label = speakerDetectionRequested ? " \(speakerName(for: segment.speakerID)):" : ""
-            return "[\(Self.timestamp(segment.start))]\(label) \(segment.text.trimmingCharacters(in: .whitespacesAndNewlines))"
+        readingBlocks.map { block in
+            let label = speakerDetectionRequested ? " \(speakerName(for: block.speakerID)):" : ""
+            return "[\(Self.timestamp(block.start))]\(label) \(readingText(for: block))"
         }.joined(separator: "\n")
     }
 
@@ -38,6 +75,13 @@ struct ConversationTranscript: Codable, Equatable, Sendable {
         let value = seconds.isFinite ? Int(max(0, seconds)) : 0
         return String(format: "%02d:%02d:%02d", value / 3600, value / 60 % 60, value % 60)
     }
+}
+
+struct ConversationReadingBlock: Identifiable {
+    var segments: [ConversationSegment]
+    let speakerID: String?
+    var id: Int { segments[0].id }
+    var start: TimeInterval { segments[0].start }
 }
 
 struct ConversationWord: Equatable, Sendable {

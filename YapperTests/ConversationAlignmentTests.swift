@@ -105,6 +105,40 @@ final class ConversationAlignmentTests: XCTestCase {
         XCTAssertNil(uncertain.segments.first?.speakerID)
     }
 
+    func testReadingBlocksPreserveEvidenceAndMarkUnassignedText() throws {
+        let segments = [
+            ConversationSegment(id: 7, start: 0, end: 1, text: "Hello", speakerID: "1"),
+            ConversationSegment(id: 9, start: 1, end: 1.4, text: " there", speakerID: nil),
+            ConversationSegment(id: 12, start: 1.4, end: 2, text: ", friend.", speakerID: "1"),
+            ConversationSegment(id: 14, start: 2.2, end: 3, text: " Yes.", speakerID: "2")
+        ]
+        var transcript = ConversationTranscript(segments: segments, speakerDetectionRequested: true)
+        XCTAssertEqual(transcript.readingBlocks.count, 2)
+        XCTAssertEqual(transcript.readingBlocks.flatMap(\.segments), segments)
+        XCTAssertEqual(transcript.plainText, "Hello there, friend. Yes.")
+        XCTAssertTrue(transcript.formattedText.contains("[unassigned: there]"))
+        transcript.speakerNames["1"] = "Alice"
+        XCTAssertTrue(transcript.formattedText.contains("Alice:"))
+        XCTAssertNil(transcript.segments[1].speakerID)
+        let reopened = try JSONDecoder().decode(ConversationTranscript.self, from: JSONEncoder().encode(transcript))
+        XCTAssertEqual(reopened.formattedText, transcript.formattedText)
+    }
+
+    func testReadingBlocksDoNotBridgeSpeakerChangesOrLongPauses() {
+        for (nextSpeaker, pause, expected) in [("2", 0.1, 3), ("1", 3.0, 3)] {
+            let transcript = ConversationTranscript(segments: [
+                .init(id: 0, start: 0, end: 1, text: "One", speakerID: "1"),
+                .init(id: 1, start: 1, end: 1.3, text: " unclear", speakerID: nil),
+                .init(id: 2, start: 1.3 + pause, end: 5, text: " next", speakerID: nextSpeaker)
+            ], speakerDetectionRequested: true)
+            XCTAssertEqual(transcript.readingBlocks.count, expected)
+            XCTAssertEqual(transcript.readingBlocks.flatMap(\.segments), transcript.segments)
+        }
+        let unknown = ConversationTranscript(segments: [.init(id: 0, start: 0, end: 1, text: "Unknown", speakerID: nil)], speakerDetectionRequested: true)
+        XCTAssertEqual(unknown.readingBlocks.count, 1)
+        XCTAssertTrue(unknown.formattedText.contains("Speaker uncertain"))
+    }
+
     func testConversationUsesAutomaticLanguageAndWordTimestamps() {
         let options = WhisperService.conversationDecodingOptions()
         XCTAssertNil(options.language)

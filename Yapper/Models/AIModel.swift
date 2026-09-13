@@ -28,13 +28,22 @@ struct AIModel: Identifiable, Equatable {
         englishOnlyOverride ?? variant.hasSuffix(".en")
     }
 
+    func supports(language: String) -> Bool {
+        if language == "auto" { return true }
+        if isEnglishOnly { return language == "en" }
+        if engine == .parakeet {
+            return ["bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it", "lv", "lt", "mt", "pl", "pt", "ro", "ru", "sk", "sl", "es", "sv", "uk"].contains(language)
+        }
+        return language == "mixed" || GeneralSettingsTab.whisperLanguages.contains { $0.code == language }
+    }
+
     // Preserve the existing recommendation ordering. These weights are heuristic
     // inputs only; model choice still requires an explicit user action.
     static let availableModels: [AIModel] = [
         AIModel(
             name: "Whisper Large v3",
             variant: "openai_whisper-large-v3",
-            details: "Full model used for conversation transcription.",
+            details: "Full multilingual Whisper model for detailed transcription.",
             size: "~3 GB",
             speed: 4.0,
             accuracy: 9.5,
@@ -44,7 +53,7 @@ struct AIModel: Identifiable, Equatable {
         AIModel(
             name: "Whisper Large v3 Turbo",
             variant: "openai_whisper-large-v3_turbo",
-            details: "Turbo variant of Large v3. Not the full conversation model.",
+            details: "Faster Large v3 variant for dictation and conversations.",
             size: "1.6 GB",
             speed: 7.0,
             accuracy: 9.5,
@@ -223,14 +232,13 @@ struct AIModel: Identifiable, Equatable {
         capability: DeviceCapability = .current,
         useCase: UseCase = .dictation
     ) -> String {
-        let engineNote = model.engine == .parakeet ? "runs in real time" : "loads comfortably"
         switch useCase {
         case .dictation:
-            return "Fast, accurate enough for live dictation and \(engineNote) on your \(capability.chipName)."
+            return "A speed-focused suggestion for your \(capability.chipName). Actual speed depends on the recording."
         case .balanced:
-            return "A strong balance of speed and accuracy for your \(capability.chipName)."
+            return "A balance of estimated speed and accuracy for your \(capability.chipName)."
         case .transcription:
-            return "Highest accuracy your \(capability.chipName) with \(capability.ramGB) GB can run well."
+            return "An accuracy-focused suggestion within your Mac's \(capability.ramGB) GB memory budget."
         }
     }
 

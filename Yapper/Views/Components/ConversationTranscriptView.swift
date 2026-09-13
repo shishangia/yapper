@@ -13,6 +13,7 @@ struct ConversationTranscriptView: View {
     @State private var mergeSource = ""
     @State private var mergeTarget = ""
     @State private var error: String?
+    @State private var reviewing = false
 
     private var conversation: ConversationTranscript? {
         historyService.items.first { $0.id == itemID }?.conversation
@@ -21,12 +22,25 @@ struct ConversationTranscriptView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             if let conversation {
+                if conversation.unassignedCount > 0 {
+                    HStack {
+                        Label("\(conversation.unassignedCount) unassigned passages · marked inline", systemImage: "person.crop.circle.badge.questionmark")
+                            .font(Typography.caption).foregroundStyle(Color.textSecondary)
+                        Spacer()
+                        Button(reviewing ? "Reading view" : "Review") { reviewing.toggle() }
+                            .buttonStyle(.stSecondary).accessibilityIdentifier("reviewSpeakers")
+                    }
+                }
                 if let warning = conversation.warning, !warning.isEmpty {
-                    Label(warning, systemImage: "exclamationmark.triangle")
-                        .font(Typography.bodySmall)
-                        .foregroundStyle(Color.textSecondary)
+                    DisclosureGroup("Transcription notes") {
+                        Text(warning).font(Typography.bodySmall).foregroundStyle(Color.textSecondary)
+                    }
                 }
                 HStack {
+                    if conversation.unassignedCount == 0 {
+                        Button(reviewing ? "Reading view" : "Edit turns") { reviewing.toggle() }
+                            .buttonStyle(.stSecondary).accessibilityIdentifier("reviewSpeakers")
+                    }
                     Button("Add Speaker") {
                         speakerName = ""
                         error = nil
@@ -45,6 +59,38 @@ struct ConversationTranscriptView: View {
                         .accessibilityIdentifier("mergeSpeakers")
                     }
                 }
+                if !reviewing {
+                    ForEach(conversation.readingBlocks) { block in
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 10) {
+                                Text(ConversationTranscript.timestamp(block.start))
+                                    .font(Typography.captionSmall).monospacedDigit().foregroundStyle(Color.textMuted)
+                                if conversation.speakerDetectionRequested {
+                                    if let id = block.speakerID {
+                                        Button(conversation.speakerName(for: id)) {
+                                            speakerName = conversation.speakerNames[id] ?? ""
+                                            error = nil
+                                            speakerToRename = id
+                                        }
+                                        .buttonStyle(.plain)
+                                        .foregroundStyle(Color.accentPrimary)
+                                        .accessibilityLabel("Rename \(conversation.speakerName(for: id))")
+                                        .accessibilityIdentifier("renameSpeaker-\(id)")
+                                    } else {
+                                        Text("Unassigned passage").foregroundStyle(Color.textSecondary)
+                                    }
+                                }
+                                Spacer()
+                            }
+                            .font(Typography.labelSmall)
+                            Text(conversation.readingText(for: block))
+                                .font(Typography.bodyMedium).foregroundStyle(Color.textPrimary)
+                                .textSelection(.enabled).lineSpacing(5)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 6)
+                    }
+                } else {
                 ForEach(conversation.segments) { segment in
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 8) {
@@ -89,6 +135,7 @@ struct ConversationTranscriptView: View {
                             .lineSpacing(4)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+                }
                 }
             }
         }
