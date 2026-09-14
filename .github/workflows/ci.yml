@@ -17,7 +17,22 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
-      - name: Build
-        run: xcodebuild -project Yapper.xcodeproj -scheme Yapper -configuration Debug build CODE_SIGNING_ALLOWED=NO
-      - name: Unit tests
-        run: xcodebuild test -project Yapper.xcodeproj -scheme Yapper -configuration Debug -destination 'platform=macOS' -only-testing:YapperTests -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO
+      - name: Cache pinned Swift packages
+        uses: actions/cache@v4
+        with:
+          path: .build/SourcePackages
+          key: ${{ runner.os }}-${{ runner.arch }}-swiftpm-${{ hashFiles('**/Package.resolved') }}
+      - name: Build for testing
+        run: >-
+          xcodebuild build-for-testing -project Yapper.xcodeproj -scheme Yapper
+          -configuration Debug -destination 'platform=macOS'
+          -derivedDataPath .build/DerivedData -clonedSourcePackagesDirPath .build/SourcePackages
+          -only-testing:YapperTests -disableAutomaticPackageResolution -skipPackageUpdates
+          CODE_SIGNING_ALLOWED=NO
+      - name: Unit tests without rebuilding
+        run: >-
+          xcodebuild test-without-building -project Yapper.xcodeproj -scheme Yapper
+          -configuration Debug -destination 'platform=macOS'
+          -derivedDataPath .build/DerivedData -clonedSourcePackagesDirPath .build/SourcePackages
+          -only-testing:YapperTests -parallel-testing-enabled NO
+          -disableAutomaticPackageResolution -skipPackageUpdates CODE_SIGNING_ALLOWED=NO
