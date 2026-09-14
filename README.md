@@ -13,11 +13,17 @@ Yapper transcribes microphone recordings and imported audio on your Mac. Use a h
 1. Open the downloaded DMG and drag **Yapper** into **Applications**.
 2. Eject the DMG, then open Yapper from Applications.
 3. Follow the permission prompts for microphone access and Accessibility.
-4. Download a model in **AI Models**, then click **Use**. Speaker detection may need an additional model download.
+4. Download a model in **AI Models**, then click **Use**. Before going offline, open **Transcribe Audio** with your intended model and speaker mode, then choose **Download required models** if shown. Whisper conversations need a speech-detection model even when speaker labels are off; automatic speaker detection also needs Sortformer.
 
 The app and installer are Developer ID signed and notarized by Apple. You do not need Terminal, Xcode, or `make`. macOS may still show its normal first-open and privacy prompts.
 
 Requires **macOS 14 or later on Apple Silicon (M1 or newer)**. This installer does not support Intel Macs or Windows. An internet connection is needed for model downloads; transcription runs locally afterward.
+
+## Source maintenance (not in the v1.0.1 download)
+
+The source on `main` includes download progress that survives page changes, cancel/retry handling that keeps shared model files, and preparation of the selected downloaded model. Escape dismisses the dictation recorder and prevents auto-paste while native work finishes; the dictation transcript still goes to History. Conversation cancellation discards pending results.
+
+Source builds also allow setup without permissions for file imports, support Play/Pause in Recent transcriptions, show your configured shortcut, and offer **Trim final period on short dictation** in Settings. That setting is on by default and affects new dictation only, after dictionary replacements. It leaves sentences, dotted abbreviations, and conversation transcripts unchanged. These changes need a new notarized release before they reach the download above.
 
 ## What it does
 
@@ -48,7 +54,7 @@ make build
 make run
 ```
 
-Debug builds use `Yapper-Dev.app`, a separate preferences domain and library. The build output goes to `~/Library/Developer/Xcode/DerivedData/Yapper`, outside the protected Documents directory. The scripts never terminate an installed app or replace it automatically.
+Debug builds use `Yapper-Dev.app`, a separate preferences domain and library. Global dictation hotkeys are disabled in Debug; use Transcribe Audio for microphone and file testing. A signed Release build is needed to test system-wide dictation. The build output goes to `~/Library/Developer/Xcode/DerivedData/Yapper`, outside the protected Documents directory. The scripts never terminate an installed app or replace it automatically.
 
 The default build uses ad-hoc signing. To use your own installed Apple Development certificate:
 
