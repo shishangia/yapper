@@ -8,7 +8,7 @@ Yapper transcribes microphone recordings and imported audio on your Mac. Use a h
 
 ## Download and install
 
-**[Download Yapper for Mac](https://github.com/shishangia/yapper/releases/download/v1.0.0/Yapper-1.0.0-4-arm64.dmg)** · [Release notes and checksum](https://github.com/shishangia/yapper/releases/tag/v1.0.0)
+**[Download Yapper for Mac](https://github.com/shishangia/yapper/releases/download/v1.0.1/Yapper-1.0.1-5-arm64.dmg)** · [Release notes and checksum](https://github.com/shishangia/yapper/releases/tag/v1.0.1)
 
 1. Open the downloaded DMG and drag **Yapper** into **Applications**.
 2. Eject the DMG, then open Yapper from Applications.
