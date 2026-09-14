@@ -6,6 +6,19 @@ Local dictation and conversation transcription for macOS, maintained by Shivam S
 
 Yapper transcribes microphone recordings and imported audio on your Mac. Use a hotkey for dictation, or record a conversation and review its timestamped speaker turns afterward. Switching pages or closing a window does not cancel a conversation job.
 
+## Download and install
+
+**[Download Yapper for Mac](https://github.com/shishangia/yapper/releases/download/v1.0.0/Yapper-1.0.0-4-arm64.dmg)** · [Release notes and checksum](https://github.com/shishangia/yapper/releases/tag/v1.0.0)
+
+1. Open the downloaded DMG and drag **Yapper** into **Applications**.
+2. Eject the DMG, then open Yapper from Applications.
+3. Follow the permission prompts for microphone access and Accessibility.
+4. Download a model in **AI Models**, then click **Use**. Speaker detection may need an additional model download.
+
+The app and installer are Developer ID signed and notarized by Apple. You do not need Terminal, Xcode, or `make`. macOS may still show its normal first-open and privacy prompts.
+
+Requires **macOS 14 or later on Apple Silicon (M1 or newer)**. This installer does not support Intel Macs or Windows. An internet connection is needed for model downloads; transcription runs locally afterward.
+
 ## What it does
 
 - Hotkey dictation with hold and toggle recording modes, clipboard restoration, and a compact recorder.
@@ -22,13 +35,11 @@ Speed and accuracy bars are relative estimates, not measured benchmarks or accur
 ## Requirements
 
 - macOS 14 or newer on Apple Silicon.
-- Xcode 26 or newer to build this source tree.
+- Xcode 26 or newer only if you want to build from source.
 - Space for the models you choose, plus working storage. Full Large v3 and its conversation support models require roughly 3.2 GB; smaller model choices need less.
 - Enough memory for the chosen model. Full Large v3 is recommended for Macs with at least 16 GB RAM.
 
-This repository publishes source. It does not currently provide a notarized download or a binary release.
-
-## Build and run
+## Build from source
 
 ```sh
 git clone https://github.com/shishangia/yapper.git
