@@ -22,6 +22,8 @@ if [[ "$MODE" == "notarized" ]]; then
     : "${NOTARY_PROFILE:?Set NOTARY_PROFILE to credentials already stored with notarytool.}"
 fi
 
+swift -e 'import CoreGraphics; if (CGSessionCopyCurrentDictionary() as? [String: Any])?["CGSSessionScreenIsLocked"] as? Bool == true { fputs("Unlock the Mac before packaging so Finder can save the installer layout.\n", stderr); exit(1) }'
+
 codesign --verify --deep --strict "$APP_PATH"
 BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Contents/Info.plist")
 [[ "$BUNDLE_ID" == "com.shishangia.yapper" ]] || { printf 'Use the Release Yapper.app, not a development app.\n' >&2; exit 1; }
@@ -38,7 +40,23 @@ DESTINATION="$OUTPUT_DIR/Yapper-$VERSION-$BUILD-arm64$SUFFIX.dmg"
 [[ ! -e "$DESTINATION" && ! -e "$DESTINATION.sha256" ]] || { printf 'Output already exists; choose a new OUTPUT_DIR or build number.\n' >&2; exit 1; }
 mkdir -p "$DERIVED_DATA/Packaging"
 WORK=$(mktemp -d "$DERIVED_DATA/Packaging/package.XXXXXX")
-trap 'rm -rf "$WORK"' EXIT
+MOUNT="/Volumes/Install Yapper"
+[[ ! -e "$MOUNT" ]] || { printf 'Eject the existing Install Yapper volume before packaging.\n' >&2; exit 1; }
+ATTACHED=0
+cleanup() {
+    local status=$?
+    if [[ "$ATTACHED" == 1 ]] && ! hdiutil detach "$MOUNT"; then
+        printf 'Could not eject packaging image. Preserved temporary files at %s\n' "$WORK" >&2
+        exit 1
+    fi
+    if [[ "$status" != 0 ]]; then
+        printf 'Packaging failed. Diagnostic files preserved at %s\n' "$WORK" >&2
+    else
+        rm -rf "$WORK"
+    fi
+    exit "$status"
+}
+trap cleanup EXIT
 STAGE="$WORK/volume"
 mkdir "$STAGE"
 ditto "$APP_PATH" "$STAGE/Yapper.app"
@@ -118,8 +136,99 @@ if [[ "$MODE" == "notarized" ]]; then
     spctl --assess --type execute --verbose=2 "$STAGE/Yapper.app"
 fi
 
-ln -s /Applications "$STAGE/Applications"
-hdiutil create -volname Yapper -srcfolder "$STAGE" -fs HFS+ -format UDZO "$WORK/Yapper.dmg"
+mkdir "$STAGE/.background"
+swift "$ROOT/scripts/generate-dmg-background.swift" "$STAGE/.background/install.png"
+hdiutil create -volname "Install Yapper" -srcfolder "$STAGE" -fs HFS+ -format UDRW "$WORK/layout.dmg"
+hdiutil attach -readwrite -nobrowse -noautoopen "$WORK/layout.dmg"
+ATTACHED=1
+SetFile -a V "$MOUNT/Install Yapper.txt"
+osascript - "$MOUNT" <<'APPLESCRIPT'
+on run argv
+    set volumeFolder to POSIX file (item 1 of argv) as alias
+    tell application "Finder"
+        make new alias file at volumeFolder to (POSIX file "/Applications" as alias) with properties {name:"Applications"}
+    end tell
+end run
+APPLESCRIPT
+swift - "$MOUNT/Applications" <<'SWIFT'
+import AppKit
+let icon = NSImage(contentsOfFile: "/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/ApplicationsFolderIcon.icns")!
+guard NSWorkspace.shared.setIcon(icon, forFile: CommandLine.arguments[1], options: []) else {
+    fatalError("Could not set the Applications alias icon")
+}
+SWIFT
+osascript - "$MOUNT" <<'APPLESCRIPT'
+on run argv
+    set mountPath to item 1 of argv
+    set volumeFolder to POSIX file mountPath as alias
+    set backgroundFile to POSIX file (mountPath & "/.background/install.png") as alias
+    with timeout of 30 seconds
+        tell application "Finder"
+            set installerWindow to make new Finder window to volumeFolder
+            set current view of installerWindow to icon view
+            -- Initialize the folder's view record before applying custom options.
+            close installerWindow
+            set installerWindow to make new Finder window to volumeFolder
+            delay 1
+            set toolbar visible of installerWindow to false
+            set statusbar visible of installerWindow to false
+            set pathbar visible of installerWindow to false
+            set bounds of installerWindow to {180, 180, 840, 622}
+            set arrangement of icon view options of installerWindow to not arranged
+            set icon size of icon view options of installerWindow to 112
+            set text size of icon view options of installerWindow to 14
+            set label position of icon view options of installerWindow to bottom
+            set shows item info of icon view options of installerWindow to false
+            set shows icon preview of icon view options of installerWindow to true
+            set background picture of icon view options of installerWindow to backgroundFile
+            set position of item "Yapper.app" of installerWindow to {180, 210}
+            set position of item "Applications" of installerWindow to {480, 210}
+            set extension hidden of item "Yapper.app" of installerWindow to true
+            set position of item ".background" of installerWindow to {1100, 600}
+            set position of item "Install Yapper.txt" of installerWindow to {1300, 600}
+            if exists item ".fseventsd" of installerWindow then set position of item ".fseventsd" of installerWindow to {1500, 600}
+            close installerWindow
+            set installerWindow to make new Finder window to volumeFolder
+            delay 1
+            set bounds of installerWindow to {180, 180, 830, 612}
+            delay 1
+            set bounds of installerWindow to {180, 180, 840, 622}
+            if icon size of icon view options of installerWindow is not 112 then error "Finder did not retain the installer icon size"
+        end tell
+    end timeout
+end run
+APPLESCRIPT
+sync
+hdiutil detach "$MOUNT"
+ATTACHED=0
+hdiutil attach -readonly -nobrowse -noautoopen "$WORK/layout.dmg"
+ATTACHED=1
+python3 - "$MOUNT/.DS_Store" <<'PY'
+import pathlib
+import plistlib
+import struct
+import sys
+data = pathlib.Path(sys.argv[1]).read_bytes()
+offset = 0
+while True:
+    offset = data.find(b"bplist00", offset)
+    if offset < 0:
+        break
+    if offset >= 4:
+        length = struct.unpack(">I", data[offset - 4:offset])[0]
+        try:
+            options = plistlib.loads(data[offset:offset + length])
+        except (ValueError, TypeError, OverflowError):
+            options = {}
+        if isinstance(options, dict) and options.get("iconSize") == 112 and options.get("backgroundType") == 2 and options.get("arrangeBy") == "none":
+            print("Verified saved installer background and icon layout")
+            sys.exit(0)
+    offset += 8
+raise SystemExit("Finder did not retain the installer layout")
+PY
+hdiutil detach "$MOUNT"
+ATTACHED=0
+hdiutil convert "$WORK/layout.dmg" -format UDZO -o "$WORK/Yapper.dmg"
 if [[ "$MODE" == "notarized" ]]; then
     codesign --sign "$SIGN_IDENTITY" --timestamp "$WORK/Yapper.dmg"
     xcrun notarytool submit "$WORK/Yapper.dmg" --keychain-profile "$NOTARY_PROFILE" --wait

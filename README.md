@@ -75,7 +75,7 @@ NOTARY_PROFILE="yapper-notary" \
 make dmg
 ```
 
-`PACKAGES` can point to an existing Xcode `SourcePackages` directory. To package an already-built Release app, invoke `bash scripts/package-dmg.sh` directly with the same signing variables and optional `APP_PATH`. Packaging uses a temporary directory under DerivedData so macOS privacy restrictions on Documents do not interfere with disk-image creation.
+`PACKAGES` can point to an existing Xcode `SourcePackages` directory. To package an already-built Release app, invoke `bash scripts/package-dmg.sh` directly with the same signing variables and optional `APP_PATH`. Keep the Mac unlocked and eject any existing **Install Yapper** volume before packaging. Finder saves the two-icon installation window and arrow background; the script checks that layout after ejecting and remounting the image read-only. Temporary build files stay under DerivedData.
 
 `bash scripts/package-dmg.sh --local-test` makes an explicitly labeled, unnotarized local test image using `SIGN_IDENTITY`. It is not for distribution. Friends should only receive the notarized release: open the DMG, drag Yapper to Applications, and follow the in-app permission and model-download prompts. No Terminal or Xcode is needed on their Macs.
 
