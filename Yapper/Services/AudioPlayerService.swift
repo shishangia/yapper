@@ -21,12 +21,11 @@ class AudioPlayerService: NSObject, ObservableObject, AVAudioPlayerDelegate {
     /// Load audio file and prepare for playback
     func loadAudio(from url: URL) {
         do {
-            // Reset previous state
-            stop()
-            
-            audioPlayer = try AVAudioPlayer(contentsOf: url)
-            audioPlayer?.delegate = self
-            audioPlayer?.prepareToPlay()
+            reset()
+            let player = try AVAudioPlayer(contentsOf: url)
+            guard player.prepareToPlay() else { throw CocoaError(.fileReadCorruptFile) }
+            audioPlayer = player
+            player.delegate = self
             
             currentAudioURL = url
             duration = audioPlayer?.duration ?? 0
@@ -40,9 +39,8 @@ class AudioPlayerService: NSObject, ObservableObject, AVAudioPlayerDelegate {
     /// Start or resume playback
     func play() {
         guard let player = audioPlayer else { return }
-        player.play()
-        isPlaying = true
-        startTimer()
+        isPlaying = player.play()
+        if isPlaying { startTimer() } else { stopTimer() }
     }
     
     /// Pause playback

@@ -12,12 +12,15 @@ private final class StubSpeechEngine: SpeechToTextEngine {
     var currentModelVariant = ""
     var structuredCalls = 0
     var failLoad = false
+    var loads: [String] = []
+    var onUnload: (() async -> Void)?
     func loadModel(variant: String) async throws {
+        loads.append(variant)
         if failLoad { throw ConversationError.modelsMissing }
         currentModelVariant = variant
         isInitialized = true
     }
-    func unload() async { isInitialized = false; currentModelVariant = "" }
+    func unload() async { await onUnload?(); isInitialized = false; currentModelVariant = "" }
     func transcribe(audioFile: URL, language: String) async throws -> String { "raw words" }
     func transcribeConversation(audioFile: URL, language: String, wordTimestamps: Bool, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord] {
         structuredCalls += 1
@@ -87,6 +90,92 @@ final class WhisperServiceTests: XCTestCase {
         parakeet.failLoad = true
         do { try await manager.loadModel(variant: ParakeetCatalog.v2Variant); XCTFail("Expected failure") }
         catch { XCTAssertFalse(manager.isInitialized) }
+    }
+
+    func testWarmupDeduplicatesAndRechecksSelectionAfterUnload() async throws {
+        let whisper = StubSpeechEngine()
+        var selection = "openai_whisper-large-v3_turbo"
+        let manager = TranscriptionManager(whisper: whisper, parakeet: StubSpeechEngine(), gate: NativeInferenceGate(),
+            selectedVariant: { selection }, modelReady: { _ in true })
+        var resume: CheckedContinuation<Void, Never>?
+        let unloading = expectation(description: "Unload suspended")
+        whisper.onUnload = {
+            await withCheckedContinuation { resume = $0; unloading.fulfill() }
+        }
+        let first = manager.warmSelectedModel()
+        let joined = manager.warmSelectedModel()
+        await fulfillment(of: [unloading], timeout: 2)
+        selection = ParakeetCatalog.v3Variant
+        whisper.onUnload = nil
+        let latest = manager.warmSelectedModel()
+        resume?.resume()
+        await first?.value
+        await joined?.value
+        await latest?.value
+        XCTAssertTrue(whisper.loads.isEmpty)
+        XCTAssertEqual(manager.currentModelVariant, selection)
+        XCTAssertNil(manager.warmingVariant)
+        await manager.warmSelectedModel()?.value
+    }
+
+    func testWarmupWaitsForInferenceAndSkipsMissingOrDeselectedModel() async throws {
+        let whisper = StubSpeechEngine()
+        let gate = NativeInferenceGate()
+        var selection = "openai_whisper-large-v3_turbo"
+        let manager = TranscriptionManager(whisper: whisper, parakeet: StubSpeechEngine(), gate: gate,
+            selectedVariant: { selection }, modelReady: { !$0.isEmpty })
+        let occupied = expectation(description: "Gate occupied")
+        var resume: CheckedContinuation<Void, Never>?
+        let active = Task { await gate.run { await withCheckedContinuation { resume = $0; occupied.fulfill() } } }
+        await fulfillment(of: [occupied], timeout: 2)
+        let warm = manager.warmSelectedModel()
+        await Task.yield()
+        XCTAssertTrue(whisper.loads.isEmpty)
+        selection = ""
+        XCTAssertNil(manager.warmSelectedModel())
+        resume?.resume()
+        await active.value
+        await warm?.value
+        XCTAssertTrue(whisper.loads.isEmpty)
+        XCTAssertEqual(selection, "")
+    }
+
+    func testReselectingResidentModelDuringUnloadQueuesItsWarmup() async throws {
+        let whisper = StubSpeechEngine()
+        let parakeet = StubSpeechEngine()
+        let turbo = "openai_whisper-large-v3_turbo"
+        let selection = NSMutableString(string: turbo)
+        let manager = TranscriptionManager(whisper: whisper, parakeet: parakeet, gate: NativeInferenceGate(),
+            selectedVariant: { selection as String }, modelReady: { _ in true })
+        try await manager.loadModel(variant: turbo)
+        let unloading = expectation(description: "Resident model unloading")
+        var resume: CheckedContinuation<Void, Never>?
+        whisper.onUnload = { await withCheckedContinuation { resume = $0; unloading.fulfill() } }
+        selection.setString(ParakeetCatalog.v3Variant)
+        let obsolete = manager.warmSelectedModel()
+        await fulfillment(of: [unloading], timeout: 2)
+        selection.setString(turbo)
+        let latest = manager.warmSelectedModel()
+        XCTAssertNotNil(latest)
+        whisper.onUnload = nil
+        resume?.resume()
+        await obsolete?.value
+        await latest?.value
+        XCTAssertTrue(parakeet.loads.isEmpty)
+        XCTAssertTrue(manager.isInitialized)
+        XCTAssertEqual(manager.currentModelVariant, turbo)
+    }
+
+    func testDictationPunctuationIsConservativeAndOptional() {
+        for (original, expected) in ["hello.": "hello", "42.": "42", "3.14.": "3.14",
+            "me@example.com.": "me@example.com", "https://example.com/path.": "https://example.com/path",
+            "www.example.com.": "www.example.com", "  hello.\n": "  hello\n"] {
+            XCTAssertEqual(DictationPunctuation.apply(to: original, enabled: true), expected)
+            XCTAssertEqual(DictationPunctuation.apply(to: original, enabled: false), original)
+        }
+        for original in ["A full sentence.", "Wait...", "Really?", "Yes!", "U.S.", "e.g.", ".", "", "hello.world.", "Hello. Goodbye."] {
+            XCTAssertEqual(DictationPunctuation.apply(to: original, enabled: true), original)
+        }
     }
 
     func testNativeWhisperAndParakeetUseIsolatedCopies() async throws {

@@ -23,7 +23,8 @@ final class ClipboardServiceTests: XCTestCase {
     }
     
     func testCopy() {
-        let text = "Copied Text Check"
+        let text = "me@example.com."
+
         ClipboardService.shared.copy(text: text)
         
         let pasteboard = NSPasteboard.general

@@ -167,7 +167,7 @@ struct PermissionsPage: View {
                     .font(.system(size: 40, weight: .regular, design: .rounded))
                     .foregroundStyle(Color.textPrimary)
 
-                Text("Grant these permissions to unlock the full experience.")
+                Text("Enable recording and auto-paste, or continue without permissions to import audio files.")
                     .font(.system(size: 15, weight: .regular))
                     .foregroundStyle(Color.textSecondary)
                     .multilineTextAlignment(.center)
@@ -199,7 +199,7 @@ struct PermissionsPage: View {
             Spacer()
 
             ContinueButton(
-                isEnabled: micStatus == .authorized && accessibilityStatus,
+                isEnabled: true,
                 action: finishAction
             )
             .padding(.bottom, 48)
@@ -235,6 +235,13 @@ struct PermissionsPage: View {
     }
 
     func checkPermissions() {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--test-permissions-denied") {
+            micStatus = .denied
+            accessibilityStatus = false
+            return
+        }
+        #endif
         micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
         let newAccessStatus = AXIsProcessTrusted()
         if newAccessStatus != accessibilityStatus {

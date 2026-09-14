@@ -33,6 +33,11 @@ enum HotkeyOption: String, Codable, CaseIterable, Identifiable {
         }
     }
     
+    func recordingHint(mode: Int) -> String {
+        mode == 0 ? "Hold \(displayName) to record, then release to transcribe."
+            : "Press \(displayName) to record, then press again to transcribe."
+    }
+
     /// macOS keycode for this modifier key
     var keyCode: UInt16 {
         switch self {

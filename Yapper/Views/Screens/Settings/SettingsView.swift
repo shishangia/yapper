@@ -96,6 +96,7 @@ struct GeneralSettingsTab: View {
     @AppStorage("transcriptionLanguage") private var transcriptionLanguage: String = "auto"
     @AppStorage("recentTranscriptionLanguages") private var recentLanguagesString: String = ""
     @AppStorage("enableAutoEdit") private var enableAutoEdit: Bool = false
+    @AppStorage("trimDictationPeriod") private var trimDictationPeriod = true
 
     private var recentLanguageCodes: [String] {
         recentLanguagesString.split(separator: ",").map(String.init).filter { !$0.isEmpty }
@@ -261,6 +262,19 @@ struct GeneralSettingsTab: View {
                     )
 
                     VStack(alignment: .leading, spacing: 14) {
+                        HStack {
+                            Text("Trim final period on short dictation")
+                                .font(Typography.bodyMedium)
+                                .foregroundStyle(Color.textPrimary)
+                            Spacer()
+                            Toggle("Trim final period on short dictation", isOn: $trimDictationPeriod)
+                                .labelsHidden()
+                                .accessibilityIdentifier("trimDictationPeriod")
+                        }
+                        Text("Removes a lone final period from an email, web address, number, or single word. Sentences and conversation transcripts stay unchanged.")
+                            .font(Typography.captionSmall)
+                            .foregroundStyle(Color.textMuted)
+                        Divider()
                         HStack {
                             Text("Enable Auto Edit")
                                 .font(Typography.bodyMedium)

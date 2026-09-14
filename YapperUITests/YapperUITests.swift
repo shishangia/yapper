@@ -8,6 +8,66 @@ final class YapperUITests: XCTestCase {
     }
 
     @MainActor
+    func testImportOnlyOnboardingAndMaintenanceControls() throws {
+        let app = XCUIApplication()
+        addTeardownBlock { @MainActor in app.terminate() }
+        app.launchArguments = ["--uitesting", "--test-onboarding", "--test-permissions-denied", "-ApplePersistenceIgnoreState", "YES",
+            "-legacyImportOffered", "YES", "-selectedModelVariant", "openai_whisper-large-v3_turbo", "-selectedHotkey", "rightOption", "-recordingMode", "1"]
+        app.launch()
+        if !app.windows.firstMatch.waitForExistence(timeout: 3) { openDashboard() }
+        XCTAssertTrue(app.buttons["Get Started"].firstMatch.waitForExistence(timeout: 10))
+        app.buttons["Get Started"].firstMatch.click()
+        XCTAssertTrue(app.buttons["Continue"].firstMatch.waitForExistence(timeout: 5))
+        app.buttons["Continue"].firstMatch.click()
+        XCTAssertTrue(app.staticTexts["Permissions"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Continue"].firstMatch.isEnabled)
+        capture(app.windows.firstMatch, name: "Import-only onboarding permissions")
+        app.buttons["Continue"].firstMatch.click()
+        XCTAssertTrue(app.buttons["sidebar.transcribeAudio"].waitForExistence(timeout: 10))
+        app.buttons["sidebar.transcribeAudio"].click()
+        XCTAssertTrue(app.buttons["importConversation"].waitForExistence(timeout: 5))
+        capture(app.windows.firstMatch, name: "Import-only setup complete")
+        app.buttons["sidebar.settings"].click()
+        let trim = app.checkBoxes["trimDictationPeriod"]
+        XCTAssertTrue(trim.waitForExistence(timeout: 5))
+        let settingsScroll = app.scrollViews.containing(.checkBox, identifier: "trimDictationPeriod").firstMatch
+        settingsScroll.scroll(byDeltaX: 0, deltaY: -420)
+        capture(app.windows.firstMatch, name: "Punctuation control before interaction")
+        let original = try XCTUnwrap(trim.value as? NSNumber)
+        trim.click()
+        XCTAssertNotEqual(trim.value as? NSNumber, original)
+        trim.click()
+        capture(app.windows.firstMatch, name: "Dictation punctuation setting")
+        app.buttons["sidebar.dashboard"].click()
+        let play = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "recent.play.")).firstMatch
+        XCTAssertTrue(play.waitForExistence(timeout: 5))
+        play.click()
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "recent.play.", "Pause")).firstMatch.waitForExistence(timeout: 5))
+        capture(app.windows.firstMatch, name: "Dashboard audio playing")
+        play.click()
+        XCTAssertTrue(play.label.contains("Play"))
+    }
+
+    @MainActor
+    func testEscapeDismissesRecorderWithoutReleasingBusyJob() throws {
+        let app = XCUIApplication()
+        addTeardownBlock { @MainActor in app.terminate() }
+        app.launchArguments = ["--uitesting", "-ApplePersistenceIgnoreState", "YES", "-alwaysShowRecorderPill", "YES", "-selectedModelVariant", ""]
+        app.launchEnvironment["YAPPER_RECORDER_PREVIEW"] = "cancelable"
+        app.launch()
+        openDashboard()
+        let recorder = app.dialogs["yapper.recorder"]
+        XCTAssertTrue(recorder.waitForExistence(timeout: 10))
+        XCTAssertTrue(recorder.descendants(matching: .any)["recorder.processing"].waitForExistence(timeout: 5))
+        capture(recorder, name: "Recorder before Escape")
+        app.typeKey(.escape, modifierFlags: [])
+        let idle = recorder.descendants(matching: .any)["recorder.idle"]
+        XCTAssertTrue(idle.waitForExistence(timeout: 5))
+        XCTAssertEqual(idle.label, "Recorder idle, busy")
+        capture(recorder, name: "Recorder dismissed with native job still busy")
+    }
+
+    @MainActor
     func testCandyNavigationAndMenuAppearance() throws {
         for appearance in ["Light", "Dark"] {
             let app = XCUIApplication()

@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct HistoryView: View {
+    @AppStorage("selectedHotkey") private var selectedHotkey: HotkeyOption = .fn
+    @AppStorage("recordingMode") private var recordingMode = 0
     @StateObject private var historyService = HistoryService.shared
     @StateObject private var audioPlayer = AudioPlayerService.shared
     @State private var showDeleteAlert = false
@@ -62,7 +64,7 @@ struct HistoryView: View {
                                 .font(Typography.displaySmall)
                                 .foregroundStyle(Color.textPrimary)
                             
-                            Text("Press ⌘+Shift+Space to start recording")
+                            Text(selectedHotkey.recordingHint(mode: recordingMode))
                                 .font(Typography.bodyMedium)
                                 .foregroundStyle(Color.textSecondary)
                         }

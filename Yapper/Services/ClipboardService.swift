@@ -87,10 +87,10 @@ class ClipboardService {
     }
 
     // Paste content (Simulate Cmd+V)
+    @MainActor
     func paste() {
-        // Create a concurrent task to avoid blocking main thread if needed,
-        // though CGEvent is fast.
-        DispatchQueue.main.async {
+        // Post synchronously so the caller's cancellation and focus checks remain valid.
+        do {
             let source = CGEventSource(stateID: .hidSystemState)
 
             // Command key down

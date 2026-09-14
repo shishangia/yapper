@@ -6,13 +6,12 @@ import SwiftUI
 struct MiniRecorderView: View {
     @ObservedObject private var audioRecorder = AudioRecordingService.shared
     private var transcription: TranscriptionManager { TranscriptionManager.shared }
-    @State private var isListening = false
-
-    @State private var isProcessing = false
+    let job: RecorderJob
+    private var isListening: Bool { job.isBusy && job.phase == .recording }
+    private var isProcessing: Bool { job.isBusy && job.phase != .recording }
     @State private var statusMessage = "Transcribing..."
-    @State private var isWarmingUp = false
     @State private var showAccessibilityWarning = false
-    var onCommit: ((String) -> Void)?
+    var onCommit: ((String, RecorderJob.Snapshot) -> Void)?
     var onCancel: (() -> Void)?
 
     @AppStorage(ModelSelection.defaultsKey) private var selectedModel: String = ModelSelection.none
@@ -88,9 +87,6 @@ struct MiniRecorderView: View {
     }
 
     // MARK: - State for Escape key cancellation
-    @State private var cancelCommit = false
-    @State private var recordingModel = ModelSelection.none
-    @State private var recordingLanguage = "auto"
     @State private var globalEscapeMonitor: Any?
     @State private var localEscapeMonitor: Any?
 
@@ -244,7 +240,8 @@ struct MiniRecorderView: View {
     private static let waveBarSpacing: CGFloat = 2.0
 
     // Default Init for Preview
-    init(onCommit: ((String) -> Void)? = nil, onCancel: (() -> Void)? = nil) {
+    init(job: RecorderJob, onCommit: ((String, RecorderJob.Snapshot) -> Void)? = nil, onCancel: (() -> Void)? = nil) {
+        self.job = job
         self.onCommit = onCommit
         self.onCancel = onCancel
     }
@@ -262,11 +259,13 @@ struct MiniRecorderView: View {
             case "recording": return .recording
             case "processing": return .processing
             case "warming": return .warming
-            default: return .idle
+            case "idle": return .idle
+            default: break
             }
         }
         #endif
-        if isWarmingUp || transcription.isLoading { return .warming }
+        guard job.isPresented else { return .idle }
+        if job.phase == .preparing { return .warming }
         if isProcessing { return .processing }
         if isListening { return .recording }
         return .idle
@@ -408,6 +407,9 @@ struct MiniRecorderView: View {
             }
         }
         .frame(width: pillWidth, height: pillHeight)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("recorder.\(displayPhase)")
+        .accessibilityLabel(Text(verbatim: "Recorder \(displayPhase), \(job.isBusy ? "busy" : "ready")"))
         .clipShape(RoundedRectangle(cornerRadius: pillCornerRadius, style: .continuous))
         .shadow(
             color: .black.opacity(displayPhase == .idle ? 0.35 : 0.45),
@@ -452,13 +454,13 @@ struct MiniRecorderView: View {
             // Set up Escape key monitors
             globalEscapeMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
                 if event.keyCode == 53 {
-                    Task { @MainActor in self.handleEscape() }
+                    MainActor.assumeIsolated { self.handleEscape() }
                 }
             }
             localEscapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-                if event.keyCode == 53 {
-                    Task { @MainActor in self.handleEscape() }
-                    return nil  // swallow Escape
+                if event.keyCode == 53, job.isBusy {
+                    MainActor.assumeIsolated { self.handleEscape() }
+                    return nil
                 }
                 return event
             }
@@ -547,22 +549,8 @@ struct MiniRecorderView: View {
     private var modelSelectionMenu: some View {
         ForEach(AIModel.availableModels) { model in
             Button {
-                let previousModel = selectedModel
                 selectedModel = model.variant
-
-                // Pre-load the new model immediately so the first transcription isn't slow
-                if model.variant != previousModel {
-                    Task {
-                        await MainActor.run { isWarmingUp = true }
-                        do {
-                            try await transcription.loadModel(variant: model.variant)
-                            debugLog("Model pre-loaded after switch: \(model.variant)")
-                        } catch {
-                            debugLog("Model pre-load failed: \(error.localizedDescription)")
-                        }
-                        await MainActor.run { isWarmingUp = false }
-                    }
-                }
+                transcription.warmSelectedModel()
             } label: {
                 if selectedModel == model.variant {
                     Label(model.name, systemImage: "checkmark")
@@ -576,234 +564,111 @@ struct MiniRecorderView: View {
     // MARK: - Logic
 
     private func initializedService() {
-        // NOTE: the recorder is now always on screen, so we must NOT keep the mic
-        // capture session warm here — that would light the system mic indicator at
-        // all times. The session is started on demand when recording begins.
-
-        guard !selectedModel.isEmpty else {
-            debugLog("No model selected - skipping initialization")
-            return
-        }
-
-        Task {
-            debugLog("Initializing WhisperService with model: \(selectedModel)")
-            do {
-                try await transcription.loadModel(variant: selectedModel)
-                debugLog("Model preloaded successfully")
-            } catch {
-                debugLog("Model preload failed: \(error.localizedDescription)")
-            }
-        }
+        transcription.warmSelectedModel()
     }
 
     private func handleHotkeyTrigger() {
-        if isListening {
-            stopAndTranscribe()
-        } else {
-            startRecording()
-        }
+        if isListening { stopAndTranscribe() }
     }
 
     private func cancelRecording() {
-        cancelCommit = true
-
-        guard isListening || audioRecorder.isRecording else {
-            isProcessing = false
-            onCancel?()
-            return
-        }
-
-        Task {
-            _ = await audioRecorder.stopRecording(discardOutput: true)
-
-            await MainActor.run {
-                isListening = false
-                isProcessing = false
-                statusMessage = "Transcribing..."
-                onCancel?()
+        guard let snapshot = job.snapshot else { return }
+        let wasRecording = isListening
+        job.cancel()
+        onCancel?()
+        if wasRecording, job.transition(snapshot.id, from: .recording, to: .stopping) {
+            Task {
+                _ = await audioRecorder.stopRecording(discardOutput: true)
+                finish(snapshot)
             }
         }
     }
 
     private func startRecording() {
-        guard !isProcessing else {
-            debugLog("Already processing, ignoring start request")
+        guard let snapshot = job.snapshot, job.phase == .preparing else { return }
+        guard !snapshot.model.isEmpty else { showError("No model selected", for: snapshot); return }
+        guard ModelStorage.transcriptionModelReady(snapshot.model) else {
+            showError("Model not downloaded", for: snapshot)
             return
         }
-
-        guard !isListening else {
-            debugLog("Already listening, ignoring duplicate start request")
-            return
-        }
-
-        // Warn (at most once) if accessibility is off — transcribed text still lands
-        // on the clipboard, we just can't auto-paste. Skipped entirely in DEBUG so
-        // frequent rebuilds (which reset the TCC grant) don't nag while testing.
-        #if !DEBUG
+        do { try TranscriptionManager.validate(variant: snapshot.model, language: snapshot.language) }
+        catch { showError("Choose a model for this language", for: snapshot); return }
+        Task {
+            let authorized: Bool
+            switch AVCaptureDevice.authorizationStatus(for: .audio) {
+            case .authorized: authorized = true
+            case .notDetermined: authorized = await AVCaptureDevice.requestAccess(for: .audio)
+            default: authorized = false
+            }
+            guard job.canCommit(snapshot.id) else { finish(snapshot); return }
+            guard authorized else { showError("Enable Microphone in System Settings", for: snapshot); return }
+            #if !DEBUG
             if !isAccessibilityEnabled && !hasShownAccessibilityWarning {
                 hasShownAccessibilityWarning = true
                 showAccessibilityWarning = true
             }
-        #endif
-
-        // Check if model is selected BEFORE starting recording
-        guard !selectedModel.isEmpty else {
-            debugLog("No model selected - showing error")
-            isProcessing = true
-            statusMessage = "No model selected"
-
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
-                isProcessing = false
-                onCancel?()
-            }
-            return
+            #endif
+            guard job.transition(snapshot.id, from: .preparing, to: .recording) else { return }
+            audioRecorder.startRecording()
         }
-
-        // Check if model is downloaded
-        guard ModelStorage.transcriptionModelReady(selectedModel) else {
-            debugLog("Model not downloaded - showing error")
-            isProcessing = true
-            statusMessage = "Model not downloaded"
-
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
-                isProcessing = false
-                onCancel?()
-            }
-            return
-        }
-
-        do { try TranscriptionManager.validate(variant: selectedModel, language: transcriptionLanguage) }
-        catch {
-            isProcessing = true
-            statusMessage = "Choose a model for this language"
-            Task { @MainActor in
-                try? await Task.sleep(for: .seconds(3))
-                isProcessing = false
-                onCancel?()
-            }
-            return
-        }
-        recordingModel = selectedModel
-        recordingLanguage = transcriptionLanguage
-        cancelCommit = false
-
-        debugLog("Starting recording...")
-        audioRecorder.startRecording()
-        isListening = true
     }
 
     private func selectAudioDevice(_ deviceId: String) {
         guard audioRecorder.selectedDeviceId != deviceId else { return }
-
-        let shouldResumeRecording = isListening
-
+        guard let snapshot = job.snapshot, isListening else {
+            if !job.isBusy { audioRecorder.selectedDeviceId = deviceId }
+            return
+        }
+        guard job.transition(snapshot.id, from: .recording, to: .switchingInput) else { return }
+        statusMessage = "Switching input..."
         Task {
-            if shouldResumeRecording {
-                await MainActor.run {
-                    isListening = false
-                    isProcessing = true
-                    statusMessage = "Switching input..."
-                }
-
-                _ = await audioRecorder.stopRecording(discardOutput: true)
-            }
-
-            await MainActor.run {
-                audioRecorder.selectedDeviceId = deviceId
-            }
-
-            guard shouldResumeRecording else { return }
-
+            _ = await audioRecorder.stopRecording(discardOutput: true)
+            guard job.canCommit(snapshot.id) else { finish(snapshot); return }
+            audioRecorder.selectedDeviceId = deviceId
+            guard job.transition(snapshot.id, from: .switchingInput, to: .recording) else { return }
             audioRecorder.startRecording()
-
-            await MainActor.run {
-                isProcessing = false
-                isListening = true
-            }
         }
     }
 
     private func stopAndTranscribe() {
-        debugLog("stopAndTranscribe called")
-
-        guard isListening || audioRecorder.isRecording else {
-            debugLog("Not listening, ignoring duplicate stop request")
+        guard let snapshot = job.snapshot else { return }
+        if job.phase == .preparing || job.phase == .switchingInput {
+            job.cancel()
+            onCancel?()
             return
         }
-
-        // The model is captured before microphone recording starts.
-        guard !recordingModel.isEmpty else {
-            debugLog("No model selected - cannot transcribe")
-            Task { @MainActor in
-                isListening = false
-                isProcessing = false
-                statusMessage = "No AI model selected. Go to Settings → AI Models to download one."
-
-                // Show error for 3 seconds
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
-                onCancel?()
-            }
-            return
-        }
-
+        guard job.transition(snapshot.id, from: .recording, to: .stopping) else { return }
+        statusMessage = "Finishing recording..."
         Task {
-            let url = await audioRecorder.stopRecording()
-            debugLog("stopRecording returned: \(url?.absoluteString ?? "nil")")
-
-            guard let url = url else {
-                debugLog("No recording URL, cancelling")
-                await MainActor.run {
-                    isListening = false
-                    onCancel?()
-                }
-                return
-            }
-
-            await MainActor.run {
-                isListening = false
-                isProcessing = true
-                statusMessage = "Transcribing..."
-            }
-
-            // Always use the final full-recording transcription for committed output.
-            // Chunk stitching caused repeated phrases at boundaries across languages.
-            await processRecording(url: url)
+            guard let url = await audioRecorder.stopRecording() else { finish(snapshot); return }
+            guard job.transition(snapshot.id, from: .stopping, to: .processing) else { return }
+            await processRecording(url: url, snapshot: snapshot)
         }
     }
 
     private func handleEscape() {
-        guard isListening || isProcessing || isWarmingUp || transcription.isLoading else { return }
+        guard job.isBusy else { return }
+        let wasRecording = isListening
+        job.cancel()
+        onCancel?()
+        // Escape retains dictation history, but never copies or pastes its result.
+        if wasRecording { stopAndTranscribe() }
+    }
 
-        debugLog("Escape pressed - cancelling immediate commit")
-        cancelCommit = true
+    private func finish(_ snapshot: RecorderJob.Snapshot) {
+        guard job.snapshot?.id == snapshot.id else { return }
+        job.finish(snapshot.id)
+        onCancel?()
+    }
 
-        if isListening {
-            Task {
-                let url = await audioRecorder.stopRecording()
-
-                await MainActor.run {
-                    isListening = false
-                    isProcessing = true
-                    statusMessage = "Stopping transcription..."
-                }
-
-                if let url = url {
-                    // Let it process in the background and save to history, but don't commit to UI
-                    await processRecording(url: url)
-                } else {
-                    await MainActor.run {
-                        onCancel?()
-                    }
-                }
-            }
-        } else {
-            // Already processing, just show stopping and quickly dismiss
-            statusMessage = "Stopping transcription..."
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                onCancel?()
-            }
+    private func showError(_ message: String, for snapshot: RecorderJob.Snapshot) {
+        guard job.snapshot?.id == snapshot.id else { return }
+        guard job.isPresented else { finish(snapshot); return }
+        _ = job.transition(snapshot.id, from: .preparing, to: .processing)
+        statusMessage = message
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            finish(snapshot)
         }
     }
 
@@ -811,65 +676,24 @@ struct MiniRecorderView: View {
         // Do not write transcripts or recording paths to a shared temporary file.
     }
 
-    private func processRecording(url: URL) async {
-        debugLog("processRecording started with url: \(url.lastPathComponent)")
+    private func processRecording(url: URL, snapshot: RecorderJob.Snapshot) async {
         do {
-            debugLog("Starting transcription...")
-            // If user has already cancelled (pressed Escape), skip transcription UI updates
-            // but still run the transcription in the background to save to history
-            if !cancelCommit {
-                await MainActor.run { statusMessage = "Transcribing..." }
-            }
-            let text = try await transcription.transcribe(audioFile: url, variant: recordingModel, language: recordingLanguage)
-            debugLog("Transcription result: \(text.prefix(50))...")
-
-            guard !text.isEmpty else {
-                debugLog("Empty text, cancelling")
-                await MainActor.run {
-                    statusMessage = "No speech detected"
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                        self.isProcessing = false
-                        self.onCancel?()
-                    }
-                }
-                return
-            }
-
+            if job.isPresented { statusMessage = "Transcribing..." }
+            let rawText = try await transcription.transcribe(audioFile: url, variant: snapshot.model, language: snapshot.language)
+            let trimPeriod = UserDefaults.standard.object(forKey: "trimDictationPeriod") as? Bool ?? true
+            let text = DictationPunctuation.apply(to: rawText, enabled: trimPeriod)
+            guard !text.isEmpty else { showError("No speech detected", for: snapshot); return }
             let duration = await getAudioDuration(url: url)
-            let modelName =
-                AIModel.availableModels.first(where: { $0.variant == recordingModel })?.name
-                ?? recordingModel
-            HistoryService.shared.addItem(
-                transcript: text,
-                duration: duration,
-                audioFileURL: url,
-                modelUsed: modelName,
-                transcriptionTime: nil
-            )
-
-            debugLog("Calling onCommit...")
-            await MainActor.run {
-                if !cancelCommit {
-                    onCommit?(text)
-                }
-                isProcessing = false
-
-                // If we cancelled by dismissing early, the window might already be closed,
-                // but if we waited for it (e.g. short transcription), close it now.
-                if cancelCommit {
-                    onCancel?()
-                }
+            let modelName = AIModel.availableModels.first(where: { $0.variant == snapshot.model })?.name ?? snapshot.model
+            HistoryService.shared.addItem(transcript: text, duration: duration, audioFileURL: url,
+                modelUsed: modelName, transcriptionTime: nil)
+            if job.canCommit(snapshot.id), let onCommit {
+                onCommit(text, snapshot)
+            } else {
+                finish(snapshot)
             }
-            debugLog("onCommit called successfully")
         } catch {
-            debugLog("Error: \(error.localizedDescription)")
-            await MainActor.run {
-                statusMessage = "Transcription failed"
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                    self.isProcessing = false
-                    self.onCancel?()
-                }
-            }
+            showError("Transcription failed", for: snapshot)
         }
     }
 

@@ -26,6 +26,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if ProcessInfo.processInfo.environment["YAPPER_RECORDER_PREVIEW"] != nil {
             miniRecorderController = MiniRecorderWindowController()
             miniRecorderController?.showIdleRecorder()
+            if ProcessInfo.processInfo.environment["YAPPER_RECORDER_PREVIEW"] == "cancelable" {
+                let controller = miniRecorderController
+                if let snapshot = controller?.job.begin(model: "", language: "auto", targetPID: nil) {
+                    _ = controller?.job.transition(snapshot.id, from: .preparing, to: .processing)
+                }
+            }
         }
         #endif
 
@@ -66,7 +72,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         miniRecorderController = MiniRecorderWindowController()
         miniRecorderController?.showIdleRecorder()
         NotificationCenter.default.addObserver(forName: .recorderIdleVisibilityChanged, object: nil, queue: .main) { [weak self] _ in
-            self?.miniRecorderController?.applyIdleVisibilityPreference()
+            Task { @MainActor [weak self] in self?.miniRecorderController?.applyIdleVisibilityPreference() }
         }
         setupHotkeyMonitoring()
     }
@@ -80,9 +86,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             alert.runModal()
             return .terminateCancel
         }
-        guard ConversationSession.shared.isBusy else { return .terminateNow }
+        guard ConversationSession.shared.isBusy || miniRecorderController?.isBusy == true else { return .terminateNow }
         let alert = NSAlert()
-        alert.messageText = "A conversation is still active"
+        alert.messageText = "A recording is still active"
         alert.informativeText = "Keep Yapper open to finish. You can switch pages or close the window without stopping transcription."
         alert.addButton(withTitle: "Keep Running")
         alert.addButton(withTitle: "Quit Without Saving")
@@ -341,7 +347,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             let recordingMode = UserDefaults.standard.integer(forKey: "recordingMode")
             if recordingMode == 1 {
-                if AudioRecordingService.shared.isRecording {
+                if miniRecorderController?.isBusy == true {
                     miniRecorderController?.stopRecording()
                 } else {
                     miniRecorderController?.startRecording()

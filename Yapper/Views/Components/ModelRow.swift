@@ -9,11 +9,9 @@ struct ModelRow: View {
     @ObservedObject var downloadService = ModelDownloadService.shared
     private var transcription: TranscriptionManager { TranscriptionManager.shared }
 
-    @State private var isLoadingModel = false
+    private var isLoadingModel: Bool { transcription.warmingVariant == model.variant }
     @State private var isDeletingModel = false
     @State private var showingDeleteConfirmation = false
-    @State private var loadError: String?
-    @State private var loadingStartTime: Date?
 
     var progress: Double { downloadService.downloadProgress[model.variant] ?? 0 }
     var isDownloading: Bool { downloadService.isDownloading[model.variant] ?? false }
@@ -43,7 +41,7 @@ struct ModelRow: View {
             if let warning = model.ramWarning(deviceRAMGB: WhisperService.deviceRAMGB) {
                 note(icon: "exclamationmark.triangle", text: warning, tint: .accentWarning)
             }
-            if let error = loadError ?? downloadService.downloadError[model.variant] {
+            if let error = downloadService.downloadError[model.variant] ?? (isActive ? transcription.warmupError : nil) {
                 note(icon: "exclamationmark.circle", text: error, tint: .accentError)
             }
             if isLoadingModel { loadingIndicator }
@@ -139,18 +137,18 @@ struct ModelRow: View {
                 .accessibilityLabel("Delete \(model.name)")
                 .accessibilityIdentifier("model.delete.\(model.variant)")
             } else if isDownloading {
-                Button("Cancel") {
+                Button(downloadService.isCanceling[model.variant] == true ? "Canceling…" : "Cancel") {
                     downloadService.cancelDownload(for: model.variant)
                 }
                 .buttonStyle(.stSecondary)
+                .disabled(downloadService.isCanceling[model.variant] == true)
                 .accessibilityLabel("Cancel \(model.name) download")
                 .accessibilityIdentifier("model.cancel.\(model.variant)")
             } else {
                 Button {
-                    loadError = nil
                     downloadService.downloadModel(variant: model.variant)
                 } label: {
-                    Label("Download", systemImage: "arrow.down")
+                    Label(downloadService.downloadError[model.variant] == nil ? "Download" : "Retry", systemImage: "arrow.down")
                 }
                 .buttonStyle(.stSecondary)
                 .disabled(isDeletingModel)
@@ -166,12 +164,12 @@ struct ModelRow: View {
                 .controlSize(.small)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
-                Text(transcription.loadingStage.isEmpty ? "Loading model…" : transcription.loadingStage)
+                Text(transcription.isLoading ? "Preparing selected model…" : "Waiting to prepare selected model…")
                     .font(Typography.bodySmall)
                     .foregroundStyle(Color.textSecondary)
-                if let loadingStartTime {
-                    TimelineView(.periodic(from: loadingStartTime, by: 1)) { context in
-                        Text("\(max(0, Int(context.date.timeIntervalSince(loadingStartTime)))) seconds elapsed")
+                if let start = transcription.warmupStartedAt {
+                    TimelineView(.periodic(from: start, by: 1)) { context in
+                        Text("\(max(0, Int(context.date.timeIntervalSince(start)))) seconds elapsed")
                             .font(Typography.caption)
                             .monospacedDigit()
                             .foregroundStyle(Color.textMuted)
@@ -186,7 +184,7 @@ struct ModelRow: View {
         let fraction = min(1, max(0, progress))
         return VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("Downloading…")
+                Text(downloadService.isCanceling[model.variant] == true ? "Canceling…" : (fraction >= 0.99 ? "Finishing model files…" : "Downloading…"))
                 Spacer()
                 Text("\(Int(fraction * 100))%")
                     .monospacedDigit()
@@ -219,22 +217,7 @@ struct ModelRow: View {
     }
 
     private func loadAndSelectModel() {
-        isLoadingModel = true
-        loadError = nil
-        loadingStartTime = Date()
-        Task { @MainActor in
-            defer {
-                isLoadingModel = false
-                loadingStartTime = nil
-            }
-            do {
-                if !ConversationSession.shared.isBusy {
-                    try await transcription.loadModel(variant: model.variant)
-                }
-                selectedModel = model.variant
-            } catch {
-                loadError = error.localizedDescription
-            }
-        }
+        selectedModel = model.variant
+        transcription.warmSelectedModel()
     }
 }

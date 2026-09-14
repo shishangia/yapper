@@ -13,6 +13,8 @@ struct DashboardView: View {
 
     @AppStorage(ModelSelection.defaultsKey) private var selectedModel: String = ModelSelection.none
     @AppStorage("transcriptionLanguage") private var transcriptionLanguage: String = "auto"
+    @AppStorage("selectedHotkey") private var selectedHotkey: HotkeyOption = .fn
+    @AppStorage("recordingMode") private var recordingMode = 0
     @State private var showFileImporter = false
     @State private var isTranscribing = false
     @State private var transcriptionStatus = ""
@@ -127,7 +129,7 @@ struct DashboardView: View {
                                     .font(Typography.bodyMedium)
                                     .foregroundStyle(Color.textPrimary)
 
-                                Text("Press ⌘+Shift+Space to start recording")
+                                Text(selectedHotkey.recordingHint(mode: recordingMode))
                                     .font(Typography.bodySmall)
                                     .foregroundStyle(Color.textSecondary)
                             }
@@ -166,22 +168,8 @@ struct DashboardView: View {
                 print("File selection error: \(error.localizedDescription)")
             }
         }
-        .onAppear {
-            Task {
-                guard !selectedModel.isEmpty else { return }
-                if !transcription.isInitialized
-                    || transcription.currentModelVariant != selectedModel
-                {
-                    try? await transcription.loadModel(variant: selectedModel)
-                }
-            }
-        }
-        .onChange(of: selectedModel) {
-            Task {
-                guard !selectedModel.isEmpty else { return }
-                try? await transcription.loadModel(variant: selectedModel)
-            }
-        }
+        .onAppear { transcription.warmSelectedModel() }
+        .onChange(of: selectedModel) { transcription.warmSelectedModel() }
     }
 
     // MARK: - Helpers
@@ -457,6 +445,9 @@ struct StatBlock: View {
 
 struct RecentTranscriptionRow: View {
     let item: HistoryItem
+    @ObservedObject private var audioPlayer = AudioPlayerService.shared
+    @State private var playbackError = false
+    private var isPlaying: Bool { audioPlayer.currentAudioURL == item.audioFileURL && audioPlayer.isPlaying }
     @State private var isHovered = false
     @State private var showCopySuccess = false
 
@@ -536,11 +527,11 @@ struct RecentTranscriptionRow: View {
 
                         // Play audio button (if available)
                         if item.audioFileURL != nil {
-                            Button(action: {}) {
+                            Button(action: togglePlayback) {
                                 HStack(spacing: 4) {
-                                    Image(systemName: "play.fill")
+                                    Image(systemName: isPlaying ? "pause.fill" : "play.fill")
                                         .font(.system(size: 11))
-                                    Text("Play")
+                                    Text(isPlaying ? "Pause" : "Play")
                                         .font(Typography.captionSmall)
                                 }
                                 .foregroundStyle(Color.textSecondary)
@@ -550,6 +541,7 @@ struct RecentTranscriptionRow: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 6))
                             }
                             .buttonStyle(.plain)
+                            .accessibilityIdentifier("recent.play.\(item.id)")
                         }
                     }
                     .opacity(isHovered ? 1 : 0.5)
@@ -570,6 +562,20 @@ struct RecentTranscriptionRow: View {
                 isHovered = hovering
             }
         }
+        .alert("Recording unavailable", isPresented: $playbackError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The audio file could not be played. Your transcript is still saved.")
+        }
+    }
+
+    private func togglePlayback() {
+        guard let url = item.audioFileURL else { return }
+        if isPlaying { audioPlayer.pause(); return }
+        if audioPlayer.currentAudioURL != url { audioPlayer.loadAudio(from: url) }
+        guard audioPlayer.currentAudioURL == url else { playbackError = true; return }
+        audioPlayer.play()
+        playbackError = !audioPlayer.isPlaying
     }
 
     private func copyToClipboard() {

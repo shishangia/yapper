@@ -8,12 +8,55 @@ class TranscriptionManager {
     private let parakeet: any SpeechToTextEngine
     private let gate: NativeInferenceGate
     private(set) var activeKind: TranscriptionEngineKind = .whisper
+    private(set) var warmingVariant: String?
+    private(set) var warmupError: String?
+    private(set) var warmupStartedAt: Date?
+    private var warmupID = UUID()
+    private var warmupTask: Task<Void, Never>?
+    private let selectedVariant: @MainActor () -> String
+    private let modelReady: @MainActor (String) -> Bool
 
     init(whisper: (any SpeechToTextEngine)? = nil, parakeet: (any SpeechToTextEngine)? = nil,
-         gate: NativeInferenceGate? = nil) {
+         gate: NativeInferenceGate? = nil,
+         selectedVariant: @escaping @MainActor () -> String = { UserDefaults.standard.string(forKey: ModelSelection.defaultsKey) ?? "" },
+         modelReady: @escaping @MainActor (String) -> Bool = { ModelStorage.transcriptionModelReady($0) }) {
         self.whisper = whisper ?? WhisperService.shared
         self.parakeet = parakeet ?? ParakeetEngine.shared
         self.gate = gate ?? .shared
+        self.selectedVariant = selectedVariant
+        self.modelReady = modelReady
+    }
+
+    @discardableResult
+    func warmSelectedModel() -> Task<Void, Never>? {
+        let variant = selectedVariant()
+        if warmingVariant == variant, let warmupTask { return warmupTask }
+        let id = UUID()
+        warmupID = id
+        warmupError = nil
+        warmingVariant = nil
+        warmupStartedAt = nil
+        warmupTask = nil
+        guard modelReady(variant) else { return nil }
+        warmingVariant = variant
+        warmupStartedAt = Date()
+        let task = Task {
+            defer {
+                if warmupID == id { warmingVariant = nil; warmupTask = nil; warmupStartedAt = nil }
+            }
+            do {
+                try await gate.run {
+                    try await prepare(variant: variant) {
+                        self.warmupID == id && self.selectedVariant() == variant && self.modelReady(variant)
+                    }
+                }
+            } catch is CancellationError {
+            } catch {
+                if warmupID == id, selectedVariant() == variant { warmupError = error.localizedDescription }
+            }
+        }
+        warmupTask = task
+        return task
     }
 
     private var activeEngine: any SpeechToTextEngine { activeKind == .whisper ? whisper : parakeet }
@@ -35,12 +78,14 @@ class TranscriptionManager {
         if currentModelVariant == variant { await activeEngine.unload() }
     }
 
-    private func prepare(variant: String) async throws {
+    private func prepare(variant: String, shouldContinue: () -> Bool = { true }) async throws {
+        guard shouldContinue() else { throw CancellationError() }
         guard let model = AIModel.availableModels.first(where: { $0.variant == variant }) else {
             throw ModelError.noSelection
         }
         if activeKind == model.engine, currentModelVariant == variant, isInitialized { return }
         await activeEngine.unload()
+        guard shouldContinue() else { throw CancellationError() }
         activeKind = model.engine
         do { try await activeEngine.loadModel(variant: variant) }
         catch { await activeEngine.unload(); throw error }
@@ -83,3 +128,23 @@ class TranscriptionManager {
 }
 
 extension WhisperService: SpeechToTextEngine {}
+
+enum DictationPunctuation {
+    static func apply(to text: String, enabled: Bool) -> String {
+        guard enabled else { return text }
+        let content = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard content.hasSuffix("."), !content.hasSuffix("..") else { return text }
+        let stem = String(content.dropLast())
+        guard !stem.isEmpty, !stem.contains(where: { $0.isWhitespace }) else { return text }
+        let email = stem.range(of: #"^[^@\s]+@[^@\s]+\.[^@\s]+$"#, options: .regularExpression) != nil
+        let url = (stem.hasPrefix("https://") || stem.hasPrefix("http://") || stem.hasPrefix("www."))
+            && URL(string: stem.hasPrefix("www.") ? "https://" + stem : stem)?.host != nil
+        let number = stem.range(of: #"^[+-]?[0-9]+([.,][0-9]+)*%?$"#, options: .regularExpression) != nil
+        let word = stem.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "'" || $0 == "’" || $0 == "_" }
+        guard email || url || number || word else { return text }
+        guard let period = text.lastIndex(of: ".") else { return text }
+        var result = text
+        result.remove(at: period)
+        return result
+    }
+}

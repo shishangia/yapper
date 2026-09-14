@@ -109,417 +109,210 @@ enum ModelCachePathResolver {
     }
 }
 
-class ModelDownloadService: ObservableObject {
+@MainActor
+final class ModelDownloadService: ObservableObject {
     static let shared = ModelDownloadService()
-    
-    @Published var downloadProgress: [String: Double] = [:] // Map Model Variant (String) to progress
-    @Published var downloadError: [String: String] = [:] // Debugging: track errors
-    @Published var isDownloading: [String: Bool] = [:]
-    
-    private var activeTasks: [String: Task<Void, Never>] = [:] // Track running download tasks
 
-    @MainActor
+    @Published private(set) var downloadProgress: [String: Double] = [:]
+    @Published private(set) var downloadError: [String: String] = [:]
+    @Published private(set) var isDownloading: [String: Bool] = [:]
+    @Published private(set) var isCanceling: [String: Bool] = [:]
+
+    private struct Job {
+        let id: UUID
+        let task: Task<Void, Error>
+    }
+
+    private var jobs: [String: Job] = [:]
+    private var tokenizerJobs: [URL: Task<Void, Error>] = [:]
+    private var deletingVariants = Set<String>()
+    private let downloadWeights: (String, @escaping @Sendable (Double) -> Void) async throws -> Void
+    private let downloadTokenizer: (String) async throws -> Void
+    private let isReady: (String) -> Bool
+    private let didDownload: (String) -> Void
+
+    init(
+        downloadWeights: @escaping (String, @escaping @Sendable (Double) -> Void) async throws -> Void,
+        downloadTokenizer: @escaping (String) async throws -> Void,
+        isReady: @escaping (String) -> Bool,
+        didDownload: @escaping (String) -> Void = { _ in }
+    ) {
+        self.downloadWeights = downloadWeights
+        self.downloadTokenizer = downloadTokenizer
+        self.isReady = isReady
+        self.didDownload = didDownload
+    }
+
+    private convenience init() {
+        self.init(downloadWeights: { variant, progress in
+            if AIModel.engineKind(for: variant) == .parakeet {
+                let version = ParakeetCatalog.version(for: variant)
+                _ = try await AsrModels.download(to: ModelStorage.parakeetCacheDirectory(for: version),
+                    version: version, progressHandler: { progress($0.fractionCompleted) })
+            } else {
+                ModelStorage.ensureWhisperKitModelsDir()
+                _ = try await WhisperKit.download(variant: variant, downloadBase: ModelStorage.whisperKitBase,
+                    progressCallback: { progress($0.fractionCompleted) })
+            }
+        }, downloadTokenizer: { variant in
+            guard let model = ModelStorage.whisperVariant(for: variant) else { throw ConversationError.modelsMissing }
+            _ = try await ModelUtilities.loadTokenizer(for: model, tokenizerFolder: ModelStorage.whisperKitBase)
+        }, isReady: { variant in
+            guard ModelStorage.transcriptionModelReady(variant) else { return false }
+            if AIModel.engineKind(for: variant) == .parakeet { return true }
+            let bytes = Self.calculateDirectorySize(at: ModelStorage.whisperKitModelsDir.appendingPathComponent(variant))
+            return bytes >= Int64(Double(AIModel.expectedSize(for: variant)) * 0.8)
+        }, didDownload: { _ in
+            TranscriptionManager.shared.warmSelectedModel()
+        })
+        Task { await refreshDownloadedModels() }
+    }
+
+    func refreshDownloadedModels() async {
+        var merged = downloadProgress.filter { jobs[$0.key] != nil }
+        for model in AIModel.availableModels where jobs[model.variant] == nil && !deletingVariants.contains(model.variant) {
+            if isReady(model.variant) { merged[model.variant] = 1 }
+        }
+        downloadProgress = merged
+    }
+
     func downloadAndWait(variant: String, progress: @escaping @Sendable (Double) -> Void) async throws {
+        try Task.checkCancellation()
         guard AIModel.availableModels.contains(where: { $0.variant == variant }) else {
             throw TranscriptionManager.ModelError.noSelection
         }
-        if ModelStorage.transcriptionModelReady(variant) { progress(1); return }
+        guard !deletingVariants.contains(variant) else { throw ConversationError.busy }
+        if jobs[variant] == nil, isReady(variant) { progress(1); return }
         downloadModel(variant: variant)
-        guard let task = activeTasks[variant] else { throw ConversationError.modelsMissing }
+        guard let job = jobs[variant] else { throw ConversationError.modelsMissing }
         let observation = $downloadProgress.sink { progress($0[variant] ?? 0) }
         defer { observation.cancel() }
-        await task.value
-        guard ModelStorage.transcriptionModelReady(variant) else { throw ConversationError.modelsMissing }
-    }
-    
-    private init() {
-        // Move any models left in the legacy ~/Documents/huggingface location into
-        // Application Support. No directory is created eagerly — a fresh install
-        // leaves no trace until the user actually downloads a model.
-        ModelStorage.migrateLegacyModelsIfNeeded()
-
-        // Check for already-downloaded models on launch
-        Task { @MainActor in
-            await refreshDownloadedModels()
-            // Don't auto-select - let user explicitly pick a model which will load it
-        }
-    }
-    
-    // Check which models are already downloaded and update progress dictionary
-    func refreshDownloadedModels() async {
-        print("🔍 Checking for already-downloaded models...")
-        
-        var foundModels = Set<String>()
-        
-        // NOTE: WhisperKit.fetchAvailableModels() returns ALL remote models, not local ones
-        // We ONLY rely on disk-based verification to check what's actually downloaded
-        
-        // Verify models actually exist on disk with proper size validation.
-        // Scan the current Application Support location plus the legacy Documents
-        // location (in case a migration move failed or hasn't run yet).
-        var scanDirs = [ModelStorage.whisperKitModelsDir]
-        if let legacy = ModelStorage.legacyModelsDir { scanDirs.append(legacy) }
-        for dir in scanDirs {
-            scanWhisperKitModels(in: dir, into: &foundModels)
-        }
-        
-        // Check Parakeet (FluidAudio) models, which live in their own cache dir.
-        for variant in ParakeetCatalog.variants {
-            let version = ParakeetCatalog.version(for: variant)
-            let cacheDir = ModelStorage.parakeetCacheDirectory(for: version)
-            if AsrModels.modelsExist(at: cacheDir, version: version) {
-                foundModels.insert(variant)
-                print("✅ Parakeet model \(variant) found in cache")
-            }
-        }
-
-        await MainActor.run {
-            // Clear all previous progress
-            self.downloadProgress.removeAll()
-
-            // Only mark models that actually exist
-            for variant in foundModels {
-                self.downloadProgress[variant] = 1.0
-                print("✅ Marked as downloaded: \(variant)")
-            }
-            
-            if foundModels.isEmpty {
-                print("❌ No models found - all will show as 'Download' buttons")
-            } else {
-                print("✅ Found \(foundModels.count) usable model(s)")
-            }
-        }
-    }
-    
-    // Scan a WhisperKit CoreML models directory and insert any complete variants
-    // (verified by required files + ~80% of expected size) into `foundModels`.
-    private func scanWhisperKitModels(in whisperKitPath: URL, into foundModels: inout Set<String>) {
-        let fileManager = FileManager.default
-
-        guard fileManager.fileExists(atPath: whisperKitPath.path) else {
-            print("ℹ️ WhisperKit cache directory doesn't exist yet: \(whisperKitPath.path)")
-            return
-        }
-
-        guard let contents = try? fileManager.contentsOfDirectory(at: whisperKitPath, includingPropertiesForKeys: [.isDirectoryKey]) else {
-            return
-        }
-
-        print("📁 Found \(contents.count) items in WhisperKit cache at \(whisperKitPath.path)")
-
-        for item in contents {
-            let modelName = item.lastPathComponent
-
-            // Skip non-model directories
-            if modelName == "config.json" || modelName == ".DS_Store" {
-                continue
-            }
-
-            // Verify this directory has actual model files (not just empty directory)
-            guard let subContents = try? fileManager.contentsOfDirectory(at: item, includingPropertiesForKeys: [.fileSizeKey]),
-                  !subContents.isEmpty else {
-                continue
-            }
-
-            // Check if it has the essential files for a model (must have config.json)
-            let hasConfigJson = subContents.contains(where: { $0.lastPathComponent == "config.json" })
-            let hasModelFiles = subContents.contains(where: { $0.lastPathComponent.hasSuffix(".mlmodelc") })
-
-            guard hasConfigJson && hasModelFiles else {
-                print("⚠️ Model \(modelName) is incomplete (missing config.json or .mlmodelc files)")
-                continue
-            }
-
-            // Calculate total directory size
-            let directorySize = Self.calculateDirectorySize(at: item)
-            let expectedSize = AIModel.expectedSize(for: modelName)
-
-            // Model is complete if it's at least 80% of expected size
-            let minAcceptableSize = Int64(Double(expectedSize) * 0.8)
-
-            if directorySize >= minAcceptableSize {
-                print("✅ Model \(modelName) verified: \(Self.formatBytes(directorySize)) (expected ~\(Self.formatBytes(expectedSize)))")
-                foundModels.insert(modelName)
-            } else {
-                print("⚠️ Model \(modelName) is INCOMPLETE: \(Self.formatBytes(directorySize)) < \(Self.formatBytes(minAcceptableSize)) minimum")
-            }
-        }
+        try await job.task.value
+        try Task.checkCancellation()
     }
 
-    // Asynchronous download using WhisperKit
     func downloadModel(variant: String) {
-        guard isDownloading[variant] != true else { return }
-
-        // Route Parakeet variants to FluidAudio.
-        if AIModel.engineKind(for: variant) == .parakeet {
-            downloadParakeetModel(variant: variant)
-            return
-        }
-
+        guard jobs[variant] == nil, !deletingVariants.contains(variant),
+              AIModel.availableModels.contains(where: { $0.variant == variant }) else { return }
+        let id = UUID()
         isDownloading[variant] = true
-        downloadProgress[variant] = 0.0
+        isCanceling[variant] = false
+        downloadProgress[variant] = 0
         downloadError[variant] = nil
-        // Create the storage directory now, on first download — never eagerly on launch.
-        ModelStorage.ensureWhisperKitModelsDir()
-        print("Starting WhisperKit download for: \(variant)")
-        
-        let task = Task {
-            // Debug: List what WhisperKit sees
-            // Note: WhisperKit API might differ, but let's try to see if we can get info.
-            // If fetchAvailableModels exists.
-            
+        let task = Task<Void, Error> {
             do {
-                // Determine model variant enum/string
-                // Note: WhisperKit.download(variant:from:) is the likely API.
-                // We use the "variant" string to fetch.
-                // Assuming `WhisperKit.download(variant: variant)` acts as the fetcher.
-                // Progress callback mock (since we might not have exact API signature yet):
-                
-                // Actual API (hypothetical based on search):
-                // let model = try await WhisperKit(model: variant) 
-                // OR
-                // try await WhisperKit.download(variant: variant) { progress in ... }
-                
-                // likely: download(variant:progressCallback:) - 'from' usually has a default
-                let _ = try await WhisperKit.download(variant: variant, downloadBase: ModelStorage.whisperKitBase, progressCallback: { progress in
-                    DispatchQueue.main.async {
-                        self.downloadProgress[variant] = progress.fractionCompleted
-                    }
-                })
-                
-                if Task.isCancelled { return }
-                guard let model = ModelStorage.whisperVariant(for: variant) else { throw ConversationError.modelsMissing }
-                _ = try await ModelUtilities.loadTokenizer(for: model, tokenizerFolder: ModelStorage.whisperKitBase)
-                if Task.isCancelled { return }
-                
-                print("Model downloaded successfully")
-                
-                DispatchQueue.main.async {
-                    self.isDownloading[variant] = false
-                    self.downloadProgress[variant] = 1.0
-                    self.activeTasks[variant] = nil // Cleanup task
+                try await downloadWeights(variant) { value in
+                    Task { @MainActor in self.report(value, variant: variant, id: id) }
                 }
+                try Task.checkCancellation()
+                if AIModel.engineKind(for: variant) == .whisper {
+                    report(1, variant: variant, id: id)
+                    try await ensureTokenizer(for: variant)
+                }
+                try Task.checkCancellation()
+                guard isReady(variant) else { throw ConversationError.modelsMissing }
+                finish(variant: variant, id: id, error: nil)
+                didDownload(variant)
             } catch {
-                if Task.isCancelled {
-                   print("Download cancelled for \(variant)")
-                   return
-                }
-                
-                print("WhisperKit download error: \(error)")
-                
-                // Auto-Repair: If duplicate models found, delete and retry ONCE
-                if error.localizedDescription.contains("Multiple models found") {
-                     print("⚠️ Multiple models detected. Cleaning cache and retrying...")
-                     
-                     await MainActor.run {
-                         self.downloadError[variant] = "Cleaning duplicates..."
-                     }
-                     
-                     let log = await self.deleteModel(variant: variant)
-                     print("🧹 Cleanup result: \(log)")
-                     
-                     // Give filesystem time to settle
-                     try? await Task.sleep(nanoseconds: 2_000_000_000)
-                     if Task.isCancelled { return }
-                     
-                     await MainActor.run {
-                         self.downloadError[variant] = "Retrying download..."
-                     }
-                     
-                     // Retry download once
-                     do {
-                         let _ = try await WhisperKit.download(variant: variant, downloadBase: ModelStorage.whisperKitBase, progressCallback: { progress in
-                             DispatchQueue.main.async {
-                                 self.downloadProgress[variant] = progress.fractionCompleted
-                             }
-                         })
-                         
-                         if Task.isCancelled { return }
-                         guard let model = ModelStorage.whisperVariant(for: variant) else { throw ConversationError.modelsMissing }
-                         _ = try await ModelUtilities.loadTokenizer(for: model, tokenizerFolder: ModelStorage.whisperKitBase)
-                         if Task.isCancelled { return }
-
-                         print("✅ Model downloaded successfully after cleanup")
-                         
-                         DispatchQueue.main.async {
-                             self.isDownloading[variant] = false
-                             self.downloadProgress[variant] = 1.0
-                             self.downloadError[variant] = nil
-                             self.activeTasks[variant] = nil
-                         }
-                     } catch {
-                         if Task.isCancelled { return }
-                         print("❌ Retry failed: \(error)")
-                         DispatchQueue.main.async {
-                             self.isDownloading[variant] = false
-                             self.downloadProgress[variant] = 0.0
-                             self.downloadError[variant] = "Error: \(error.localizedDescription)\n\nTry clicking the trash icon to manually clean cache."
-                             self.activeTasks[variant] = nil
-                         }
-                     }
-                     return
-                }
-
-                DispatchQueue.main.async {
-                    self.isDownloading[variant] = false
-                    self.downloadProgress[variant] = 0.0
-                    self.downloadError[variant] = error.localizedDescription + "\n\n(Try Trash icon to clean cache)"
-                    self.activeTasks[variant] = nil
-                }
+                let outcome: Error = Task.isCancelled ? CancellationError() : error
+                finish(variant: variant, id: id, error: outcome)
+                throw outcome
             }
         }
-        
-        activeTasks[variant] = task
-    }
-    
-    // Download a Parakeet model via FluidAudio (CoreML weights from Hugging Face).
-    private func downloadParakeetModel(variant: String) {
-        isDownloading[variant] = true
-        downloadProgress[variant] = 0.0
-        downloadError[variant] = nil
-        print("Starting FluidAudio (Parakeet) download for: \(variant)")
-
-        let version = ParakeetCatalog.version(for: variant)
-
-        let task = Task {
-            do {
-                _ = try await AsrModels.download(
-                    to: ModelStorage.parakeetCacheDirectory(for: version),
-                    version: version,
-                    progressHandler: { progress in
-                        DispatchQueue.main.async {
-                            self.downloadProgress[variant] = progress.fractionCompleted
-                        }
-                    })
-
-                if Task.isCancelled { return }
-                print("Parakeet model downloaded successfully")
-
-                DispatchQueue.main.async {
-                    self.isDownloading[variant] = false
-                    self.downloadProgress[variant] = 1.0
-                    self.activeTasks[variant] = nil
-                }
-            } catch {
-                if Task.isCancelled {
-                    print("Parakeet download cancelled for \(variant)")
-                    return
-                }
-                print("FluidAudio download error: \(error)")
-                DispatchQueue.main.async {
-                    self.isDownloading[variant] = false
-                    self.downloadProgress[variant] = 0.0
-                    self.downloadError[variant] = error.localizedDescription
-                    self.activeTasks[variant] = nil
-                }
-            }
-        }
-
-        activeTasks[variant] = task
+        jobs[variant] = Job(id: id, task: task)
     }
 
-    // Aggressively deletes any potential cache for this variant
-    @MainActor
-    func deleteModel(variant: String) async -> String {
-        await NativeInferenceGate.shared.run {
-            await TranscriptionManager.shared.unloadWhileLocked(variant: variant)
-            return await removeModelFiles(variant: variant)
-        }
+    private func ensureTokenizer(for variant: String) async throws {
+        guard let key = ModelStorage.tokenizerDirectory(for: variant) else { throw ConversationError.modelsMissing }
+        if let task = tokenizerJobs[key] { try await task.value; return }
+        // Large v3 and Turbo share files; canceling either job must not cancel the shared writer.
+        let task = Task { try await downloadTokenizer(variant) }
+        tokenizerJobs[key] = task
+        defer { tokenizerJobs[key] = nil }
+        try await task.value
     }
 
-    private func removeModelFiles(variant: String) async -> String {
-        // Parakeet models are managed by FluidAudio in its own cache directory.
-        if AIModel.engineKind(for: variant) == .parakeet {
-            let version = ParakeetCatalog.version(for: variant)
-            let cacheDir = ModelStorage.parakeetCacheDirectory(for: version)
-            try? FileManager.default.removeItem(at: cacheDir)
-            await MainActor.run {
-                self.downloadProgress[variant] = 0.0
-                self.isDownloading[variant] = false
-            }
-            return "Deleted Parakeet model cache for \(variant)"
-        }
+    private func report(_ value: Double, variant: String, id: UUID) {
+        guard jobs[variant]?.id == id, isCanceling[variant] != true, value.isFinite else { return }
+        downloadProgress[variant] = max(downloadProgress[variant] ?? 0, min(0.99, max(0, value)))
+    }
 
-        let fileManager = FileManager.default
-        // Only ever touch the WhisperKit model directories Yapper itself owns:
-        // the current Application Support location and the legacy Documents location.
-        // Deletion is limited to the exact per-variant subdirectories under those
-        // roots — no broad substring matching over Caches/home/temp that could nuke
-        // unrelated files (the pre-#65 behavior).
-        let roots = ModelCachePathResolver.repoOwnedModelRoots()
-        let cleanupReport = ModelCachePathResolver.removeVariantDirectories(
-            for: variant,
-            roots: roots,
-            fileManager: fileManager,
-            log: { print($0) }
-        )
-
-        let deletedCount = cleanupReport.deletedPaths.count
-        let checkedPaths = cleanupReport.checkedPaths.map(\.path)
-
-        print("🗑️ Cleanup complete. Deleted \(deletedCount) repo-owned model caches")
-
-        if deletedCount > 0 {
-            await MainActor.run {
-                self.downloadProgress[variant] = 0.0
-                self.isDownloading[variant] = false
-            }
-            return "Deleted \(deletedCount) items"
-        } else {
-            await MainActor.run {
-                self.downloadProgress[variant] = 0.0
-                self.isDownloading[variant] = false
-            }
-            let homePath = fileManager.homeDirectoryForCurrentUser.path
-            return "No repo-owned cache found for '\(variant)'. Checked: \(checkedPaths.map { $0.replacingOccurrences(of: homePath, with: "~") }.joined(separator: ", "))"
-        }
+    private func finish(variant: String, id: UUID, error: Error?) {
+        guard jobs[variant]?.id == id else { return }
+        jobs[variant] = nil
+        isDownloading[variant] = false
+        isCanceling[variant] = false
+        downloadProgress[variant] = error == nil ? 1 : 0
+        downloadError[variant] = error.map { $0 is CancellationError ? "Download canceled. You can retry when ready." : Self.message(for: $0) }
     }
 
     func cancelDownload(for variant: String) {
-        if let task = activeTasks[variant] {
-            task.cancel()
-            activeTasks[variant] = nil
-            print("Cancelled download task for \(variant)")
-        }
-        
-        isDownloading[variant] = false
-        downloadProgress[variant] = 0.0
-        downloadError[variant] = nil
-        
-        // Delete any partial download
-        Task {
-            let result = await deleteModel(variant: variant)
-            print("🗑️ Cleaned up partial download: \(result)")
+        guard let job = jobs[variant] else { return }
+        isCanceling[variant] = true
+        job.task.cancel()
+    }
+
+    func deleteModel(variant: String) async -> String {
+        guard jobs[variant] == nil, !deletingVariants.contains(variant) else { return "Wait for the download to finish before deleting this model." }
+        deletingVariants.insert(variant)
+        defer { deletingVariants.remove(variant) }
+        return await NativeInferenceGate.shared.run {
+            await TranscriptionManager.shared.unloadWhileLocked(variant: variant)
+            let result = removeModelFiles(variant: variant)
+            downloadProgress[variant] = isReady(variant) ? 1 : 0
+            downloadError[variant] = nil
+            return result
         }
     }
-    
-    // MARK: - Helper Functions
-    
-    /// Calculate total size of a directory recursively
-    static func calculateDirectorySize(at url: URL) -> Int64 {
-        let fileManager = FileManager.default
-        var totalSize: Int64 = 0
-        
-        guard let enumerator = fileManager.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey], options: [.skipsHiddenFiles]) else {
-            return 0
-        }
-        
-        for case let fileURL as URL in enumerator {
+
+    private func removeModelFiles(variant: String) -> String {
+        if AIModel.engineKind(for: variant) == .parakeet {
+            let cacheDir = ModelStorage.parakeetCacheDirectory(for: ParakeetCatalog.version(for: variant))
             do {
-                let resourceValues = try fileURL.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
-                if resourceValues.isRegularFile == true {
-                    totalSize += Int64(resourceValues.fileSize ?? 0)
-                }
-            } catch {
-                continue
+                if FileManager.default.fileExists(atPath: cacheDir.path) { try FileManager.default.removeItem(at: cacheDir) }
+                return "Deleted Parakeet model cache for \(variant)"
+            } catch { return error.localizedDescription }
+        }
+        let report = ModelCachePathResolver.removeVariantDirectories(for: variant,
+            roots: ModelCachePathResolver.repoOwnedModelRoots())
+        return "Deleted \(report.deletedPaths.count) model caches"
+    }
+
+    nonisolated static func message(for error: Error) -> String {
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain {
+            switch nsError.code {
+            case NSURLErrorNotConnectedToInternet, NSURLErrorNetworkConnectionLost, NSURLErrorCannotConnectToHost, NSURLErrorCannotFindHost:
+                return "The download could not connect. Check your internet connection and retry."
+            case NSURLErrorTimedOut:
+                return "The download timed out. Check your connection and retry."
+            default: break
             }
         }
-        
+        if (nsError.domain == NSCocoaErrorDomain && nsError.code == NSFileWriteOutOfSpaceError)
+            || (nsError.domain == NSPOSIXErrorDomain && nsError.code == Int(ENOSPC)) {
+            return "There is not enough disk space. Free some space and retry."
+        }
+        let description = error.localizedDescription
+        if description.range(of: #"\b429\b|too many requests"#, options: [.regularExpression, .caseInsensitive]) != nil {
+            return "The model server is busy. Wait a little and retry."
+        }
+        if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? Error { return message(for: underlying) }
+        return "Download failed. \(description) You can retry without deleting other models."
+    }
+
+    nonisolated static func calculateDirectorySize(at url: URL) -> Int64 {
+        let fileManager = FileManager.default
+        var totalSize: Int64 = 0
+        guard let enumerator = fileManager.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey], options: [.skipsHiddenFiles]) else { return 0 }
+        for case let fileURL as URL in enumerator {
+            guard let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey]), values.isRegularFile == true else { continue }
+            totalSize += Int64(values.fileSize ?? 0)
+        }
         return totalSize
     }
-    
-    /// Format bytes into human-readable string
-    static func formatBytes(_ bytes: Int64) -> String {
+
+    nonisolated static func formatBytes(_ bytes: Int64) -> String {
         let formatter = ByteCountFormatter()
         formatter.allowedUnits = [.useBytes, .useKB, .useMB, .useGB]
         formatter.countStyle = .file

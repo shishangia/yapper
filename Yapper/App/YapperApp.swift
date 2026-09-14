@@ -34,8 +34,8 @@ struct YapperApp: App {
 
     init() {
         // For UI testing: bypass onboarding automatically
-        if ProcessInfo.processInfo.arguments.contains("--uitesting") {
-            hasCompletedOnboarding = true
+        if AppEnvironment.isDevelopment, ProcessInfo.processInfo.arguments.contains("--uitesting") {
+            hasCompletedOnboarding = !ProcessInfo.processInfo.arguments.contains("--test-onboarding")
         }
     }
 
