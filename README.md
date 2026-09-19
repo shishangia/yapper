@@ -19,6 +19,31 @@ The app and installer are Developer ID signed and notarized by Apple. You do not
 
 Requires **macOS 14 or later on Apple Silicon (M1 or newer)**. This installer does not support Intel Macs or Windows. An internet connection is needed for model downloads; transcription runs locally afterward.
 
+## Windows preview
+
+**[Download the Windows 11 x64 preview](https://github.com/shishangia/yapper/releases/download/windows-v0.1.0-preview.1/Yapper-0.1.0-preview.1-win-x64-setup.exe)** · [Preview notes and checksum](https://github.com/shishangia/yapper/releases/tag/windows-v0.1.0-preview.1)
+
+A separate native Windows app lives under `windows/`; it does not replace the Mac app. It targets Windows 11 x64 (Intel/AMD) and runs Whisper or Parakeet locally, with optional speaker separation, editable recording-specific speaker names, history/playback, dictionary rules, and tray dictation.
+
+The preview uses CPU inference and platform-specific model files. Start with Whisper Tiny or Small on a modest PC; Large v3 needs substantially more memory and processing time. Parakeet v3 does not support Hindi, Gujarati, or Chinese. Automatic speaker labels remain approximate and can require correction.
+
+The default shortcut is **Ctrl+Alt+Space**, configurable in Settings. Fn is firmware-controlled on many Windows keyboards. Closing the window leaves Yapper in the tray. Auto-paste can be blocked by elevated target apps; Yapper falls back to the clipboard rather than bypassing Windows security. Microphone recording needs the Windows microphone permission. File import supports WAV, MP3, M4A, WMA, and AIFF through installed Windows codecs; unsupported files show an error. The preview limits recordings to two hours.
+
+Windows data stays under `%LOCALAPPDATA%\Yapper`, separately from the Mac library. There is no automatic sync, GPU setup, or cross-platform model-cache sharing. Failed transcription can retry retained audio during the current session, but retry state does not survive restart.
+
+The Windows installer bundles .NET and native runtime dependencies, so users do not need developer tools. It is an **unsigned test build**, not equivalent to the notarized Mac release; SmartScreen may report an unknown publisher. Do not disable Windows security settings to install it.
+
+Windows CI checks the core data rules, real native speech/speaker processing with synthetic audio, actual textbox paste and clipboard restoration, installer execution, and native history/editor navigation. Physical microphone/hotkey behavior, browser-specific paste, and performance on a user's PC still need validation. The Mac's mature speaker-review presentation and the Windows preview are not yet identical.
+
+To build on Windows with .NET 10:
+
+```powershell
+dotnet run --project windows/Yapper.Core.Tests
+dotnet run --project windows/Yapper.Windows
+```
+
+Maintainers can run `scripts/package-windows.ps1` on a Windows build machine with Inno Setup 6 and the Visual C++ redistributable files. GitHub's Windows preview workflow produces the same installer and SHA-256 sidecar.
+
 ## What is new in 1.0.2
 
 Downloads keep their progress when you change pages, cancellation preserves shared model files, and the selected downloaded model prepares for use. Escape dismisses the dictation recorder and prevents auto-paste while native work finishes; the dictation transcript still goes to History. Conversation cancellation discards pending results.
@@ -88,6 +113,8 @@ make dmg
 ## Permissions and recording
 
 Microphone access is needed for recording. Accessibility access is needed for global dictation shortcuts and pasting into other apps. File import does not require microphone access.
+
+If Mac dictation appears in History and manual Cmd+V works but auto-paste does not, check Accessibility for the running app. A changed signing certificate can leave an old Yapper entry looking enabled while macOS rejects it. Quit Yapper, remove that entry, add `/Applications/Yapper.app` again, enable it, and reopen the app. Source builds now show a copy-only recovery message when permission or target focus blocks auto-paste; this feedback is newer than the v1.0.2 Mac download.
 
 Yapper captures the microphone, not system audio. Obtain the consent of everyone being recorded. Speaker labels appear after processing; they do not identify real people automatically or create persistent voice profiles.
 
