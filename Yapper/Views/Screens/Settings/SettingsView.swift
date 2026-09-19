@@ -561,10 +561,15 @@ struct PermissionsSettingsTab: View {
                             desc: "Paste transcribed text directly",
                             isGranted: accessibilityStatus,
                             action: {
-                                ClipboardService.shared.requestAccessibilityPermission()
-                                // System dialog handles opening Settings when user clicks "Open System Settings"
+                                ClipboardService.shared.openAccessibilitySettings()
                             }
                         )
+                        if !accessibilityStatus {
+                            Text("Auto-paste is unavailable; transcripts stay on your clipboard. If Yapper already appears enabled in System Settings, remove that entry, add the current app from Applications, and enable it again. This can be needed after a signing-certificate change.")
+                                .font(Typography.bodySmall)
+                                .foregroundStyle(Color.textSecondary)
+                                .accessibilityIdentifier("accessibilityRecovery")
+                        }
                     }
                 }
             }

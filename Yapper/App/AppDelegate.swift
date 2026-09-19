@@ -26,6 +26,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if ProcessInfo.processInfo.environment["YAPPER_RECORDER_PREVIEW"] != nil {
             miniRecorderController = MiniRecorderWindowController()
             miniRecorderController?.showIdleRecorder()
+            if ProcessInfo.processInfo.environment["YAPPER_RECORDER_PREVIEW"] == "permission-feedback" {
+                miniRecorderController?.job.showPasteFeedback(.copiedPermissionMissing)
+            }
             if ProcessInfo.processInfo.environment["YAPPER_RECORDER_PREVIEW"] == "cancelable" {
                 let controller = miniRecorderController
                 if let snapshot = controller?.job.begin(model: "", language: "auto", targetPID: nil) {

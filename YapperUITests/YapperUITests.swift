@@ -68,6 +68,20 @@ final class YapperUITests: XCTestCase {
     }
 
     @MainActor
+    func testMissingPastePermissionShowsCopyRecovery() throws {
+        let app = XCUIApplication()
+        addTeardownBlock { @MainActor in app.terminate() }
+        app.launchArguments = ["--uitesting", "-ApplePersistenceIgnoreState", "YES", "-alwaysShowRecorderPill", "YES", "-selectedModelVariant", ""]
+        app.launchEnvironment["YAPPER_RECORDER_PREVIEW"] = "permission-feedback"
+        app.launch()
+        let recorder = app.dialogs["yapper.recorder"]
+        XCTAssertTrue(recorder.waitForExistence(timeout: 5))
+        XCTAssertTrue(recorder.staticTexts["Copied. Enable Accessibility to paste."].waitForExistence(timeout: 3))
+        XCTAssertTrue(recorder.buttons["Settings"].exists)
+        capture(recorder, name: "Auto-paste permission recovery")
+    }
+
+    @MainActor
     func testCandyNavigationAndMenuAppearance() throws {
         for appearance in ["Light", "Dark"] {
             let app = XCUIApplication()

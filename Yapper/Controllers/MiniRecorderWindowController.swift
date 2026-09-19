@@ -16,9 +16,27 @@ final class RecorderJob {
     private(set) var isPresented = false
     private(set) var commitAllowed = false
     var isBusy: Bool { snapshot != nil }
+    private(set) var pasteFeedback: ClipboardService.PasteOutcome?
+    private var feedbackID = UUID()
+
+    @discardableResult
+    func showPasteFeedback(_ outcome: ClipboardService.PasteOutcome) -> UUID {
+        pasteFeedback = outcome.message == nil ? nil : outcome
+        let id = UUID()
+        feedbackID = id
+        Task {
+            try? await Task.sleep(for: .seconds(8))
+            if feedbackID == id { pasteFeedback = nil }
+        }
+        return id
+    }
+
+    func isCurrentFeedback(_ id: UUID) -> Bool { feedbackID == id }
 
     func begin(model: String, language: String, targetPID: pid_t?) -> Snapshot? {
         guard !isBusy else { return nil }
+        feedbackID = UUID()
+        pasteFeedback = nil
         let value = Snapshot(model: model, language: language, targetPID: targetPID)
         snapshot = value
         phase = .preparing
@@ -237,48 +255,32 @@ class MiniRecorderWindowController: NSObject {
         job.dismiss(snapshot.id)
         returnToIdle()
         Task {
-            defer { job.finish(snapshot.id) }
-            guard job.canCommit(snapshot.id) else { return }
             let clipboard = ClipboardService.shared
-            guard clipboard.isAccessibilityTrusted,
-                  let pid = snapshot.targetPID, let app = NSRunningApplication(processIdentifier: pid), !app.isTerminated else {
-                clipboard.copy(text: text)
-                return
-            }
-            app.activate()
-            try? await Task.sleep(for: .milliseconds(500))
-            guard job.canCommit(snapshot.id), !Task.isCancelled else { return }
-            guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else {
-                clipboard.copy(text: text)
-                return
-            }
-            let previous = shouldRestoreClipboardAfterAutoPaste ? clipboard.copyForTemporaryPaste(text: text) : nil
-            if previous == nil { clipboard.copy(text: text) }
-            clipboard.paste()
-            if let previous {
-                try? await Task.sleep(for: .milliseconds(350))
-                clipboard.restore(previous, ifCurrentStringMatches: text)
+            let restoreClipboard = shouldRestoreClipboardAfterAutoPaste
+            let outcome = await ClipboardService.deliver(text: text, restoreClipboard: restoreClipboard,
+                canCommit: { self.job.canCommit(snapshot.id) },
+                accessibilityTrusted: { clipboard.isAccessibilityTrusted },
+                activateTarget: {
+                    guard let pid = snapshot.targetPID, let app = NSRunningApplication(processIdentifier: pid), !app.isTerminated else { return false }
+                    return app.activate()
+                },
+                targetIsFocused: { NSWorkspace.shared.frontmostApplication?.processIdentifier == snapshot.targetPID },
+                copy: { text in
+                    if restoreClipboard { return clipboard.copyForTemporaryPaste(text: text) }
+                    clipboard.copy(text: text)
+                    return nil
+                }, sendPaste: { clipboard.paste() },
+                restore: { clipboard.restore($0, ifCurrentStringMatches: $1) },
+                wait: { try? await Task.sleep(for: $0) })
+            job.finish(snapshot.id)
+            let feedback = job.showPasteFeedback(outcome)
+            if outcome.message != nil {
+                panel?.ignoresMouseEvents = false
+                panel?.orderFrontRegardless()
+                try? await Task.sleep(for: .seconds(8))
+                if !job.isBusy, job.isCurrentFeedback(feedback) { returnToIdle() }
             }
         }
     }
 
-    private func showAccessibilityAlert() {
-        let alert = NSAlert()
-        alert.messageText = "Accessibility Permission Required"
-        alert.informativeText =
-            "Yapper needs Accessibility permission to automatically paste transcriptions into the active app.\n\nYour transcription has been copied to the clipboard.\n\nTo enable auto-paste, grant permission in:\nSystem Settings → Privacy & Security → Accessibility"
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Open System Settings")
-        alert.addButton(withTitle: "OK")
-
-        let response = alert.runModal()
-        if response == .alertFirstButtonReturn {
-            if let url = URL(
-                string:
-                    "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-            {
-                NSWorkspace.shared.open(url)
-            }
-        }
-    }
 }

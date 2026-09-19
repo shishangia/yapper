@@ -58,6 +58,44 @@ final class ClipboardServiceTests: XCTestCase {
         XCTAssertEqual(pasteboard.string(forType: .string), "User copied something else")
     }
     
-    // Testing paste() is difficult in unit tests as it requires active application focus and AX permissions.
-    // We primarily verify the write operation here.
+    @MainActor
+    func testPasteOutcomesPreserveFallbackAndCancellation() async {
+        for scenario in 0..<6 {
+            var allowed = scenario != 0
+            var trusted = scenario != 1
+            var copies = 0
+            var pastes = 0
+            var restores = 0
+            let result = await ClipboardService.deliver(text: "test phrase", restoreClipboard: true,
+                canCommit: { allowed }, accessibilityTrusted: { trusted }, activateTarget: { scenario != 2 },
+                targetIsFocused: { scenario != 3 },
+                copy: { text in copies += 1; return ClipboardService.shared.copyForTemporaryPaste(text: text) },
+                sendPaste: { pastes += 1; return true }, restore: { _, _ in restores += 1 },
+                wait: { duration in
+                    if duration == .milliseconds(500) {
+                        if scenario == 4 { allowed = false }
+                        if scenario == 5 { trusted = false }
+                    }
+                })
+            let expected: [ClipboardService.PasteOutcome] = [.canceled, .copiedPermissionMissing,
+                .copiedTargetUnavailable, .copiedTargetUnavailable, .canceled, .copiedPermissionMissing]
+            XCTAssertEqual(result, expected[scenario])
+            XCTAssertEqual(copies, [0, 1, 1, 1, 0, 1][scenario])
+            XCTAssertEqual(pastes, 0)
+            XCTAssertEqual(restores, 0)
+        }
+    }
+
+    @MainActor
+    func testPasteRequestRestoresOnlyAfterPosting() async {
+        var events: [String] = []
+        let result = await ClipboardService.deliver(text: "test phrase", restoreClipboard: true,
+            canCommit: { true }, accessibilityTrusted: { true }, activateTarget: { true }, targetIsFocused: { true },
+            copy: { text in events.append("copy"); return ClipboardService.shared.copyForTemporaryPaste(text: text) },
+            sendPaste: { events.append("post"); return true }, restore: { _, _ in events.append("restore") },
+            wait: { _ in events.append("wait") })
+        XCTAssertEqual(result, .pasteRequested)
+        XCTAssertEqual(events, ["wait", "copy", "post", "wait", "restore"])
+        XCTAssertNil(result.message)
+    }
 }

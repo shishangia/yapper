@@ -4,6 +4,50 @@ import Cocoa
 class ClipboardService {
     static let shared = ClipboardService()
 
+    enum PasteOutcome: Equatable {
+        case pasteRequested, copiedPermissionMissing, copiedTargetUnavailable, copiedEventUnavailable, canceled
+
+        var message: String? {
+            switch self {
+            case .pasteRequested, .canceled: return nil
+            case .copiedPermissionMissing: return "Copied. Enable Accessibility to paste."
+            case .copiedTargetUnavailable: return "Copied. Focus your text field and press ⌘V."
+            case .copiedEventUnavailable: return "Copied. Press ⌘V to paste."
+            }
+        }
+    }
+
+    @MainActor
+    static func deliver(
+        text: String, restoreClipboard: Bool, canCommit: () -> Bool,
+        accessibilityTrusted: () -> Bool, activateTarget: () -> Bool, targetIsFocused: () -> Bool,
+        copy: (String) -> ClipboardSnapshot?, sendPaste: () -> Bool,
+        restore: (ClipboardSnapshot, String) -> Void,
+        wait: (Duration) async -> Void
+    ) async -> PasteOutcome {
+        guard canCommit(), !Task.isCancelled else { return .canceled }
+        guard accessibilityTrusted() else { _ = copy(text); return .copiedPermissionMissing }
+        guard activateTarget() else { _ = copy(text); return .copiedTargetUnavailable }
+        await wait(.milliseconds(500))
+        guard canCommit(), !Task.isCancelled else { return .canceled }
+        guard accessibilityTrusted() else { _ = copy(text); return .copiedPermissionMissing }
+        guard targetIsFocused() else { _ = copy(text); return .copiedTargetUnavailable }
+        let previous = copy(text)
+        guard sendPaste() else { return .copiedEventUnavailable }
+        if restoreClipboard, let previous {
+            await wait(.milliseconds(350))
+            restore(previous, text)
+        }
+        return .pasteRequested
+    }
+
+    @MainActor
+    func openAccessibilitySettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
     struct ClipboardSnapshot {
         fileprivate let items: [ClipboardItemSnapshot]
     }
@@ -23,7 +67,7 @@ class ClipboardService {
 
         // Verify write
         if let check = pasteboard.string(forType: .string), check == finalText {
-            print("✅ Clipboard Write Verified: '\(check.prefix(20))...'")
+            print("Clipboard write verified")
         } else {
             print("❌ Clipboard Write FAILED!")
         }
@@ -88,34 +132,20 @@ class ClipboardService {
 
     // Paste content (Simulate Cmd+V)
     @MainActor
-    func paste() {
-        // Post synchronously so the caller's cancellation and focus checks remain valid.
-        do {
-            let source = CGEventSource(stateID: .hidSystemState)
-
-            // Command key down
-            let cmdDown = CGEvent(keyboardEventSource: source, virtualKey: 0x37, keyDown: true)
-            cmdDown?.flags = .maskCommand
-
-            // 'V' key down
-            let vDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true)
-            vDown?.flags = .maskCommand
-
-            // 'V' key up
-            let vUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false)
-            vUp?.flags = .maskCommand
-
-            // Command key up
-            let cmdUp = CGEvent(keyboardEventSource: source, virtualKey: 0x37, keyDown: false)
-
-            // Post events
-            cmdDown?.post(tap: .cghidEventTap)
-            vDown?.post(tap: .cghidEventTap)
-            vUp?.post(tap: .cghidEventTap)
-            cmdUp?.post(tap: .cghidEventTap)
-
-            print("Simulated Cmd+V")
-        }
+    @discardableResult
+    func paste() -> Bool {
+        guard isAccessibilityTrusted,
+              let source = CGEventSource(stateID: .hidSystemState),
+              let cmdDown = CGEvent(keyboardEventSource: source, virtualKey: 0x37, keyDown: true),
+              let vDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true),
+              let vUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false),
+              let cmdUp = CGEvent(keyboardEventSource: source, virtualKey: 0x37, keyDown: false) else { return false }
+        cmdDown.flags = .maskCommand
+        vDown.flags = .maskCommand
+        vUp.flags = .maskCommand
+        // Synchronous posting keeps the caller's focus and cancellation checks adjacent.
+        for event in [cmdDown, vDown, vUp, cmdUp] { event.post(tap: .cghidEventTap) }
+        return true
     }
 
     // Fallback using AppleScript (more robust for some apps)

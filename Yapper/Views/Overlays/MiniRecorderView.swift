@@ -10,14 +10,11 @@ struct MiniRecorderView: View {
     private var isListening: Bool { job.isBusy && job.phase == .recording }
     private var isProcessing: Bool { job.isBusy && job.phase != .recording }
     @State private var statusMessage = "Transcribing..."
-    @State private var showAccessibilityWarning = false
     var onCommit: ((String, RecorderJob.Snapshot) -> Void)?
     var onCancel: (() -> Void)?
 
     @AppStorage(ModelSelection.defaultsKey) private var selectedModel: String = ModelSelection.none
     @AppStorage("recordingMode") private var recordingMode: Int = 0
-    /// Whether we've already shown the one-time accessibility warning (release only).
-    @AppStorage("hasShownAccessibilityWarning") private var hasShownAccessibilityWarning = false
     @AppStorage("transcriptionLanguage") private var transcriptionLanguage: String = "auto"
     @AppStorage("recentTranscriptionLanguages") private var recentLanguagesString: String = ""
     private let quickLanguageDefaults = ["en", "es", "fr", "de", "hi", "pt", "ja", "zh"]
@@ -80,10 +77,6 @@ struct MiniRecorderView: View {
 
     private var inputDeviceHelpText: String {
         "Input device: \(currentInputDeviceName). Change microphones without going back to Settings."
-    }
-
-    private var isAccessibilityEnabled: Bool {
-        AXIsProcessTrusted()
     }
 
     // MARK: - State for Escape key cancellation
@@ -250,7 +243,7 @@ struct MiniRecorderView: View {
 
     /// The recorder is always on screen. `idle` is the tiny resting pill; the
     /// other phases are the expanded HUD it morphs into.
-    private enum RecorderPhase { case idle, warming, processing, recording }
+    private enum RecorderPhase { case idle, warming, processing, recording, feedback }
 
     private var displayPhase: RecorderPhase {
         #if DEBUG
@@ -264,6 +257,7 @@ struct MiniRecorderView: View {
             }
         }
         #endif
+        if job.pasteFeedback?.message != nil { return .feedback }
         guard job.isPresented else { return .idle }
         if job.phase == .preparing { return .warming }
         if isProcessing { return .processing }
@@ -278,6 +272,7 @@ struct MiniRecorderView: View {
         case .idle: return 58
         case .warming: return 200
         case .processing: return 210
+        case .feedback: return 490
         case .recording: return expanded ? 460 : 250
         }
     }
@@ -400,6 +395,17 @@ struct MiniRecorderView: View {
                 warmingContent
             case .processing:
                 processingContent
+            case .feedback:
+                HStack(spacing: 10) {
+                    Text(job.pasteFeedback?.message ?? "").font(Typography.pillLabel)
+                    if job.pasteFeedback == .copiedPermissionMissing {
+                        Button("Settings") { ClipboardService.shared.openAccessibilitySettings() }
+                            .buttonStyle(.borderless)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .foregroundStyle(Color.textPrimary)
+                .accessibilityIdentifier("pasteFeedback")
             case .recording:
                 recordingContent
             case .idle:
@@ -500,21 +506,6 @@ struct MiniRecorderView: View {
                 handleEscape()
             })
         )
-        .alert("Accessibility Permission Required", isPresented: $showAccessibilityWarning) {
-            Button("Open Settings") {
-                if let url = URL(
-                    string:
-                        "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-                ) {
-                    NSWorkspace.shared.open(url)
-                }
-            }
-            Button("Continue Anyway", role: .cancel) {}
-        } message: {
-            Text(
-                "Accessibility is disabled. Transcribed text will be copied to clipboard but won't auto-paste into apps.\n\nEnable it in System Settings → Privacy & Security → Accessibility."
-            )
-        }
     }
 
     // MARK: - Subviews
@@ -602,12 +593,6 @@ struct MiniRecorderView: View {
             }
             guard job.canCommit(snapshot.id) else { finish(snapshot); return }
             guard authorized else { showError("Enable Microphone in System Settings", for: snapshot); return }
-            #if !DEBUG
-            if !isAccessibilityEnabled && !hasShownAccessibilityWarning {
-                hasShownAccessibilityWarning = true
-                showAccessibilityWarning = true
-            }
-            #endif
             guard job.transition(snapshot.id, from: .preparing, to: .recording) else { return }
             audioRecorder.startRecording()
         }
