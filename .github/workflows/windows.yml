@@ -1,0 +1,50 @@
+name: Windows preview
+on:
+  push:
+    branches: [main]
+    paths: ['windows/**', 'scripts/*windows*', '.github/workflows/windows.yml']
+  pull_request:
+    paths: ['windows/**', 'scripts/*windows*', '.github/workflows/windows.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_GENERATE_ASPNET_CERTIFICATE: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Core regression checks
+        run: dotnet run --project windows/Yapper.Core.Tests -c Release
+      - name: Build self-contained Windows app
+        run: dotnet publish windows/Yapper.Windows -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:RestoreLockedMode=true -o dist/windows/app
+      - name: Build installer
+        shell: pwsh
+        run: ./scripts/package-windows.ps1
+      - name: Native speech and speaker smoke test
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Speech
+          $voice = New-Object System.Speech.Synthesis.SpeechSynthesizer
+          $format = New-Object System.Speech.AudioFormat.SpeechAudioFormatInfo 16000, ([System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen), ([System.Speech.AudioFormat.AudioChannel]::Mono)
+          $voice.SetOutputToWaveFile("$PWD/dist/windows/test-speech.wav", $format)
+          $voice.Speak('Hello, this is a local transcription test. We should meet tomorrow afternoon and review the report together.')
+          $voice.Dispose()
+          dotnet run --project windows/Yapper.Native.Tests -c Release -- "$PWD/dist/windows/test-models" "$PWD/dist/windows/test-speech.wav"
+          if ($LASTEXITCODE -ne 0) { throw 'Native speech test failed' }
+      - name: Native window smoke test
+        shell: pwsh
+        run: ./scripts/test-windows-ui.ps1 -AppPath "$PWD/dist/windows/app/Yapper.exe"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Yapper-Windows-x64-preview
+          path: |
+            dist/windows/*setup.exe
+            dist/windows/*.sha256
+            dist/windows/windows-ui.png
+          if-no-files-found: error

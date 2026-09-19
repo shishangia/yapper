@@ -1,0 +1,19 @@
+Yapper for Windows preview
+Copyright Shivam Shishangia. Yapper retains the original SpeakType MIT notice in LICENSE.
+
+Application dependencies
+Whisper.net and whisper.cpp: MIT. https://github.com/sandrohanea/whisper.net and https://github.com/ggml-org/whisper.cpp
+sherpa-onnx: Apache-2.0. https://github.com/k2-fsa/sherpa-onnx
+ONNX Runtime: MIT. https://github.com/microsoft/onnxruntime
+NAudio: MIT. https://github.com/naudio/NAudio
+SharpCompress: MIT. https://github.com/adamhathcock/sharpcompress
+.NET: MIT. https://github.com/dotnet/runtime
+
+Models are downloaded only when requested. Their licenses remain separate from the app license.
+Whisper: OpenAI MIT model license; ggml conversion by whisper.cpp contributors. https://huggingface.co/ggerganov/whisper.cpp
+Parakeet TDT 0.6B v3: NVIDIA CC-BY-4.0; ONNX conversion provided by the sherpa-onnx project. https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
+Speaker segmentation: pyannote segmentation-3.0, MIT, Copyright 2022 CNRS. https://huggingface.co/pyannote/segmentation-3.0
+Speaker embeddings: 3D-Speaker ERes2Net, Apache-2.0. https://github.com/modelscope/3D-Speaker
+
+This is an unsigned Windows test build. Windows SmartScreen may warn about an unrecognized publisher. Do not disable security settings to install it; use a trusted signed release when available.
+Audio stays local. Model downloads connect to Hugging Face and GitHub and may follow their HTTPS download redirects.
