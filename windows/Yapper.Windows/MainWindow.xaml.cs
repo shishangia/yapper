@@ -238,7 +238,9 @@ public partial class MainWindow : Window
     {
         if (!Begin()) return;
         var model = Chosen;
-        try { await models.Download(model, true, Reporter, cancellation!.Token); Status.Text = "Models are ready for offline use."; }
+        var reporter = Reporter;
+        var token = cancellation!.Token;
+        try { await Task.Run(() => models.Download(model, true, reporter, token)); Status.Text = "Models are ready for offline use."; }
         catch (OperationCanceledException) { Status.Text = "Download canceled. You can retry."; }
         catch (Exception error) { Status.Text = "Download failed. " + error.Message; }
         finally { Finish(); }

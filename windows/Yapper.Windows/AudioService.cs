@@ -29,7 +29,7 @@ public sealed class AudioService : IDisposable
             capture.DataAvailable += (_, e) =>
             {
                 try { lock (writerLock) writer?.Write(e.Buffer, 0, e.BytesRecorded); }
-                catch (Exception error) { stopped.TrySetException(error); RecordingFailed?.Invoke(error); }
+                catch (Exception error) { if (stopped.TrySetException(error)) RecordingFailed?.Invoke(error); }
             };
             capture.RecordingStopped += (_, e) =>
             {
