@@ -34,4 +34,5 @@ if (string.IsNullOrWhiteSpace(multi.PlainText) || multi.Warning is not null) thr
 var canceled = new CancellationTokenSource(); canceled.Cancel();
 try { await service.Transcribe(samples, model, "en", false, false, progress, canceled.Token); throw new Exception("Cancellation ignored"); }
 catch (OperationCanceledException) { }
-Console.WriteLine($"PASS native {model.Id}; {multi.Segments.Count} passages; {multi.SpeakerIds.Count()} speaker labels; {clock.Elapsed.TotalSeconds:F1}s; peak working set {Process.GetCurrentProcess().PeakWorkingSet64 / 1024 / 1024} MiB");
+var peak = Process.GetCurrentProcess().PeakWorkingSet64;
+Console.WriteLine($"PASS native {model.Id}; {multi.Segments.Count} passages; {multi.SpeakerIds.Count()} speaker labels; {clock.Elapsed.TotalSeconds:F1}s; peak working set {(peak > 0 ? (peak / 1024 / 1024) + " MiB" : "unavailable on this platform")}");

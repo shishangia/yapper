@@ -37,6 +37,10 @@ public partial class MainWindow : Window
         models = new(root);
         speech = new(models);
         InitializeComponent();
+        Width = Math.Min(Width, SystemParameters.WorkArea.Width - 32);
+        Height = Math.Min(Height, SystemParameters.WorkArea.Height - 32);
+        Left = SystemParameters.WorkArea.Left + (SystemParameters.WorkArea.Width - Width) / 2;
+        Top = SystemParameters.WorkArea.Top + (SystemParameters.WorkArea.Height - Height) / 2;
         ModelChoice.ItemsSource = ModelStore.Catalog;
         ModelsList.ItemsSource = ModelStore.Catalog;
         ModelChoice.SelectedItem = ModelStore.Catalog.FirstOrDefault(m => m.Id == library.Data.Preferences.SelectedModel) ?? ModelStore.Catalog[1];
@@ -62,6 +66,14 @@ public partial class MainWindow : Window
             input.Released += () => { if (!library.Data.Preferences.ToggleRecording && audio.IsRecording) _ = StopAndProcess(); };
             try { input.Register(library.Data.Preferences.Hotkey); } catch (Exception error) { Status.Text = error.Message; }
         };
+        audio.RecordingFailed += error => Dispatcher.InvokeAsync(async () =>
+        {
+            if (!jobs.IsBusy || finishing) return;
+            finishing = true;
+            try { await audio.Stop(); } catch { }
+            Status.Text = "Microphone recording stopped. " + error.Message;
+            Finish();
+        });
         initialized = true;
         RefreshLibrary();
         UpdateReady();

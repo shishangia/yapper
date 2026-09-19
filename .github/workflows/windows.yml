@@ -37,9 +37,17 @@ jobs:
           $voice.Dispose()
           dotnet run --project windows/Yapper.Native.Tests -c Release -- "$PWD/dist/windows/test-models" "$PWD/dist/windows/test-speech.wav"
           if ($LASTEXITCODE -ne 0) { throw 'Native speech test failed' }
-      - name: Native window smoke test
+      - name: Actual textbox paste and clipboard tests
+        run: dotnet run --project windows/Yapper.Windows.Tests -c Release
+      - name: Install packaged preview and test native UI
         shell: pwsh
-        run: ./scripts/test-windows-ui.ps1 -AppPath "$PWD/dist/windows/app/Yapper.exe"
+        run: |
+          $install = Join-Path $env:RUNNER_TEMP 'Yapper-installed'
+          $setup = Start-Process "$PWD/dist/windows/Yapper-0.1.0-preview.1-win-x64-setup.exe" -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$install") -Wait -PassThru
+          if ($setup.ExitCode -ne 0) { throw "Installer failed: $($setup.ExitCode)" }
+          ./scripts/test-windows-ui.ps1 -AppPath "$install/Yapper.exe"
+          Copy-Item (Join-Path $env:RUNNER_TEMP 'windows-ui.png') 'dist/windows/windows-ui.png'
+          Start-Process "$install/unins000.exe" -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait
       - uses: actions/upload-artifact@v4
         with:
           name: Yapper-Windows-x64-preview

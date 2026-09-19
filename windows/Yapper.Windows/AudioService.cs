@@ -13,6 +13,8 @@ public sealed class AudioService : IDisposable
     private AudioFileReader? playback;
     public bool IsRecording => capture is not null;
     public bool IsPlaying => player?.PlaybackState == PlaybackState.Playing;
+    public event Action<Exception>? RecordingFailed;
+    private readonly object writerLock = new();
     public static string[] Inputs => Enumerable.Range(0, WaveIn.DeviceCount).Select(i => WaveIn.GetCapabilities(i).ProductName).ToArray();
 
     public void Start(string path, int device)
@@ -24,12 +26,16 @@ public sealed class AudioService : IDisposable
         {
             writer = new WaveFileWriter(path, capture.WaveFormat);
             stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
-            capture.DataAvailable += (_, e) => writer?.Write(e.Buffer, 0, e.BytesRecorded);
+            capture.DataAvailable += (_, e) =>
+            {
+                try { lock (writerLock) writer?.Write(e.Buffer, 0, e.BytesRecorded); }
+                catch (Exception error) { stopped.TrySetException(error); RecordingFailed?.Invoke(error); }
+            };
             capture.RecordingStopped += (_, e) =>
             {
-                writer?.Dispose();
-                writer = null;
-                if (e.Exception is not null) stopped.TrySetException(e.Exception); else stopped.TrySetResult();
+                lock (writerLock) { writer?.Dispose(); writer = null; }
+                if (e.Exception is not null) { stopped.TrySetException(e.Exception); RecordingFailed?.Invoke(e.Exception); }
+                else stopped.TrySetResult();
             };
             capture.StartRecording();
         }
@@ -67,7 +73,7 @@ public sealed class AudioService : IDisposable
 
     public void TogglePlayback(string path)
     {
-        if (IsPlaying) { player!.Pause(); return; }
+        if (IsPlaying && playback?.FileName == path) { player!.Pause(); return; }
         if (playback?.FileName != path)
         {
             StopPlayback();
