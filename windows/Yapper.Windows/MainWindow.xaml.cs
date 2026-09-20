@@ -18,6 +18,7 @@ public partial class MainWindow : Window
     private readonly AudioService audio = new();
     private readonly JobGate jobs = new();
     private readonly Forms.NotifyIcon tray;
+    private readonly RecorderWindow recorder;
     private WindowsInput? input;
     private CancellationTokenSource? cancellation;
     private Guid activeId;
@@ -30,13 +31,23 @@ public partial class MainWindow : Window
     private bool finishing;
     private bool initialized;
     private bool quitting;
+    private readonly AppUpdates updates = new();
+    private WindowsUpdate? availableUpdate;
+    private bool updateBusy;
 
     public MainWindow(string root)
     {
         library = new(root);
         models = new(root);
         speech = new(models);
+        AppTheme.Apply(library.Data.Preferences.Theme);
         InitializeComponent();
+        recorder = new RecorderWindow();
+        recorder.StopRequested += () => _ = StopAndProcess();
+        recorder.CancelRequested += () => CancelJob(this, new RoutedEventArgs());
+        audio.LevelChanged += level => Dispatcher.InvokeAsync(() => recorder.UpdateLevel(level));
+        ThemeChoice.SelectedItem = ThemeChoice.Items.Cast<ComboBoxItem>().First(i => (string)i.Content == AppTheme.Preference);
+        Microsoft.Win32.SystemEvents.UserPreferenceChanged += SystemAppearanceChanged;
         Width = Math.Min(Width, SystemParameters.WorkArea.Width - 32);
         Height = Math.Min(Height, SystemParameters.WorkArea.Height - 32);
         Left = SystemParameters.WorkArea.Left + (SystemParameters.WorkArea.Width - Width) / 2;
@@ -51,6 +62,13 @@ public partial class MainWindow : Window
         RestoreClipboard.IsChecked = library.Data.Preferences.RestoreClipboard;
         TrimPeriod.IsChecked = library.Data.Preferences.TrimPeriod;
         AutoEdit.IsChecked = library.Data.Preferences.AutoEdit;
+        AutoCheckUpdates.IsChecked = library.Data.Preferences.AutoCheckUpdates;
+        Loaded += async (_, _) =>
+        {
+            if (Environment.GetEnvironmentVariable("YAPPER_TEST_ROOT") is null && library.Data.Preferences.AutoCheckUpdates
+                && DateTimeOffset.UtcNow - (library.Data.Preferences.LastUpdateCheck ?? DateTimeOffset.MinValue) >= TimeSpan.FromDays(1))
+                await CheckUpdatesAsync();
+        };
         MicrophoneChoice.ItemsSource = AudioService.Inputs;
         MicrophoneChoice.SelectedIndex = 0;
         using var iconStream = System.Windows.Application.GetResourceStream(new Uri("pack://application:,,,/Yapper.ico")).Stream;
@@ -61,6 +79,7 @@ public partial class MainWindow : Window
         tray.ContextMenuStrip.Items.Add("Quit", null, (_, _) => Dispatcher.Invoke(Quit));
         SourceInitialized += (_, _) =>
         {
+            AppTheme.ApplyTitleBar(this);
             input = new(new WindowInteropHelper(this).Handle);
             input.Pressed += HotkeyPressed;
             input.Released += () => { if (!library.Data.Preferences.ToggleRecording && audio.IsRecording) _ = StopAndProcess(); };
@@ -88,23 +107,49 @@ public partial class MainWindow : Window
             var id = activeId;
             return new Progress<(string Stage, double Value)>(p =>
             {
-                if (jobs.CanCommit(id)) { Status.Text = p.Stage; Progress.Value = p.Value; tray.Text = "Yapper · " + p.Stage[..Math.Min(p.Stage.Length, 40)]; }
+                if (jobs.CanCommit(id)) { Status.Text = p.Stage; recorder.SetStatus(p.Stage); Progress.Value = p.Value; tray.Text = "Yapper · " + p.Stage[..Math.Min(p.Stage.Length, 40)]; }
             });
         }
     }
     private void ShowWindow() { Show(); WindowState = WindowState.Normal; Activate(); }
+    private void ViewHistory(object sender, RoutedEventArgs e) => Tabs.SelectedIndex = 2;
+    private void SelectRecent(object sender, SelectionChangedEventArgs e)
+    {
+        if (RecentList.SelectedItem is Recording item) { selected = item; ShowTranscript(); }
+    }
+    private void ChangeTheme(object sender, SelectionChangedEventArgs e)
+    {
+        if (!initialized || ThemeChoice.SelectedItem is not ComboBoxItem item) return;
+        var preference = (string)item.Content;
+        library.Save(library.Data with { Preferences = library.Data.Preferences with { Theme = preference } });
+        AppTheme.Apply(preference);
+    }
+    private void SystemAppearanceChanged(object sender, Microsoft.Win32.UserPreferenceChangedEventArgs e)
+        => Dispatcher.InvokeAsync(() => AppTheme.Apply(library.Data.Preferences.Theme));
     private void UpdateReady() { if (!jobs.IsBusy) Status.Text = models.Ready(Chosen) ? $"Ready · {Chosen.Name} · {library.Data.Preferences.Hotkey}" : "Download your selected model in AI Models before recording."; }
     private void RefreshLibrary()
     {
         HistoryList.ItemsSource = library.Data.Recordings;
+        RecentList.ItemsSource = library.Data.Recordings.Take(5).ToArray();
+        RecentEmpty.Visibility = library.Data.Recordings.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         RulesGrid.ItemsSource = library.Data.Dictionary;
+        var words = library.Data.Usage.Sum(x => x.Words);
+        var today = DateTime.Today;
+        Greeting.Text = DateTime.Now.Hour < 12 ? "Good morning," : DateTime.Now.Hour < 18 ? "Good afternoon," : "Welcome back,";
+        DashboardWords.Text = StatsWords.Text = words.ToString("N0");
+        StatsCount.Text = library.Data.Usage.Count.ToString("N0");
+        StatsMinutes.Text = (library.Data.Usage.Sum(x => x.Seconds) / 60).ToString("N1");
+        StatsSaved.Text = (words / 40).ToString("N0");
+        DashboardSaved.Text = $"About {words / 40:N0} typing minutes saved · 40 words/min estimate";
+        DashboardWeek.Text = library.Data.Usage.Count(x => x.Date.LocalDateTime >= today.AddDays(-6)).ToString("N0");
+        DashboardToday.Text = $"{library.Data.Usage.Count(x => x.Date.LocalDateTime >= today)} today · {library.Data.Usage.Count} all time";
         StatisticsText.Text = $"{library.Data.Usage.Count} transcriptions · {library.Data.Usage.Sum(x => x.Words)} words · {library.Data.Usage.Sum(x => x.Seconds) / 60:F1} recorded minutes\nModel files: {Directory.EnumerateFiles(models.Root, "*", SearchOption.AllDirectories).Sum(p => new FileInfo(p).Length) / 1_000_000_000d:F2} GB";
         if (selected is not null) { selected = library.Data.Recordings.FirstOrDefault(r => r.Id == selected.Id); ShowTranscript(); }
     }
     private void ShowTranscript() { TranscriptText.Text = selected?.DisplayText ?? ""; HistoryText.Text = selected?.DisplayText ?? ""; }
     private bool Begin()
     {
-        if (jobs.IsBusy) { Status.Text = "Wait for the current job to finish, or cancel it."; return false; }
+        if (jobs.IsBusy || updateBusy) { Status.Text = "Wait for the current job or update to finish."; return false; }
         activeId = jobs.Begin();
         audio.StopPlayback();
         cancellation = new();
@@ -121,6 +166,7 @@ public partial class MainWindow : Window
         RetryButton.IsEnabled = retry is not null;
         CancelButton.IsEnabled = false;
         RecordButton.Content = "Record microphone";
+        recorder.Dismiss();
         tray.Text = "Yapper";
         RefreshLibrary();
     }
@@ -145,6 +191,7 @@ public partial class MainWindow : Window
         try
         {
             audio.Start(recordingPath, MicrophoneChoice.SelectedIndex);
+            recorder.Present(true);
             Status.Text = "Recording microphone… Press the shortcut again or Stop when finished.";
             tray.Text = "Yapper · Recording";
             RecordButton.Content = "Stop and transcribe";
@@ -159,6 +206,7 @@ public partial class MainWindow : Window
         var completed = false;
         recordingPath = null;
         Status.Text = "Finishing recording…";
+        if (!jobs.CancellationRequested) recorder.Present(false, "Finishing recording…");
         try
         {
             await audio.Stop();
@@ -249,6 +297,7 @@ public partial class MainWindow : Window
     {
         jobs.Cancel(); cancellation?.Cancel();
         Status.Text = "Canceling. Waiting for active native work to finish…";
+        recorder.Dismiss();
         if (audio.IsRecording) _ = StopAndProcess();
     }
     private void SelectModel(object sender, SelectionChangedEventArgs e)
@@ -280,7 +329,7 @@ public partial class MainWindow : Window
     }
     private void DeleteModel(object sender, RoutedEventArgs e)
     {
-        if (jobs.IsBusy) { Status.Text = "Wait for processing to finish before deleting models."; return; }
+        if (jobs.IsBusy || updateBusy) { Status.Text = "Wait for processing or updating to finish before deleting models."; return; }
         if (MessageBox.Show(this, "Delete " + Chosen.Name + "? Your recordings are not affected.", "Yapper", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
         var path = models.DirectoryFor(Chosen.Id);
         if (Directory.Exists(path)) Directory.Delete(path, true);
@@ -302,17 +351,56 @@ public partial class MainWindow : Window
         try
         {
             input?.Register(shortcut);
-            library.Save(library.Data with { Preferences = new(Chosen.Id, SpokenLanguage, ToggleMode.IsChecked == true, RestoreClipboard.IsChecked == true, TrimPeriod.IsChecked == true, shortcut, AutoEdit.IsChecked == true) });
+            library.Save(library.Data with { Preferences = new(Chosen.Id, SpokenLanguage, ToggleMode.IsChecked == true, RestoreClipboard.IsChecked == true, TrimPeriod.IsChecked == true, shortcut, AutoEdit.IsChecked == true, library.Data.Preferences.Theme, AutoCheckUpdates.IsChecked == true, library.Data.Preferences.LastUpdateCheck) });
             Status.Text = "Settings saved.";
         }
         catch (Exception error) { Status.Text = error.Message; }
+    }
+    private async void CheckUpdates(object sender, RoutedEventArgs e) => await CheckUpdatesAsync();
+    private async Task CheckUpdatesAsync()
+    {
+        if (updateBusy || !CheckUpdatesButton.IsEnabled) return;
+        CheckUpdatesButton.IsEnabled = false;
+        UpdateStatus.Text = "Checking GitHub…";
+        try
+        {
+            availableUpdate = await updates.Check(CancellationToken.None);
+            library.Save(library.Data with { Preferences = library.Data.Preferences with { LastUpdateCheck = DateTimeOffset.UtcNow } });
+            UpdateStatus.Text = availableUpdate is null ? "You're up to date." : $"Yapper {availableUpdate.Version} is available.";
+            InstallUpdateButton.IsEnabled = availableUpdate is not null;
+            if (availableUpdate is not null && !jobs.IsBusy)
+                tray.ShowBalloonTip(6000, "Yapper update available", $"Version {availableUpdate.Version} is ready. Open Settings to download and install.", Forms.ToolTipIcon.Info);
+        }
+        catch (Exception error) { UpdateStatus.Text = "Could not check for updates. " + error.Message; }
+        finally { CheckUpdatesButton.IsEnabled = true; }
+    }
+    private async void InstallUpdate(object sender, RoutedEventArgs e)
+    {
+        if (availableUpdate is null || updateBusy) return;
+        if (jobs.IsBusy) { UpdateStatus.Text = "Finish recording or transcription before installing."; return; }
+        var update = availableUpdate;
+        if (MessageBox.Show(this, $"Download Yapper {update.Version} from GitHub and close Yapper to run its installer?\n\nWindows preview installers are unsigned. Windows security prompts stay enabled. Your library will remain in place.", "Update Yapper", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+        updateBusy = true;
+        InstallUpdateButton.IsEnabled = CheckUpdatesButton.IsEnabled = false;
+        try
+        {
+            var path = await updates.Download(update, Path.Combine(library.Root, "Updates"), new Progress<double>(p => UpdateStatus.Text = $"Downloading update… {p:P0}"), CancellationToken.None);
+            var start = new ProcessStartInfo(path) { UseShellExecute = true };
+            start.ArgumentList.Add("/DIR=" + AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar));
+            if (System.Diagnostics.Process.Start(start) is null) throw new IOException("Windows did not start the installer.");
+            updateBusy = false;
+            Quit();
+        }
+        catch (Exception error) { UpdateStatus.Text = "Update not installed. " + error.Message; }
+        finally { updateBusy = false; CheckUpdatesButton.IsEnabled = true; InstallUpdateButton.IsEnabled = availableUpdate is not null; }
     }
     private void OpenPrivacy(object sender, RoutedEventArgs e) => System.Diagnostics.Process.Start(new ProcessStartInfo("ms-settings:privacy-microphone") { UseShellExecute = true });
     private void OpenData(object sender, RoutedEventArgs e) => System.Diagnostics.Process.Start(new ProcessStartInfo(library.Root) { UseShellExecute = true });
     private void OnClosing(object? sender, CancelEventArgs e) { if (!quitting) { e.Cancel = true; Hide(); } }
     private void Quit()
     {
-        if (jobs.IsBusy) { ShowWindow(); Status.Text = "Cancel or finish the current recording before quitting."; return; }
-        quitting = true; var icon = tray.Icon; tray.Dispose(); icon?.Dispose(); input?.Dispose(); audio.Dispose(); Close(); System.Windows.Application.Current.Shutdown();
+        if (jobs.IsBusy || updateBusy) { ShowWindow(); Status.Text = "Finish the current recording or update before quitting."; return; }
+        Microsoft.Win32.SystemEvents.UserPreferenceChanged -= SystemAppearanceChanged;
+        quitting = true; var icon = tray.Icon; tray.Dispose(); icon?.Dispose(); input?.Dispose(); audio.Dispose(); recorder.Close(); Close(); System.Windows.Application.Current.Shutdown();
     }
 }

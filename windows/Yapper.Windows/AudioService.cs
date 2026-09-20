@@ -14,6 +14,7 @@ public sealed class AudioService : IDisposable
     public bool IsRecording => capture is not null;
     public bool IsPlaying => player?.PlaybackState == PlaybackState.Playing;
     public event Action<Exception>? RecordingFailed;
+    public event Action<float>? LevelChanged;
     private readonly object writerLock = new();
     public static string[] Inputs => Enumerable.Range(0, WaveIn.DeviceCount).Select(i => WaveIn.GetCapabilities(i).ProductName).ToArray();
 
@@ -28,7 +29,13 @@ public sealed class AudioService : IDisposable
             stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
             capture.DataAvailable += (_, e) =>
             {
-                try { lock (writerLock) writer?.Write(e.Buffer, 0, e.BytesRecorded); }
+                try
+                {
+                    lock (writerLock) writer?.Write(e.Buffer, 0, e.BytesRecorded);
+                    var peak = 0f;
+                    for (var index = 0; index + 1 < e.BytesRecorded; index += 2) peak = Math.Max(peak, Math.Abs(BitConverter.ToInt16(e.Buffer, index) / 32768f));
+                    LevelChanged?.Invoke(peak);
+                }
                 catch (Exception error) { if (stopped.TrySetException(error)) RecordingFailed?.Invoke(error); }
             };
             capture.RecordingStopped += (_, e) =>

@@ -74,6 +74,35 @@ var tests = new (string Name, Action Run)[]
         Throws(() => gate.Begin()); gate.Finish(first); var second = gate.Begin(); gate.Finish(first);
         True(gate.IsBusy); True(gate.CanCommit(second)); gate.Finish(second); True(!gate.IsBusy);
     }),
+    ("theme and automatic-check preferences survive old libraries", () =>
+    {
+        var preferences = JsonSerializer.Deserialize<Preferences>("{\"SelectedModel\":\"whisper-small\"}")!;
+        Equal("System", preferences.Theme); True(preferences.AutoCheckUpdates);
+        WithLibrary(root =>
+        {
+            var store = new LibraryStore(root);
+            store.Save(store.Data with { Preferences = preferences with { Theme = "Dark", AutoCheckUpdates = false } });
+            var reopened = new LibraryStore(root);
+            Equal("Dark", reopened.Data.Preferences.Theme); True(!reopened.Data.Preferences.AutoCheckUpdates);
+        });
+    }),
+    ("updates select only verified newer Windows assets", () =>
+    {
+        ReleaseInfo Release(string version, bool prerelease = true)
+        {
+            var tag = "windows-v" + version; var name = "Yapper-" + version + "-win-x64-setup.exe";
+            return new(tag, "notes", false, prerelease, [new(name, $"https://github.com/shishangia/yapper/releases/download/{tag}/{name}", 100, "sha256:" + new string('a', 64))]);
+        }
+        var newer = Release("0.1.0-preview.3");
+        Equal("0.1.0-preview.3", UpdatePolicy.Select([Release("0.1.0-preview.1"), newer], "0.1.0-preview.2")!.Version);
+        True(UpdatePolicy.Select([newer], "0.1.0") is null);
+        True(UpdatePolicy.Select([newer with { Draft = true }], "0.1.0-preview.2") is null);
+        True(UpdatePolicy.Select([newer with { Tag = "v1.0.3" }], "0.1.0-preview.2") is null);
+        True(UpdatePolicy.Select([newer with { Assets = [newer.Assets[0] with { Digest = null }] }], "0.1.0-preview.2") is null);
+        True(UpdatePolicy.Select([newer with { Assets = [newer.Assets[0] with { Url = "https://example.com/update.exe" }] }], "0.1.0-preview.2") is null);
+        Equal("0.1.0", UpdatePolicy.Select([Release("0.1.0", false)], "0.1.0-preview.2")!.Version);
+        True(!UpdatePolicy.TrustedAsset("https://github.com.evil.test/shishangia/yapper/releases/download/a/b", "a", "b"));
+    }),
     ("corrupt library is not overwritten", () =>
     {
         WithLibrary(root => { var path = Path.Combine(root, "library.json"); File.WriteAllText(path, "broken"); Throws(() => new LibraryStore(root)); Equal("broken", File.ReadAllText(path)); });

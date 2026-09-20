@@ -24,23 +24,38 @@ try {
     if (!$window) { throw 'Yapper window did not appear' }
     $status = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'status'))
     if (!$status) { throw 'Status control missing' }
-    foreach ($name in @('Transcribe', 'History', 'AI Models', 'Dictionary', 'Settings')) {
-        $tab = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, $name))
-        if (!$tab) { throw "Missing tab: $name" }
-        $pattern = $tab.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern)
-        $pattern.Select()
-    }
     Add-Type -AssemblyName System.Drawing
-    $bounds = $window.Current.BoundingRectangle
-    $bitmap = New-Object System.Drawing.Bitmap ([int]$bounds.Width), ([int]$bounds.Height)
-    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-    $graphics.CopyFromScreen([int]$bounds.X, [int]$bounds.Y, 0, 0, $bitmap.Size)
-    $screenshot = Join-Path (Split-Path $AppPath -Parent) '../windows-ui.png'
-    $bitmap.Save($screenshot)
-    $graphics.Dispose()
-    $bitmap.Dispose()
-    $history = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, 'History'))
-    $history.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+    $output = Join-Path (Split-Path $AppPath -Parent) '../windows-screenshots'
+    New-Item -ItemType Directory -Path $output -Force | Out-Null
+    function Select-Page([string]$id) {
+        $tab = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, $id))
+        if (!$tab) { throw "Missing sidebar route: $id" }
+        $tab.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+    }
+    function Capture-Window($element, [string]$name) {
+        $bounds = $element.Current.BoundingRectangle
+        $bitmap = New-Object System.Drawing.Bitmap ([int]$bounds.Width), ([int]$bounds.Height)
+        $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+        $graphics.CopyFromScreen([int]$bounds.X, [int]$bounds.Y, 0, 0, $bitmap.Size)
+        $bitmap.Save((Join-Path $output "$name.png"))
+        $graphics.Dispose(); $bitmap.Dispose()
+    }
+    foreach ($appearance in @('Light', 'Dark')) {
+        Select-Page 'sidebar.settings'
+        $theme = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'themeChoice'))
+        if (!$theme) { throw 'Theme picker missing' }
+        $theme.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
+        $choice = $theme.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, $appearance))
+        if (!$choice) { throw "Theme choice missing: $appearance" }
+        $choice.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+        foreach ($route in @('dashboard', 'transcribeAudio', 'history', 'dictionary', 'statistics', 'aiModels', 'settings')) {
+            Select-Page "sidebar.$route"
+            Capture-Window $window "$appearance-$route"
+        }
+    }
+    $saved = Get-Content (Join-Path $testRoot 'library.json') -Raw | ConvertFrom-Json
+    if ($saved.Preferences.Theme -ne 'Dark') { throw 'Theme did not persist' }
+    Select-Page 'sidebar.history'
     $entry = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem))
     if (!$entry) { throw 'Synthetic history entry did not load' }
     $entry.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
@@ -53,9 +68,25 @@ try {
         if (!$editor) { Start-Sleep -Milliseconds 100 }
     }
     if (!$editor) { throw 'Transcript editor did not open' }
+    Capture-Window $editor 'Dark-editor'
     $editor.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern).Close()
-    Write-Host 'PASS Windows native window, status, tab navigation, history load, and transcript editor'
+    Stop-Process -Id $process.Id
+    $process.WaitForExit()
+    $env:YAPPER_RECORDER_TEST = 'recording'
+    $process = Start-Process -FilePath $AppPath -PassThru
+    $deadline = [DateTime]::UtcNow.AddSeconds(10)
+    $pill = $null
+    while (!$pill -and [DateTime]::UtcNow -lt $deadline) {
+        $pill = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, 'Yapper Recorder'))
+        if (!$pill) { Start-Sleep -Milliseconds 100 }
+    }
+    if (!$pill) { throw 'Floating recorder did not appear' }
+    Capture-Window $pill 'Dark-recorder'
+    $restored = Get-Content (Join-Path $testRoot 'library.json') -Raw | ConvertFrom-Json
+    if ($restored.Preferences.Theme -ne 'Dark' -or $restored.Recordings.Count -ne 1) { throw 'Relaunch changed theme or library' }
+    Write-Host 'PASS sidebar, light/dark themes, persistence, floating recorder, history and editor'
 } finally {
     if (!$process.HasExited) { Stop-Process -Id $process.Id }
     Remove-Item Env:YAPPER_TEST_ROOT
+    Remove-Item Env:YAPPER_RECORDER_TEST -ErrorAction SilentlyContinue
 }

@@ -21,7 +21,14 @@ public sealed class TranscriptEditor : Window
     {
         this.library = library; recordingId = id;
         Title = "Yapper · Review transcript"; Width = 860; Height = 660; MinWidth = 720; MinHeight = 500;
-        var root = new DockPanel { Margin = new Thickness(20) };
+        Width = Math.Min(Width, SystemParameters.WorkArea.Width - 32);
+        Height = Math.Min(Height, SystemParameters.WorkArea.Height - 32);
+        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        SourceInitialized += (_, _) => AppTheme.ApplyTitleBar(this);
+        var root = new DockPanel { Margin = new Thickness(24) };
+        var heading = new TextBlock { Text = "Review transcript", Style = (Style)FindResource("PageTitle") };
+        DockPanel.SetDock(heading, Dock.Top);
+        root.Children.Add(heading);
         var actions = new WrapPanel();
         AddButton(actions, "Confirm one speaker", () =>
         {

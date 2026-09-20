@@ -23,6 +23,11 @@ public partial class App : System.Windows.Application
             var window = new MainWindow(root);
             MainWindow = window;
             window.Show();
+            if (Environment.GetEnvironmentVariable("YAPPER_TEST_ROOT") is not null && Environment.GetEnvironmentVariable("YAPPER_RECORDER_TEST") is { } phase)
+            {
+                var preview = new RecorderWindow();
+                preview.Present(phase == "recording");
+            }
         }
         catch (Exception error)
         {

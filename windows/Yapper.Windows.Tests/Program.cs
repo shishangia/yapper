@@ -20,6 +20,13 @@ internal static class Program
                 window.Activate(); field.Focus();
                 Clipboard.SetText("original clipboard");
                 var target = new WindowInteropHelper(window).Handle;
+                var recorder = new RecorderWindow();
+                recorder.Present(true);
+                await Task.Delay(150);
+                if (WindowsInput.CaptureTarget() != target) throw new Exception("Floating recorder stole input focus.");
+                recorder.Present(false);
+                recorder.Dismiss();
+                recorder.Close();
                 var outcome = await WindowsInput.Paste("Yapper test phrase", target, true, () => true);
                 if (outcome is not null) throw new Exception(outcome);
                 if (field.Text != "Yapper test phrase") throw new Exception("Text was not inserted into the focused textbox.");

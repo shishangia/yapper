@@ -12,7 +12,7 @@ public sealed record Recording(Guid Id, DateTimeOffset Date, string Text, double
 public sealed record UsageEntry(Guid Id, DateTimeOffset Date, int Words, double Seconds);
 public sealed record DictionaryRule(string Trigger, string Replacement, bool Enabled = true);
 public sealed record Preferences(string SelectedModel = "whisper-small", string Language = "auto", bool ToggleRecording = true,
-    bool RestoreClipboard = true, bool TrimPeriod = true, string Hotkey = "Control+Alt+Space", bool AutoEdit = false);
+    bool RestoreClipboard = true, bool TrimPeriod = true, string Hotkey = "Control+Alt+Space", bool AutoEdit = false, string Theme = "System", bool AutoCheckUpdates = true, DateTimeOffset? LastUpdateCheck = null);
 public sealed record LibraryData
 {
     public int Version { get; init; } = 1;
