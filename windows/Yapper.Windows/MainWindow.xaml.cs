@@ -172,7 +172,7 @@ public partial class MainWindow : Window
     }
     private void HotkeyPressed()
     {
-        if (finishing) return;
+        if (finishing || updateBusy) return;
         if (audio.IsRecording) { if (library.Data.Preferences.ToggleRecording) _ = StopAndProcess(); return; }
         StartRecording(true, WindowsInput.CaptureTarget());
     }
@@ -380,6 +380,7 @@ public partial class MainWindow : Window
         if (jobs.IsBusy) { UpdateStatus.Text = "Finish recording or transcription before installing."; return; }
         var update = availableUpdate;
         if (MessageBox.Show(this, $"Download Yapper {update.Version} from GitHub and close Yapper to run its installer?\n\nWindows preview installers are unsigned. Windows security prompts stay enabled. Your library will remain in place.", "Update Yapper", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+        if (jobs.IsBusy) { UpdateStatus.Text = "A recording started. Finish it before installing."; return; }
         updateBusy = true;
         InstallUpdateButton.IsEnabled = CheckUpdatesButton.IsEnabled = false;
         try

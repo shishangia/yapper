@@ -2,6 +2,20 @@ using Yapper.Windows;
 using Yapper.Core;
 using System.Diagnostics;
 
+if (args.Length == 3 && args[0] == "--verify-update-download")
+{
+    var release = System.Text.Json.JsonSerializer.Deserialize<ReleaseInfo>(File.ReadAllText(args[1]))!;
+    var update = UpdatePolicy.Select([release], "0.0.0-preview.1") ?? throw new Exception("Release rejected");
+    var path = await new AppUpdates().Download(update, args[2], new Progress<double>(), CancellationToken.None);
+    Console.WriteLine("PASS downloaded and verified Windows update: " + new FileInfo(path).Length + " bytes");
+    return;
+}
+if (args.Length == 1 && args[0] == "--check-updates")
+{
+    var update = await new AppUpdates().Check(CancellationToken.None);
+    Console.WriteLine(update is null ? "PASS live GitHub check: no newer Windows update" : "PASS live GitHub check: " + update.Version);
+    return;
+}
 if (args.Length < 2) throw new ArgumentException("Usage: native-tests <isolated-root> <16k-mono-pcm16-wav> [model-id]");
 var root = Path.GetFullPath(args[0]);
 var audio = Path.GetFullPath(args[1]);

@@ -4,6 +4,7 @@
     <ProjectReference Include="../Yapper.Core/Yapper.Core.csproj" />
     <Compile Include="../Yapper.Windows/ModelStore.cs" Link="ModelStore.cs" />
     <Compile Include="../Yapper.Windows/SpeechService.cs" Link="SpeechService.cs" />
+    <Compile Include="../Yapper.Windows/AppUpdates.cs" Link="AppUpdates.cs" />
     <PackageReference Include="Whisper.net" Version="1.9.1" />
     <PackageReference Include="Whisper.net.Runtime" Version="1.9.1" />
     <PackageReference Include="org.k2fsa.sherpa.onnx" Version="1.13.8" />

@@ -16,7 +16,7 @@
         <ControlTemplate TargetType="TabControl">
           <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="232"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
             <DockPanel Margin="0,30,0,0">
-              <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="22,12,18,28"><Image Source="Yapper.ico" Width="40" Height="40" Margin="0,0,10,0"/><TextBlock Text="Yapper" FontWeight="SemiBold" FontSize="22" VerticalAlignment="Center"/></StackPanel>
+              <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="22,12,18,28"><Image Source="Yapper.ico" Width="40" Height="40" Margin="0,0,10,0"/><TextBlock Text="Yapper" Foreground="{DynamicResource Ink}" FontWeight="SemiBold" FontSize="22" VerticalAlignment="Center"/></StackPanel>
               <StackPanel DockPanel.Dock="Bottom" Margin="22,16,22,20"><Border Height="1" Background="{DynamicResource SubtleBorder}" Margin="0,0,0,14"/><TextBlock Text="Shivam" FontWeight="SemiBold" Foreground="{DynamicResource SecondaryInk}"/><TextBlock Text="Windows preview 2" Style="{StaticResource Caption}" Margin="0,6,0,0"/></StackPanel>
               <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained"/></ScrollViewer>
             </DockPanel>

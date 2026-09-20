@@ -41,7 +41,9 @@ public sealed class TranscriptEditor : Window
         DockPanel.SetDock(status, Dock.Bottom); root.Children.Add(status);
         var grid = new Grid(); grid.ColumnDefinitions.Add(new() { Width = new GridLength(260) }); grid.ColumnDefinitions.Add(new());
         grid.Children.Add(passages);
-        var editor = new StackPanel { Margin = new Thickness(18, 0, 0, 0) }; Grid.SetColumn(editor, 1); grid.Children.Add(editor);
+        var editor = new StackPanel { Margin = new Thickness(18, 0, 0, 0) };
+        var editorScroll = new ScrollViewer { Content = editor, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        Grid.SetColumn(editorScroll, 1); grid.Children.Add(editorScroll);
         editor.Children.Add(new TextBlock { Text = "Passage text", FontWeight = FontWeights.Bold }); editor.Children.Add(text);
         editor.Children.Add(new TextBlock { Text = "Speaker assignment" }); editor.Children.Add(speakers);
         var save = new WrapPanel(); AddButton(save, "Save passage", SavePassage); editor.Children.Add(save);
