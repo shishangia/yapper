@@ -2,13 +2,13 @@
 
 <img src="Yapper/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" width="128" alt="Yapper's smiling chat bubble">
 
-Local dictation and conversation transcription for macOS, maintained by Shivam Shishangia.
+Local dictation and conversation transcription for macOS and Windows, maintained by Shivam Shishangia.
 
-Yapper transcribes microphone recordings and imported audio on your Mac. Use a hotkey for dictation, or record a conversation and review its timestamped speaker turns afterward. Switching pages or closing a window does not cancel a conversation job.
+Yapper transcribes microphone recordings and imported audio on your computer. Use a hotkey for dictation, or record a conversation and review its timestamped speaker turns afterward. Switching pages or closing a window does not cancel a conversation job.
 
 ## Download and install
 
-**[Download Yapper for Mac](https://github.com/shishangia/yapper/releases/download/v1.0.2/Yapper-1.0.2-6-arm64.dmg)** · [Release notes and checksum](https://github.com/shishangia/yapper/releases/tag/v1.0.2)
+**[Download Yapper for Mac](https://github.com/shishangia/yapper/releases/download/v1.0.3/Yapper-1.0.3-7-arm64.dmg)** · [Release notes and checksum](https://github.com/shishangia/yapper/releases/tag/v1.0.3)
 
 1. Open the downloaded DMG and drag **Yapper** into **Applications**.
 2. Eject the DMG, then open Yapper from Applications.
@@ -21,9 +21,9 @@ Requires **macOS 14 or later on Apple Silicon (M1 or newer)**. This installer do
 
 ## Windows preview
 
-**[Download the Windows 11 x64 preview](https://github.com/shishangia/yapper/releases/download/windows-v0.1.0-preview.1/Yapper-0.1.0-preview.1-win-x64-setup.exe)** · [Preview notes and checksum](https://github.com/shishangia/yapper/releases/tag/windows-v0.1.0-preview.1)
+**[Download the Windows 11 x64 preview](https://github.com/shishangia/yapper/releases/download/windows-v0.1.0-preview.2/Yapper-0.1.0-preview.2-win-x64-setup.exe)** · [Preview notes and checksum](https://github.com/shishangia/yapper/releases/tag/windows-v0.1.0-preview.2)
 
-A separate native Windows app lives under `windows/`; it does not replace the Mac app. It targets Windows 11 x64 (Intel/AMD) and runs Whisper or Parakeet locally, with optional speaker separation, editable recording-specific speaker names, history/playback, dictionary rules, and tray dictation.
+A separate native Windows app lives under `windows/`; it does not replace the Mac app. It targets Windows 11 x64 (Intel/AMD) and runs Whisper or Parakeet locally, with optional speaker separation, editable recording-specific speaker names, history/playback, dictionary rules, and tray dictation. Preview 2 shares the Mac app's candy sidebar, rounded cards, model comparison bars, and Light/Dark/System appearance. A floating recording pill shows elapsed time and microphone level, with Stop and Cancel controls, without stealing focus from your text field.
 
 The preview uses CPU inference and platform-specific model files. Start with Whisper Tiny or Small on a modest PC; Large v3 needs substantially more memory and processing time. Parakeet v3 does not support Hindi, Gujarati, or Chinese. Automatic speaker labels remain approximate and can require correction.
 
@@ -43,6 +43,16 @@ dotnet run --project windows/Yapper.Windows
 ```
 
 Maintainers can run `scripts/package-windows.ps1` on a Windows build machine with Inno Setup 6 and the Visual C++ redistributable files. GitHub's Windows preview workflow produces the same installer and SHA-256 sidecar.
+
+## Updates from GitHub
+
+Mac 1.0.3 and Windows preview 2 add **Check for updates** in Settings and automatic checks at launch when the last successful check is over 24 hours old. Download and installation always need your confirmation. Install these versions manually once to enable future in-app updates; older versions do not have an active updater.
+
+The Mac app selects only stable Apple Silicon DMGs and verifies the GitHub SHA-256, bundle/version, Developer ID team, and Gatekeeper approval. It stages the new app, waits for the old process to quit, retains a rollback copy, and reopens Yapper. Run it from `/Applications/Yapper.app` to use in-app installation. Your separate library and model storage remain in place.
+
+Windows preview builds select only newer Windows installers, including newer previews. Downloads are size/checksum verified before launching the normal installer. Windows previews remain unsigned, so SmartScreen prompts still apply; Yapper does not suppress them. A stable Windows build will not select preview updates.
+
+Neither app starts an installation during recording, transcription, or model downloads. Automatic checks contact GitHub for release metadata, not transcription. You can turn them off and check manually. Debug Mac builds never automatically update.
 
 ## What is new in 1.0.2
 
@@ -114,7 +124,7 @@ make dmg
 
 Microphone access is needed for recording. Accessibility access is needed for global dictation shortcuts and pasting into other apps. File import does not require microphone access.
 
-If Mac dictation appears in History and manual Cmd+V works but auto-paste does not, check Accessibility for the running app. A changed signing certificate can leave an old Yapper entry looking enabled while macOS rejects it. Quit Yapper, remove that entry, add `/Applications/Yapper.app` again, enable it, and reopen the app. Source builds now show a copy-only recovery message when permission or target focus blocks auto-paste; this feedback is newer than the v1.0.2 Mac download.
+If Mac dictation appears in History and manual Cmd+V works but auto-paste does not, check Accessibility for the running app. A changed signing certificate can leave an old Yapper entry looking enabled while macOS rejects it. Quit Yapper, remove that entry, add `/Applications/Yapper.app` again, enable it, and reopen the app. Mac v1.0.3 shows a copy-only recovery message when permission or target focus blocks auto-paste.
 
 Yapper captures the microphone, not system audio. Obtain the consent of everyone being recorded. Speaker labels appear after processing; they do not identify real people automatically or create persistent voice profiles.
 
@@ -122,7 +132,7 @@ Yapper captures the microphone, not system audio. Obtain the consent of everyone
 
 Model downloads connect to Hugging Face and may follow its download redirects. After the required files are present, transcription and speaker processing run locally. There is no Python service or cloud transcription API in the app.
 
-The source-build version disables automatic app updates and does not contact the upstream licensing service. User-initiated external links open in the browser. Audio, transcripts, and dictionary entries are not part of this repository.
+Release builds can check this repository's GitHub releases for app updates; Debug Mac builds disable updates. Yapper does not contact the upstream licensing service. User-initiated external links open in the browser. Audio, transcripts, and dictionary entries are not part of this repository.
 
 The local library is stored in `~/Library/Application Support/Yapper`. Preferences use `com.shishangia.yapper`; development builds use `Yapper-Dev` and `com.shishangia.yapper.dev`.
 
@@ -160,4 +170,4 @@ The app uses SwiftUI, AppKit, AVFoundation, [WhisperKit](https://github.com/argm
 
 ## License and provenance
 
-Yapper is based on [SpeakType](https://github.com/karansinghgit/speaktype) v1.3.0 by Karan Singh, with a redesigned interface and conversation workflow maintained by Shivam Shishangia. The original MIT copyright and permission notice are retained in [LICENSE](LICENSE). Dependency code and downloaded model weights retain their own licenses and usage terms.
+Yapper is based on [SpeakType](https://github.com/karansinghgit/speaktype) v1.3.0 by Karan Singh, with a redesigned interface and conversation workflow maintained by Shivam Shishangia. [LICENSE](LICENSE) retains Karan Singh's original MIT copyright notice and adds Shivam Shishangia's copyright for Yapper's modifications and additions. The MIT terms require keeping the original notice; retaining it does not mean Karan authored the Yapper-specific work. Dependency code and downloaded model weights retain their own licenses and usage terms.
