@@ -429,6 +429,21 @@ struct GeneralSettingsTab: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(!AppEnvironment.updatesEnabled || updateService.isCheckingForUpdates)
+                        if !updateService.checkStatus.isEmpty {
+                            Text(updateService.checkStatus).font(Typography.bodySmall).foregroundStyle(Color.textSecondary)
+                        }
+                        if let update = updateService.availableUpdate {
+                            Button("Download and Install \(update.version)") { updateService.installUpdate(url: update.downloadURL) }
+                                .buttonStyle(.stSecondary)
+                                .disabled(updateService.isInstalling)
+                        }
+                        if let error = updateService.installError {
+                            Text(error).font(Typography.bodySmall).foregroundStyle(Color.accentError)
+                        }
+                        if updateService.isInstalling {
+                            Text(updateService.installStatus).font(Typography.bodySmall)
+                            ProgressView(value: updateService.installProgress)
+                        }
                     }
                 }
 

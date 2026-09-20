@@ -119,7 +119,7 @@ class MiniRecorderWindowController: NSObject {
 
     // Start recording - show panel and begin recording
     func startRecording() {
-        guard !job.isBusy else { return }
+        guard !job.isBusy, !UpdateService.shared.isInstalling else { return }
         let defaults = UserDefaults.standard
         guard job.begin(model: defaults.string(forKey: ModelSelection.defaultsKey) ?? "",
                         language: defaults.string(forKey: "transcriptionLanguage") ?? "auto",

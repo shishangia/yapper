@@ -192,7 +192,7 @@ final class ModelDownloadService: ObservableObject {
     }
 
     func downloadModel(variant: String) {
-        guard jobs[variant] == nil, !deletingVariants.contains(variant),
+        guard !UpdateService.shared.isInstalling, jobs[variant] == nil, !deletingVariants.contains(variant),
               AIModel.availableModels.contains(where: { $0.variant == variant }) else { return }
         let id = UUID()
         isDownloading[variant] = true
@@ -253,7 +253,7 @@ final class ModelDownloadService: ObservableObject {
     }
 
     func deleteModel(variant: String) async -> String {
-        guard jobs[variant] == nil, !deletingVariants.contains(variant) else { return "Wait for the download to finish before deleting this model." }
+        guard !UpdateService.shared.isInstalling, jobs[variant] == nil, !deletingVariants.contains(variant) else { return "Wait for the download or app update to finish before deleting this model." }
         deletingVariants.insert(variant)
         defer { deletingVariants.remove(variant) }
         return await NativeInferenceGate.shared.run {

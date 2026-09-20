@@ -22,7 +22,7 @@ enum AppEnvironment {
     static var usesIsolatedStorage: Bool { isDevelopment || isRunningTests }
     static var globalHotkeysEnabled: Bool { !isDevelopment && !isRunningTests }
     static var updatesEnabled: Bool {
-        #if DEBUG || LOCAL_BUILD
+        #if DEBUG
             return false
         #else
             return !isRunningTests

@@ -14,6 +14,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastHandledHotkeyPressedState = false
     private var globalKeyDownMonitor: Any?
     private var localKeyDownMonitor: Any?
+    private var updateWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard !AppEnvironment.isRunningTests else { return }
@@ -48,7 +49,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // live quietly in the menu bar.
         observeWindowsForDockIcon()
 
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["YAPPER_UPDATE_PREVIEW"] == "1" {
+            UpdateService.shared.availableUpdate = .mockUpdate
+            showUpdateWindow()
+        }
+        #endif
         guard AppEnvironment.updatesEnabled else { return }
+        UpdateService.shared.isWorkActive = { [weak self] in
+            self?.miniRecorderController?.isBusy == true || ConversationSession.shared.isBusy
+                || LegacyImportService.shared.isImporting || ModelDownloadService.shared.isDownloading.values.contains(true)
+                || TranscriptionManager.shared.isLoading || TranscriptionManager.shared.isTranscribing
+                || TranscriptionManager.shared.warmingVariant != nil
+        }
         checkForUpdatesOnLaunch()
 
         UpdateService.shared.showUpdateWindowPublisher
@@ -82,6 +95,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard !AppEnvironment.isRunningTests else { return .terminateNow }
+        if UpdateService.shared.isInstalling && !UpdateService.shared.isRestarting {
+            let alert = NSAlert()
+            alert.messageText = "An app update is being prepared"
+            alert.informativeText = "Keep Yapper open until the verified update is ready to restart."
+            alert.runModal()
+            return .terminateCancel
+        }
         if LegacyImportService.shared.isImporting {
             let alert = NSAlert()
             alert.messageText = "Library import is still running"
@@ -417,25 +437,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func checkForUpdatesOnLaunch() {
         guard AppEnvironment.updatesEnabled else { return }
         let updateService = UpdateService.shared
-        let autoUpdate = UserDefaults.standard.bool(forKey: "autoUpdate")
-        guard autoUpdate && updateService.shouldCheckForUpdates() else { return }
+        guard updateService.isAutoUpdateEnabled && updateService.shouldCheckForUpdates() else { return }
 
         Task {
             await updateService.checkForUpdates(silent: true)
-            if updateService.availableUpdate != nil && updateService.shouldShowReminder() {
-                await MainActor.run { self.showUpdateWindow() }
-            }
+            if updateService.availableUpdate != nil { updateService.markReminderShown() }
         }
     }
 
     private func showUpdateWindow() {
-        guard AppEnvironment.updatesEnabled,
-            let update = UpdateService.shared.availableUpdate else { return }
+        guard let update = UpdateService.shared.availableUpdate else { return }
 
-        let updateSheetView = UpdateSheet(update: update)
+        updateWindow?.close()
+        let updateSheetView = UpdateSheet(update: update, close: { [weak self] in self?.updateWindow?.close() })
         let hostingController = NSHostingController(rootView: updateSheetView)
 
         let window = NSWindow(contentViewController: hostingController)
+        updateWindow = window
         window.title = "Software Update"
         window.styleMask = [.titled, .closable]
         window.isReleasedWhenClosed = false

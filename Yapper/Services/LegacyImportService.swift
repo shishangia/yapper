@@ -33,7 +33,7 @@ final class LegacyImportService {
     }
 
     func importLibrary() async {
-        guard canImport, !isImporting else { return }
+        guard canImport, !isImporting, !UpdateService.shared.isInstalling else { return }
         guard NSRunningApplication.runningApplications(withBundleIdentifier: Self.legacyDomain).isEmpty else {
             error = "Quit the previous app before importing so its library cannot change during the copy."
             return

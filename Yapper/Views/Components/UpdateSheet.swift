@@ -4,9 +4,10 @@ import SwiftUI
 struct UpdateSheet: View {
     @Environment(\.dismiss) var dismiss
     @ObservedObject var updateService = UpdateService.shared
-    @AppStorage("autoUpdate") private var autoUpdate = false
+    @AppStorage("autoUpdate") private var autoUpdate = true
 
     let update: AppVersion
+    var close: (() -> Void)? = nil
     let appName = "Yapper"
 
     var body: some View {
@@ -112,7 +113,7 @@ struct UpdateSheet: View {
             if !updateService.isInstalling {
                 HStack(spacing: 8) {
                     Toggle(isOn: $autoUpdate) {
-                        Text("Automatically download and install updates in the future")
+                        Text("Check for updates automatically (ask before installing)")
                             .font(Typography.bodySmall)
                             .foregroundStyle(.secondary)
                     }
@@ -133,20 +134,20 @@ struct UpdateSheet: View {
                 } else {
                     Button("Skip This Version") {
                         updateService.skipVersion(update.version)
-                        dismiss()
+                        if let close { close() } else { dismiss() }
                     }
-                    .buttonStyle(SecondaryButtonStyle())
+                    .buttonStyle(.stSecondary)
 
                     Button("Remind Me Later") {
                         updateService.markReminderShown()
-                        dismiss()
+                        if let close { close() } else { dismiss() }
                     }
-                    .buttonStyle(SecondaryButtonStyle())
+                    .buttonStyle(.stSecondary)
 
-                    Button("Install Update") {
+                    Button("Download and Install") {
                         updateService.installUpdate(url: update.downloadURL)
                     }
-                    .buttonStyle(PrimaryButtonStyle())
+                    .buttonStyle(.stPrimary)
                     .disabled(updateService.isInstalling)
                 }
             }
@@ -156,34 +157,6 @@ struct UpdateSheet: View {
         .background(Color(nsColor: .windowBackgroundColor))
         // Allow the sheet to grow for the progress area
         .fixedSize(horizontal: false, vertical: true)
-    }
-}
-
-// MARK: - Button Styles
-
-struct PrimaryButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(Typography.labelMedium)
-            .foregroundStyle(.white)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 10)
-            .background(Color.blue)
-            .cornerRadius(8)
-            .opacity(configuration.isPressed ? 0.8 : 1.0)
-    }
-}
-
-struct SecondaryButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(Typography.labelMedium)
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 10)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .cornerRadius(8)
-            .opacity(configuration.isPressed ? 0.8 : 1.0)
     }
 }
 

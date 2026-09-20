@@ -165,7 +165,7 @@ final class ConversationSession {
     private var history: HistoryService { suppliedHistory ?? .shared }
 
     private func begin(name: String) -> UUID? {
-        guard !isBusy else { return nil }
+        guard !isBusy, !UpdateService.shared.isInstalling else { return nil }
         do { try TranscriptionManager.validate(variant: selectedModel, language: language) }
         catch { phase = .failed; message = error.localizedDescription; return nil }
         activeModel = selectedModel

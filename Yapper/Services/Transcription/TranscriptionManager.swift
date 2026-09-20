@@ -29,6 +29,7 @@ class TranscriptionManager {
 
     @discardableResult
     func warmSelectedModel() -> Task<Void, Never>? {
+        guard !UpdateService.shared.isInstalling else { return nil }
         let variant = selectedVariant()
         if warmingVariant == variant, let warmupTask { return warmupTask }
         let id = UUID()
