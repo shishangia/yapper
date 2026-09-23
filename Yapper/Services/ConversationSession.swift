@@ -184,17 +184,22 @@ final class ConversationSession {
     private func process(_ audio: URL, id: UUID) async {
         guard activeID == id else { return }
         var keepAudio = false
+        var preparedAudio: ConversationAudioStorage.PreparedAudio?
         defer {
+            preparedAudio?.removeTemporaryFile()
             if !keepAudio && retainedAudioURL != audio { try? FileManager.default.removeItem(at: audio) }
         }
         do {
             if phase == .canceling { finishCanceled(id: id); return }
-            let duration = try await ConversationAudioStorage.duration(audio)
+            let prepared = try await ConversationAudioStorage.prepareForProcessing(audio)
+            preparedAudio = prepared
+            if phase == .canceling { finishCanceled(id: id); return }
+            let duration = try await ConversationAudioStorage.duration(prepared.processingURL)
             if phase == .canceling { finishCanceled(id: id); return }
             phase = .processing
             let start = Date()
             let variant = activeModel ?? selectedModel
-            let transcript = try await service.process(audio, variant: variant, detectSpeakers: jobDetectSpeakers,
+            let transcript = try await service.process(prepared.processingURL, variant: variant, detectSpeakers: jobDetectSpeakers,
                 singleSpeaker: jobSingleSpeaker, language: jobLanguage)
             guard activeID == id else { return }
             if phase == .canceling { finishCanceled(id: id); return }

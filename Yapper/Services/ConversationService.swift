@@ -1,4 +1,4 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import CoreML
 import FluidAudio
 import Foundation
@@ -196,6 +196,17 @@ final class ConversationService {
 
 @MainActor
 enum ConversationAudioStorage {
+    struct PreparedAudio {
+        let sourceURL: URL
+        let processingURL: URL
+        let temporaryURL: URL?
+
+        func removeTemporaryFile() {
+            guard let temporaryURL else { return }
+            try? FileManager.default.removeItem(at: temporaryURL)
+        }
+    }
+
     static func importAudio(_ source: URL) throws -> URL {
         let accessed = source.startAccessingSecurityScopedResource()
         defer { if accessed { source.stopAccessingSecurityScopedResource() } }
@@ -210,5 +221,89 @@ enum ConversationAudioStorage {
         let duration = try await AVURLAsset(url: url).load(.duration).seconds
         guard duration.isFinite, duration > 0 else { throw ConversationError.invalidAudio }
         return duration
+    }
+
+    /// `AVURLAsset` can identify and play WhatsApp's Ogg/Opus files, while
+    /// `AVAudioFile` fails when FluidAudio tries to read their decoded frames.
+    /// Keep the imported original for playback/history and use a temporary,
+    /// 16 kHz PCM WAV only for local inference. This avoids another lossy encode.
+    static func prepareForProcessing(
+        _ source: URL,
+        transcode: ((URL, URL) async throws -> Void)? = nil
+    ) async throws -> PreparedAudio {
+        guard source.pathExtension.lowercased() == "opus" else {
+            return PreparedAudio(sourceURL: source, processingURL: source, temporaryURL: nil)
+        }
+
+        let directory = AppEnvironment.applicationSupportDirectory
+            .appendingPathComponent("Processing", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let output = directory.appendingPathComponent(UUID().uuidString).appendingPathExtension("wav")
+        do {
+            if let transcode {
+                try await transcode(source, output)
+            } else {
+                try await transcodeOpus(source, toWAV: output)
+            }
+            guard FileManager.default.fileExists(atPath: output.path),
+                  (try output.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0) > 0 else {
+                throw ConversationError.invalidAudio
+            }
+            return PreparedAudio(sourceURL: source, processingURL: output, temporaryURL: output)
+        } catch {
+            try? FileManager.default.removeItem(at: output)
+            throw error
+        }
+    }
+
+    private static func transcodeOpus(_ source: URL, toWAV output: URL) async throws {
+        let asset = AVURLAsset(url: source)
+        guard let track = try await asset.loadTracks(withMediaType: .audio).first else {
+            throw ConversationError.invalidAudio
+        }
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: 16_000,
+            AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false,
+        ]
+        let reader = try AVAssetReader(asset: asset)
+        let readerOutput = AVAssetReaderTrackOutput(track: track, outputSettings: settings)
+        guard reader.canAdd(readerOutput) else { throw ConversationError.invalidAudio }
+        reader.add(readerOutput)
+        let writer = try AVAssetWriter(outputURL: output, fileType: .wav)
+        let writerInput = AVAssetWriterInput(mediaType: .audio, outputSettings: settings)
+        guard writer.canAdd(writerInput) else { throw ConversationError.invalidAudio }
+        writer.add(writerInput)
+        guard writer.startWriting(), reader.startReading() else {
+            throw writer.error ?? reader.error ?? ConversationError.invalidAudio
+        }
+        writer.startSession(atSourceTime: .zero)
+        do {
+            while let sample = readerOutput.copyNextSampleBuffer() {
+                try Task.checkCancellation()
+                while !writerInput.isReadyForMoreMediaData {
+                    try await Task.sleep(for: .milliseconds(2))
+                }
+                guard writerInput.append(sample) else {
+                    throw writer.error ?? ConversationError.invalidAudio
+                }
+            }
+            guard reader.status == .completed else {
+                throw reader.error ?? ConversationError.invalidAudio
+            }
+            writerInput.markAsFinished()
+            await writer.finishWriting()
+            guard writer.status == .completed else {
+                throw writer.error ?? ConversationError.invalidAudio
+            }
+        } catch {
+            reader.cancelReading()
+            writer.cancelWriting()
+            throw error
+        }
     }
 }
