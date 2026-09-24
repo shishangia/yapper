@@ -538,7 +538,7 @@ struct MiniRecorderView: View {
 
     @ViewBuilder
     private var modelSelectionMenu: some View {
-        ForEach(AIModel.availableModels) { model in
+        ForEach(AIModel.availableModels.filter { !$0.isLegacy || $0.variant == selectedModel }) { model in
             Button {
                 selectedModel = model.variant
                 transcription.warmSelectedModel()
@@ -664,14 +664,14 @@ struct MiniRecorderView: View {
     private func processRecording(url: URL, snapshot: RecorderJob.Snapshot) async {
         do {
             if job.isPresented { statusMessage = "Transcribing..." }
-            let rawText = try await transcription.transcribe(audioFile: url, variant: snapshot.model, language: snapshot.language)
+            let output = try await transcription.transcribeDetailed(audioFile: url, variant: snapshot.model, language: snapshot.language)
             let trimPeriod = UserDefaults.standard.object(forKey: "trimDictationPeriod") as? Bool ?? true
-            let text = DictationPunctuation.apply(to: rawText, enabled: trimPeriod)
+            let text = DictationPunctuation.apply(to: output.text, enabled: trimPeriod)
             guard !text.isEmpty else { showError("No speech detected", for: snapshot); return }
             let duration = await getAudioDuration(url: url)
             let modelName = AIModel.availableModels.first(where: { $0.variant == snapshot.model })?.name ?? snapshot.model
             HistoryService.shared.addItem(transcript: text, duration: duration, audioFileURL: url,
-                modelUsed: modelName, transcriptionTime: nil)
+                modelUsed: modelName, transcriptionTime: output.timing.total, dictationTiming: output.timing)
             if job.canCommit(snapshot.id), let onCommit {
                 onCommit(text, snapshot)
             } else {

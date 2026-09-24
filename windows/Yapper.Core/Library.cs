@@ -4,7 +4,13 @@ using System.Text.RegularExpressions;
 
 namespace Yapper.Core;
 
-public sealed record Recording(Guid Id, DateTimeOffset Date, string Text, double Duration, string AudioPath, string Model, Transcript? Conversation = null)
+public sealed record ProcessingTiming(double Decode, double Queue, double ModelPreparation, double Inference,
+    double SpeakerDetection, double Cleanup)
+{
+    [JsonIgnore] public double Total => Decode + Queue + ModelPreparation + Inference + SpeakerDetection + Cleanup;
+}
+public sealed record Recording(Guid Id, DateTimeOffset Date, string Text, double Duration, string AudioPath, string Model,
+    Transcript? Conversation = null, ProcessingTiming? Timing = null)
 {
     [JsonIgnore] public string DisplayText => Conversation?.FormattedText() ?? Text;
     [JsonIgnore] public string Label => $"{Date.LocalDateTime:g} · {Model} · {Text.Replace('\n', ' ')[..Math.Min(Text.Length, 70)]}";
@@ -12,7 +18,8 @@ public sealed record Recording(Guid Id, DateTimeOffset Date, string Text, double
 public sealed record UsageEntry(Guid Id, DateTimeOffset Date, int Words, double Seconds);
 public sealed record DictionaryRule(string Trigger, string Replacement, bool Enabled = true);
 public sealed record Preferences(string SelectedModel = "whisper-small", string Language = "auto", bool ToggleRecording = true,
-    bool RestoreClipboard = true, bool TrimPeriod = true, string Hotkey = "Control+Alt+Space", bool AutoEdit = false, string Theme = "System", bool AutoCheckUpdates = true, DateTimeOffset? LastUpdateCheck = null);
+    bool RestoreClipboard = true, bool TrimPeriod = true, string Hotkey = "Control+Alt+Space", bool AutoEdit = false, string Theme = "System",
+    bool AutoCheckUpdates = true, DateTimeOffset? LastUpdateCheck = null, bool IncludeTimestamps = false);
 public sealed record LibraryData
 {
     public int Version { get; init; } = 1;
@@ -78,7 +85,8 @@ public static class DictationText
 {
     public static string Process(string text, IReadOnlyList<DictionaryRule> rules, bool trimPeriod, bool autoEdit)
     {
-        if (autoEdit) text = Regex.Replace(text, @"\b(um|uh)\b[, ]*", "", RegexOptions.IgnoreCase);
+        text = text.Replace("\r\n", "\n").Replace('\r', '\n');
+        if (autoEdit) text = AutoEdit(text);
         foreach (var rule in rules.Where(r => r.Enabled && !string.IsNullOrWhiteSpace(r.Trigger)))
         {
             var pattern = Regex.Escape(rule.Trigger.Trim()).Replace("\\ ", @"\s+");
@@ -95,6 +103,69 @@ public static class DictationText
         var url = (stem.StartsWith("https://") || stem.StartsWith("http://") || stem.StartsWith("www."))
             && Uri.TryCreate(stem.StartsWith("www.") ? "https://" + stem : stem, UriKind.Absolute, out _);
         return token || number || email || url ? stem : text;
+    }
+
+    private static string AutoEdit(string text)
+    {
+        text = Scratch(text);
+        text = Regex.Replace(text, @"(?i)(^|[\s,.;:!?])(?:uh+|um+|umm+|uhm+|erm+|hmm+)(?=$|[\s,.;:!?])[,.;:!?]?", "$1");
+        text = Regex.Replace(text, @"(?i)\bnew paragraph\b[,.]?", "\n\n");
+        text = Regex.Replace(text, @"(?i)\bnew line\b[,.]?", "\n");
+        text = FormatBullets(text);
+        text = FormatNumbers(text);
+        text = Regex.Replace(text, @"[ \t]+([,.;:!?])", "$1");
+        text = Regex.Replace(text, @"[ \t]+", " ");
+        text = Regex.Replace(text, @" *\n *", "\n");
+        text = Regex.Replace(text, @"\n{3,}", "\n\n").Trim();
+        return Capitalize(text);
+    }
+
+    private static string Scratch(string text)
+    {
+        var command = new Regex(@"(?i)\b(?:scratch that|scratch it)\b[\s,:;-]*");
+        while (command.Match(text) is { Success: true } match)
+        {
+            var prefix = text[..match.Index];
+            var boundary = prefix.LastIndexOfAny(['.', '!', '?', '\n']);
+            var kept = boundary >= 0 ? prefix[..(boundary + 1)].Trim() : "";
+            var correction = text[(match.Index + match.Length)..].Trim();
+            text = string.Join(kept.Length == 0 ? "" : " ", new[] { kept, correction }.Where(x => x.Length > 0));
+        }
+        return text;
+    }
+
+    private static string FormatBullets(string text)
+    {
+        var regex = new Regex(@"(?i)\b(?:bullet point|bullet item)\b[\s,:-]*");
+        return regex.Matches(text).Count < 2 ? text : regex.Replace(text, "\n• ").Trim();
+    }
+
+    private static string FormatNumbers(string text)
+    {
+        var names = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        { ["one"] = 1, ["two"] = 2, ["three"] = 3, ["four"] = 4, ["five"] = 5,
+          ["six"] = 6, ["seven"] = 7, ["eight"] = 8, ["nine"] = 9, ["ten"] = 10 };
+        var regex = new Regex(@"(?i)\b(?:number|item)\s+(one|two|three|four|five|six|seven|eight|nine|ten|[1-9]|10)\b[\s,:-]*");
+        var matches = regex.Matches(text);
+        var values = matches.Select(m => int.TryParse(m.Groups[1].Value, out var n) ? n : names[m.Groups[1].Value]).ToArray();
+        if (values.Length < 2 || values.Where((value, index) => value != values[0] + index).Any()) return text;
+        var index = 0;
+        var output = regex.Replace(text, _ => "\n" + values[index++] + ". ").Trim();
+        return Regex.Replace(output, @"[ \t]+(?=\n\d+[.] )", "");
+    }
+
+    private static string Capitalize(string text)
+    {
+        foreach (var pattern in new[] { @"(?m)^([ \t]*(?:[•*-]|\d+[.)])?[ \t]*)([a-z])", @"([.!?][ \t]+)([a-z])" })
+            text = Regex.Replace(text, pattern, match =>
+            {
+                var rest = text[(match.Groups[2].Index)..];
+                var end = rest.IndexOfAny([' ', '\t', '\r', '\n', ',', ';', ':', '!', '?']);
+                var token = end >= 0 ? rest[..end] : rest;
+                if (token.Contains('@') || token.Skip(1).Any(char.IsUpper)) return match.Value;
+                return match.Groups[1].Value + match.Groups[2].Value.ToUpperInvariant();
+            });
+        return text;
     }
 }
 

@@ -17,6 +17,7 @@ struct HistoryItem: Identifiable, Codable, Hashable {
     let audioFileURL: URL?
     let modelUsed: String?
     let transcriptionTime: TimeInterval?
+    var dictationTiming: DictationTiming? = nil
     var conversation: ConversationTranscript? = nil
 
     var displayText: String { conversation?.formattedText ?? transcript }
@@ -54,7 +55,8 @@ class HistoryService: ObservableObject {
         loadHistory()
     }
     
-    func addItem(transcript: String, duration: TimeInterval, audioFileURL: URL? = nil, modelUsed: String? = nil, transcriptionTime: TimeInterval? = nil) {
+    func addItem(transcript: String, duration: TimeInterval, audioFileURL: URL? = nil, modelUsed: String? = nil,
+                 transcriptionTime: TimeInterval? = nil, dictationTiming: DictationTiming? = nil) {
         let normalizedTranscript = WhisperService.normalizedTranscription(from: transcript)
         guard !normalizedTranscript.isEmpty else { return }
 
@@ -70,7 +72,8 @@ class HistoryService: ObservableObject {
             duration: duration,
             audioFileURL: audioFileURL,
             modelUsed: modelUsed,
-            transcriptionTime: transcriptionTime
+            transcriptionTime: transcriptionTime,
+            dictationTiming: dictationTiming
         )
         let statsEntry = HistoryStatsEntry(
             id: newItem.id,
@@ -127,6 +130,16 @@ class HistoryService: ObservableObject {
         guard conversation.speakerNames[speakerID] != savedName else { return true }
         conversation.singleSpeakerUndo = nil
         conversation.speakerNames[speakerID] = savedName
+        items[index].conversation = conversation
+        saveHistory()
+        return true
+    }
+
+    @discardableResult
+    func setTimestampsVisible(itemID: UUID, visible: Bool) -> Bool {
+        guard let index = items.firstIndex(where: { $0.id == itemID }),
+              var conversation = items[index].conversation else { return false }
+        conversation.timestampsVisible = visible
         items[index].conversation = conversation
         saveHistory()
         return true

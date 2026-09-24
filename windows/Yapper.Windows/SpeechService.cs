@@ -1,35 +1,71 @@
 using System.IO;
+using System.Diagnostics;
 using SherpaOnnx;
 using Whisper.net;
 using Yapper.Core;
 
 namespace Yapper.Windows;
 
-public sealed class SpeechService(ModelStore models)
+public sealed record SpeechResult(Transcript Transcript, double QueueSeconds, double ModelPreparationSeconds,
+    double InferenceSeconds, double SpeakerDetectionSeconds);
+
+public sealed class SpeechService(ModelStore models) : IDisposable
 {
     private readonly SemaphoreSlim gate = new(1);
+    private WhisperFactory? whisperFactory;
+    private WhisperProcessor? whisperProcessor;
+    private string? whisperModel;
+    private string? whisperLanguage;
+    private bool whisperDetailed;
+    private IProgress<(string Stage, double Value)>? whisperProgress;
+    private OfflineRecognizer? parakeetRecognizer;
+    private string? parakeetModel;
+    private OfflineSpeakerDiarization? diarizer;
 
-    public async Task<Transcript> Transcribe(float[] samples, SpeechModel model, string language, bool speakers, bool single,
-        IProgress<(string Stage, double Value)> progress, CancellationToken cancellation)
+    public async Task Warm(SpeechModel model, string language, bool detailed, CancellationToken cancellation)
     {
         await gate.WaitAsync(cancellation);
+        try
+        {
+            if (!models.Ready(model)) return;
+            if (model.Id == "parakeet-v3") EnsureParakeet(model);
+            else EnsureWhisper(model, language, detailed, new Progress<(string, double)>());
+        }
+        finally { gate.Release(); }
+    }
+
+    public async Task<SpeechResult> Transcribe(float[] samples, SpeechModel model, string language, bool speakers, bool single,
+        IProgress<(string Stage, double Value)> progress, CancellationToken cancellation)
+    {
+        var queued = Stopwatch.StartNew();
+        await gate.WaitAsync(cancellation);
+        var queueSeconds = queued.Elapsed.TotalSeconds;
         try
         {
             if (!models.Ready(model)) throw new InvalidOperationException("Download the selected model first.");
             if (model.Id == "parakeet-v3" && language is not ("auto" or "en")) throw new InvalidOperationException("Choose Whisper for Hindi, Gujarati, or Chinese.");
             cancellation.ThrowIfCancellationRequested();
             progress.Report(("Transcribing locally", 0));
+            var prepare = Stopwatch.StartNew();
+            var prepared = model.Id == "parakeet-v3" ? EnsureParakeet(model)
+                : EnsureWhisper(model, language, speakers && !single, progress);
+            var preparationSeconds = prepared ? prepare.Elapsed.TotalSeconds : 0;
+            var inference = Stopwatch.StartNew();
             var words = await Task.Run(async () => model.Id == "parakeet-v3"
-                ? Parakeet(samples, model) : await Whisper(samples, model, language, speakers && !single, progress), CancellationToken.None);
+                ? Parakeet(samples) : await Whisper(samples), CancellationToken.None);
+            var inferenceSeconds = inference.Elapsed.TotalSeconds;
             cancellation.ThrowIfCancellationRequested();
             var transcript = Alignment.Align(words, [], speakers, single);
+            var speakerSeconds = 0d;
             if (speakers && !single && transcript.PlainText.Trim().Length > 0)
             {
                 try
                 {
                     if (!models.SpeakersReady) throw new InvalidOperationException("Speaker models have not been downloaded.");
                     progress.Report(("Separating speakers locally", 0));
+                    var speakerClock = Stopwatch.StartNew();
                     var turns = await Task.Run(() => Diarize(samples, progress), CancellationToken.None);
+                    speakerSeconds = speakerClock.Elapsed.TotalSeconds;
                     cancellation.ThrowIfCancellationRequested();
                     transcript = Alignment.Align(words, turns, true);
                 }
@@ -39,23 +75,48 @@ public sealed class SpeechService(ModelStore models)
                     transcript = transcript with { Warning = "Speaker detection failed. The full unlabeled transcript was kept. " + error.Message };
                 }
             }
-            return transcript;
+            return new(transcript, queueSeconds, preparationSeconds, inferenceSeconds, speakerSeconds);
         }
         finally { gate.Release(); }
     }
 
-    private async Task<List<SpeechWord>> Whisper(float[] samples, SpeechModel model, string language, bool detailed,
-        IProgress<(string, double)> progress)
+    private bool EnsureWhisper(SpeechModel model, string language, bool detailed, IProgress<(string, double)> progress)
     {
-        using var factory = WhisperFactory.FromPath(models.PathFor(model, model.Required[0]));
-        var builder = factory.CreateBuilder().WithLanguage(language).WithProgressHandler(p => progress.Report(("Transcribing locally", p / 100d)));
+        if (whisperModel == model.Id && whisperLanguage == language && whisperDetailed == detailed
+            && whisperFactory is not null && whisperProcessor is not null)
+        {
+            whisperProgress = progress;
+            return false;
+        }
+        var loadedModel = whisperModel != model.Id || whisperFactory is null;
+        whisperProcessor?.Dispose();
+        whisperProcessor = null;
+        if (loadedModel)
+        {
+            whisperFactory?.Dispose();
+            whisperFactory = WhisperFactory.FromPath(models.PathFor(model, model.Required[0]));
+        }
+        whisperProgress = progress;
+        var factory = whisperFactory ?? throw new InvalidOperationException("Whisper model is not loaded.");
+        var builder = factory.CreateBuilder()
+            .WithThreads(Math.Clamp(Environment.ProcessorCount / 2, 1, 8))
+            .WithProgressHandler(p => whisperProgress?.Report(("Transcribing locally", p / 100d)));
+        if (language == "auto") builder.WithLanguageDetection(); else builder.WithLanguage(language);
         if (detailed) builder.WithTokenTimestamps();
-        using var processor = builder.Build();
+        whisperProcessor = builder.Build();
+        whisperModel = model.Id; whisperLanguage = language; whisperDetailed = detailed;
+        DisposeParakeet();
+        return true;
+    }
+
+    private async Task<List<SpeechWord>> Whisper(float[] samples)
+    {
+        var processor = whisperProcessor ?? throw new InvalidOperationException("Whisper model is not loaded.");
         var result = new List<SpeechWord>();
         await foreach (var segment in processor.ProcessAsync(samples))
         {
             if (segment.Text.Trim() is "[BLANK_AUDIO]" or "[SILENCE]") continue;
-            if (!detailed)
+            if (!whisperDetailed)
             {
                 result.Add(new(segment.Text, segment.Start.TotalSeconds, segment.End.TotalSeconds));
                 continue;
@@ -78,8 +139,10 @@ public sealed class SpeechService(ModelStore models)
         return result;
     }
 
-    private List<SpeechWord> Parakeet(float[] samples, SpeechModel model)
+    private bool EnsureParakeet(SpeechModel model)
     {
+        if (parakeetModel == model.Id && parakeetRecognizer is not null) return false;
+        DisposeParakeet();
         var config = new OfflineRecognizerConfig();
         config.ModelConfig.Transducer.Encoder = models.PathFor(model, "encoder.int8.onnx");
         config.ModelConfig.Transducer.Decoder = models.PathFor(model, "decoder.int8.onnx");
@@ -87,7 +150,15 @@ public sealed class SpeechService(ModelStore models)
         config.ModelConfig.Tokens = models.PathFor(model, "tokens.txt");
         config.ModelConfig.ModelType = "nemo_transducer";
         config.ModelConfig.NumThreads = Math.Clamp(Environment.ProcessorCount / 2, 1, 8);
-        using var recognizer = new OfflineRecognizer(config);
+        parakeetRecognizer = new OfflineRecognizer(config);
+        parakeetModel = model.Id;
+        DisposeWhisper();
+        return true;
+    }
+
+    private List<SpeechWord> Parakeet(float[] samples)
+    {
+        var recognizer = parakeetRecognizer ?? throw new InvalidOperationException("Parakeet model is not loaded.");
         using var stream = recognizer.CreateStream();
         stream.AcceptWaveform(16000, samples);
         recognizer.Decode(stream);
@@ -111,17 +182,49 @@ public sealed class SpeechService(ModelStore models)
 
     private List<SpeakerTurn> Diarize(float[] samples, IProgress<(string, double)> progress)
     {
-        var config = new OfflineSpeakerDiarizationConfig();
-        config.Segmentation.Pyannote.Model = Path.Combine(models.DirectoryFor("speakers"), "model.onnx");
-        config.Embedding.Model = Path.Combine(models.DirectoryFor("speakers"), "speaker.onnx");
-        config.Clustering.NumClusters = -1;
-        config.Clustering.Threshold = .5f;
-        using var diarizer = new OfflineSpeakerDiarization(config);
+        if (diarizer is null)
+        {
+            var config = new OfflineSpeakerDiarizationConfig();
+            config.Segmentation.Pyannote.Model = Path.Combine(models.DirectoryFor("speakers"), "model.onnx");
+            config.Embedding.Model = Path.Combine(models.DirectoryFor("speakers"), "speaker.onnx");
+            config.Clustering.NumClusters = -1;
+            config.Clustering.Threshold = .5f;
+            diarizer = new OfflineSpeakerDiarization(config);
+        }
         var callback = new OfflineSpeakerDiarizationProgressCallback((done, total, _) =>
         {
             progress.Report(("Separating speakers locally", (double)done / Math.Max(1, total)));
             return 0;
         });
         return diarizer.ProcessWithCallback(samples, callback, IntPtr.Zero).Select(s => new SpeakerTurn(s.Speaker.ToString(), s.Start, s.End)).ToList();
+    }
+
+    public async Task Unload(string modelId)
+    {
+        await gate.WaitAsync();
+        try
+        {
+            if (whisperModel == modelId) DisposeWhisper();
+            if (parakeetModel == modelId) DisposeParakeet();
+            if (modelId == "speakers") { diarizer?.Dispose(); diarizer = null; }
+        }
+        finally { gate.Release(); }
+    }
+
+    private void DisposeWhisper()
+    {
+        whisperProcessor?.Dispose(); whisperProcessor = null;
+        whisperFactory?.Dispose(); whisperFactory = null;
+        whisperModel = whisperLanguage = null; whisperDetailed = false; whisperProgress = null;
+    }
+
+    private void DisposeParakeet()
+    {
+        parakeetRecognizer?.Dispose(); parakeetRecognizer = null; parakeetModel = null;
+    }
+
+    public void Dispose()
+    {
+        DisposeWhisper(); DisposeParakeet(); diarizer?.Dispose(); diarizer = null; gate.Dispose();
     }
 }

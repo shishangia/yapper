@@ -39,14 +39,24 @@ while (reader.BaseStream.Position + 8 <= reader.BaseStream.Length)
 }
 if (format != 1 || channels != 1 || bits != 16 || rate != 16000 || pcm is null) throw new InvalidDataException("Expected 16k mono PCM16");
 var samples = Enumerable.Range(0, pcm.Length / 2).Select(i => BitConverter.ToInt16(pcm, i * 2) / 32768f).ToArray();
-var service = new SpeechService(models);
+var captured = Path.Combine(root, "captured.wav");
+File.Copy(audio, captured, true);
+var capturedLength = new FileInfo(captured).Length;
+var decodedCapture = AudioDecoder.Decode(captured, captured);
+if (decodedCapture.Length == 0 || new FileInfo(captured).Length != capturedLength)
+    throw new Exception("Already-normalized microphone WAV was rewritten or lost.");
+using var service = new SpeechService(models);
 var clock = Stopwatch.StartNew();
-var single = await service.Transcribe(samples, model, "en", true, true, progress, CancellationToken.None);
+var singleResult = await service.Transcribe(samples, model, "en", true, true, progress, CancellationToken.None);
+var single = singleResult.Transcript;
 if (string.IsNullOrWhiteSpace(single.PlainText) || single.Segments.Any(s => s.SpeakerId != "1")) throw new Exception("Single-speaker transcription failed");
-var multi = await service.Transcribe(samples, model, "en", true, false, progress, CancellationToken.None);
+var multiResult = await service.Transcribe(samples, model, "en", true, false, progress, CancellationToken.None);
+var multi = multiResult.Transcript;
 if (string.IsNullOrWhiteSpace(multi.PlainText) || multi.Warning is not null) throw new Exception("Native speaker pipeline failed: " + multi.Warning);
+var reused = await service.Transcribe(samples, model, "en", true, false, progress, CancellationToken.None);
+if (reused.ModelPreparationSeconds != 0) throw new Exception("Resident model and processor were rebuilt.");
 var canceled = new CancellationTokenSource(); canceled.Cancel();
 try { await service.Transcribe(samples, model, "en", false, false, progress, canceled.Token); throw new Exception("Cancellation ignored"); }
 catch (OperationCanceledException) { }
 var peak = Process.GetCurrentProcess().PeakWorkingSet64;
-Console.WriteLine($"PASS native {model.Id}; {multi.Segments.Count} passages; {multi.SpeakerIds.Count()} speaker labels; {clock.Elapsed.TotalSeconds:F1}s; peak working set {(peak > 0 ? (peak / 1024 / 1024) + " MiB" : "unavailable on this platform")}");
+Console.WriteLine($"PASS native {model.Id}; {multi.Segments.Count} passages; {multi.SpeakerIds.Count()} speaker labels; resident processor reused; inference {reused.InferenceSeconds:F2}s; {clock.Elapsed.TotalSeconds:F1}s total; peak working set {(peak > 0 ? (peak / 1024 / 1024) + " MiB" : "unavailable on this platform")}");

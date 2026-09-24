@@ -80,6 +80,36 @@ final class ConversationAlignmentTests: XCTestCase {
         XCTAssertEqual(ConversationTranscript.timestamp(3661), "01:01:01")
     }
 
+    func testLegacyTranscriptDefaultsToTimestampedPresentation() throws {
+        let raw = #"{"segments":[{"id":0,"start":0,"end":1,"text":" Hello","speakerID":null}],"speakerNames":{},"speakerDetectionRequested":false}"#
+        let decoded = try JSONDecoder().decode(ConversationTranscript.self, from: Data(raw.utf8))
+        XCTAssertTrue(decoded.showsTimestamps)
+        XCTAssertTrue(decoded.formattedText.hasPrefix("[00:00:00] Hello"))
+    }
+
+    func testParagraphPresentationPreservesTextAndGroupsBySpeaker() {
+        let segments = [
+            ConversationSegment(id: 0, start: 0, end: 1, text: " Hello", speakerID: "1"),
+            ConversationSegment(id: 1, start: 4, end: 5, text: " again", speakerID: "1"),
+            ConversationSegment(id: 2, start: 7, end: 8, text: " Reply", speakerID: "2"),
+            ConversationSegment(id: 3, start: 8, end: 8.2, text: " yes", speakerID: nil),
+        ]
+        var transcript = ConversationTranscript(segments: segments, speakerNames: ["1": "Alice"],
+            speakerDetectionRequested: true, timestampsVisible: false)
+        XCTAssertFalse(transcript.showsTimestamps)
+        XCTAssertEqual(transcript.paragraphBlocks.map(\.speakerID), ["1", "2"] )
+        XCTAssertEqual(transcript.paragraphBlocks.flatMap(\.segments), segments)
+        XCTAssertFalse(transcript.formattedText.contains("[00:"))
+        XCTAssertTrue(transcript.formattedText.contains("Alice: Hello again"))
+        XCTAssertTrue(transcript.formattedText.contains("Speaker 2: Reply yes†"))
+
+        transcript.speakerDetectionRequested = false
+        XCTAssertEqual(transcript.paragraphBlocks.count, 1)
+        XCTAssertEqual(transcript.paragraphBlocks[0].segments, segments)
+        XCTAssertEqual(transcript.formattedText, "Hello again Reply yes")
+        XCTAssertEqual(transcript.plainText, segments.map(\.text).joined())
+    }
+
     func testSpeechChunksPreserveRegionsWithinAudioBounds() {
         let ranges = ConversationAlignment.speechChunks([0..<10, 12..<20, 18..<35, 40..<100], sampleCount: 55, maxSamples: 20)
         XCTAssertEqual(ranges, [0..<20, 20..<35, 40..<55])
@@ -191,6 +221,6 @@ final class ConversationAlignmentTests: XCTestCase {
         XCTAssertEqual(options.task, .transcribe)
         XCTAssertEqual(options.concurrentWorkerCount, 1)
         XCTAssertTrue(AIModel.availableModels.contains { $0.variant == "openai_whisper-large-v3" })
-        XCTAssertTrue(AIModel.availableModels.contains { $0.variant == "openai_whisper-large-v3_turbo" })
+        XCTAssertTrue(AIModel.availableModels.contains { $0.variant == "openai_whisper-large-v3-v20240930_turbo" })
     }
 }

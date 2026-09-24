@@ -14,6 +14,9 @@ public sealed record Transcript
     public bool SpeakerDetectionRequested { get; init; }
     public string? Warning { get; init; }
     public SpeakerSnapshot? SingleSpeakerUndo { get; init; }
+    public bool? TimestampsVisible { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool ShowsTimestamps => TimestampsVisible ?? true;
     public string PlainText => string.Concat(Segments.Select(s => s.Text));
     public string SpeakerName(string? id) => id is null ? "Needs review" : SpeakerNames.GetValueOrDefault(id, "Speaker " + id);
     public IEnumerable<string> SpeakerIds => Segments.Select(s => s.SpeakerId).OfType<string>().Concat(SpeakerNames.Keys).Distinct();
@@ -53,10 +56,30 @@ public sealed record Transcript
             }
             else blocks.Add((speaker, first.Start, end, new StringBuilder(text)));
         }
-        var result = string.Join(Environment.NewLine, blocks.Select(b =>
-            $"[{TimeSpan.FromSeconds(Math.Max(0, b.Start)):hh\\:mm\\:ss}]{(SpeakerDetectionRequested ? " " + SpeakerName(b.Speaker) + ":" : "")} {b.Text.ToString().Trim()}"));
+        if (!ShowsTimestamps)
+        {
+            var paragraphs = new List<(string? Speaker, double Start, double End, StringBuilder Text)>();
+            foreach (var block in blocks)
+            {
+                var speaker = SpeakerDetectionRequested ? block.Speaker : null;
+                if (paragraphs.Count > 0 && paragraphs[^1].Speaker == speaker)
+                {
+                    var previous = paragraphs[^1];
+                    previous.Text.Append(block.Text);
+                    paragraphs[^1] = (speaker, previous.Start, block.End, previous.Text);
+                }
+                else paragraphs.Add((speaker, block.Start, block.End, new StringBuilder(block.Text.ToString())));
+            }
+            blocks = paragraphs;
+        }
+        var separator = ShowsTimestamps ? Environment.NewLine : Environment.NewLine + Environment.NewLine;
+        var result = string.Join(separator, blocks.Select(b => ShowsTimestamps
+            ? $"[{TimeSpan.FromSeconds(Math.Max(0, b.Start)):hh\\:mm\\:ss}]{(SpeakerDetectionRequested ? " " + SpeakerName(b.Speaker) + ":" : "")} {b.Text.ToString().Trim()}"
+            : $"{(SpeakerDetectionRequested ? SpeakerName(b.Speaker) + ": " : "")}{b.Text.ToString().Trim()}"));
         return uncertain ? result + "\n\n† Speaker attribution needs review for the marked words." : result;
     }
+
+    public Transcript WithTimestamps(bool visible) => this with { TimestampsVisible = visible };
 
     public Transcript Rename(string id, string name)
     {

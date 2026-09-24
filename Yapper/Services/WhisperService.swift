@@ -8,14 +8,11 @@ import ArgmaxCore
 class WhisperService {
     // Shared singleton instance - use this everywhere
     static let shared = WhisperService()
-    private static let autoEditEnabledKey = "enableAutoEdit"
     private static let placeholderPatterns = [
         #"\[(?:BLANK_AUDIO|SILENCE)\]"#,
         #"<\|nospeech\|>"#,
         #"\[\s*S\s*\]"#,
     ]
-    private static let fillerWordPattern =
-        #"(?i)(^|[\s,.;:!?])(?:uh+|um+|umm+|uhm+|erm+|hmm+)(?=$|[\s,.;:!?])[,.;:!?]?"#
     private static let noiseLabelTerms = [
         "applause",
         "background noise",
@@ -392,9 +389,23 @@ class WhisperService {
     }
 
     private func decodingOptions(for language: String) -> DecodingOptions {
+        let englishOnly = AIModel.availableModels.first { $0.variant == currentModelVariant }?.isEnglishOnly == true
+        return Self.dictationDecodingOptions(language: language, englishOnly: englishOnly)
+    }
+
+    static func dictationDecodingOptions(language: String, englishOnly: Bool = false) -> DecodingOptions {
         var options = DecodingOptions()
         options.task = .transcribe
-        options.language = (language == "auto") ? nil : language
+        if englishOnly {
+            options.language = "en"
+            options.detectLanguage = false
+        } else if language == "auto" {
+            options.language = nil
+            options.detectLanguage = true
+        } else {
+            options.language = language
+            options.detectLanguage = false
+        }
         return options
     }
 
@@ -415,43 +426,15 @@ class WhisperService {
             options: [.regularExpression, .caseInsensitive]
         )
 
+        normalized = normalized.replacingOccurrences(of: "\r\n", with: "\n")
+        normalized = normalized.replacingOccurrences(of: "\r", with: "\n")
         normalized = normalized.replacingOccurrences(
-            of: #"\s+"#,
-            with: " ",
-            options: .regularExpression
-        )
-
-        normalized = applyAutoEdit(to: normalized)
+            of: #"[ \t]+"#, with: " ", options: .regularExpression)
+        normalized = normalized.replacingOccurrences(
+            of: #" *\n *"#, with: "\n", options: .regularExpression)
+        normalized = normalized.replacingOccurrences(
+            of: #"\n{3,}"#, with: "\n\n", options: .regularExpression)
 
         return normalized.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    /// Filler-word removal + punctuation tidy, gated by the "Auto Edit" toggle.
-    ///
-    /// Custom word replacements and spoken snippets are applied separately by
-    /// `DictionaryService` in `TranscriptionManager`, so they run once for
-    /// every engine (not just Whisper) and independently of this toggle.
-    private static func applyAutoEdit(to text: String) -> String {
-        guard UserDefaults.standard.bool(forKey: autoEditEnabledKey) else {
-            return text.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        var edited = text.replacingOccurrences(
-            of: fillerWordPattern,
-            with: "$1",
-            options: .regularExpression
-        )
-
-        edited = edited.replacingOccurrences(
-            of: #"\s+([,.;:!?])"#,
-            with: "$1",
-            options: .regularExpression
-        )
-        edited = edited.replacingOccurrences(
-            of: #"\s+"#,
-            with: " ",
-            options: .regularExpression
-        )
-        return edited.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

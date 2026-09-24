@@ -7,6 +7,7 @@ import Combine
 @Observable
 final class ConversationSession {
     static let shared = ConversationSession()
+    private static let timestampsDefaultsKey = "conversationIncludeTimestamps"
 
     enum Phase: Equatable {
         case idle, preparing, recording, processing, canceling, canceled, completed, failed
@@ -14,6 +15,9 @@ final class ConversationSession {
 
     var detectSpeakers = true
     var singleSpeaker = false
+    var includeTimestamps = false {
+        didSet { defaults.set(includeTimestamps, forKey: Self.timestampsDefaultsKey) }
+    }
     var language = "auto"
     private(set) var phase: Phase = .idle
     private(set) var resultID: UUID?
@@ -26,6 +30,7 @@ final class ConversationSession {
     private var jobLanguage = "auto"
     private var jobDetectSpeakers = true
     private var jobSingleSpeaker = false
+    private var jobIncludeTimestamps = true
     @ObservationIgnored private let defaults: UserDefaults
     var selectedModel: String { defaults.string(forKey: ModelSelection.defaultsKey) ?? ModelSelection.none }
     var modelName: String {
@@ -44,6 +49,7 @@ final class ConversationSession {
         self.service = service ?? ConversationService()
         self.suppliedHistory = history
         self.defaults = defaults
+        includeTimestamps = defaults.object(forKey: Self.timestampsDefaultsKey) as? Bool ?? false
     }
 
     var isBusy: Bool {
@@ -172,6 +178,7 @@ final class ConversationSession {
         jobLanguage = language
         jobDetectSpeakers = detectSpeakers
         jobSingleSpeaker = singleSpeaker
+        jobIncludeTimestamps = includeTimestamps
         let id = UUID()
         activeID = id
         phase = .preparing
@@ -199,8 +206,9 @@ final class ConversationSession {
             phase = .processing
             let start = Date()
             let variant = activeModel ?? selectedModel
-            let transcript = try await service.process(prepared.processingURL, variant: variant, detectSpeakers: jobDetectSpeakers,
+            var transcript = try await service.process(prepared.processingURL, variant: variant, detectSpeakers: jobDetectSpeakers,
                 singleSpeaker: jobSingleSpeaker, language: jobLanguage)
+            transcript.timestampsVisible = jobIncludeTimestamps
             guard activeID == id else { return }
             if phase == .canceling { finishCanceled(id: id); return }
             guard let item = history.addConversation(transcript, duration: duration, audioFileURL: audio,

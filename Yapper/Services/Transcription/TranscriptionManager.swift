@@ -15,16 +15,19 @@ class TranscriptionManager {
     private var warmupTask: Task<Void, Never>?
     private let selectedVariant: @MainActor () -> String
     private let modelReady: @MainActor (String) -> Bool
+    private let autoEditEnabled: @MainActor () -> Bool
 
     init(whisper: (any SpeechToTextEngine)? = nil, parakeet: (any SpeechToTextEngine)? = nil,
          gate: NativeInferenceGate? = nil,
          selectedVariant: @escaping @MainActor () -> String = { UserDefaults.standard.string(forKey: ModelSelection.defaultsKey) ?? "" },
-         modelReady: @escaping @MainActor (String) -> Bool = { ModelStorage.transcriptionModelReady($0) }) {
+         modelReady: @escaping @MainActor (String) -> Bool = { ModelStorage.transcriptionModelReady($0) },
+         autoEditEnabled: @escaping @MainActor () -> Bool = { UserDefaults.standard.bool(forKey: "enableAutoEdit") }) {
         self.whisper = whisper ?? WhisperService.shared
         self.parakeet = parakeet ?? ParakeetEngine.shared
         self.gate = gate ?? .shared
         self.selectedVariant = selectedVariant
         self.modelReady = modelReady
+        self.autoEditEnabled = autoEditEnabled
     }
 
     @discardableResult
@@ -100,11 +103,28 @@ class TranscriptionManager {
     }
 
     func transcribe(audioFile: URL, variant: String, language: String = "auto") async throws -> String {
+        try await transcribeDetailed(audioFile: audioFile, variant: variant, language: language).text
+    }
+
+    func transcribeDetailed(audioFile: URL, variant: String, language: String = "auto") async throws -> DictationOutput {
         try Self.validate(variant: variant, language: language)
+        let queuedAt = Date()
         return try await gate.run {
+            let enteredGateAt = Date()
+            let modelStart = Date()
             try await prepare(variant: variant)
-            let text = try await activeEngine.transcribe(audioFile: audioFile, language: language)
-            return DictionaryService.apply(to: text)
+            let modelSeconds = Date().timeIntervalSince(modelStart)
+            let inferenceStart = Date()
+            let raw = try await activeEngine.transcribe(audioFile: audioFile, language: language)
+            let inferenceSeconds = Date().timeIntervalSince(inferenceStart)
+            let cleanupStart = Date()
+            let normalized = WhisperService.normalizedTranscription(from: raw)
+            let edited = DictationCleanup.apply(to: normalized, enabled: autoEditEnabled())
+            let text = DictionaryService.apply(to: edited)
+            let cleanupSeconds = Date().timeIntervalSince(cleanupStart)
+            return DictationOutput(text: text, timing: DictationTiming(
+                queue: enteredGateAt.timeIntervalSince(queuedAt), modelPreparation: modelSeconds,
+                inference: inferenceSeconds, cleanup: cleanupSeconds))
         }
     }
 
@@ -129,6 +149,118 @@ class TranscriptionManager {
 }
 
 extension WhisperService: SpeechToTextEngine {}
+
+struct DictationTiming: Codable, Equatable, Sendable {
+    let queue: TimeInterval
+    let modelPreparation: TimeInterval
+    let inference: TimeInterval
+    let cleanup: TimeInterval
+    var total: TimeInterval { queue + modelPreparation + inference + cleanup }
+}
+
+struct DictationOutput: Equatable, Sendable {
+    let text: String
+    let timing: DictationTiming
+}
+
+enum DictationCleanup {
+    private static let filler =
+        #"(?i)(^|[\s,.;:!?])(?:uh+|um+|umm+|uhm+|erm+|hmm+)(?=$|[\s,.;:!?])[,.;:!?]?"#
+    private static let bullet = #"(?i)\b(?:bullet point|bullet item)\b[\s,:-]*"#
+    private static let numbered = #"(?i)\b(?:number|item)\s+(one|two|three|four|five|six|seven|eight|nine|ten|[1-9]|10)\b[\s,:-]*"#
+    private static let numberValues = ["one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+                                       "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10]
+
+    static func apply(to text: String, enabled: Bool) -> String {
+        guard enabled else { return text.trimmingCharacters(in: .whitespacesAndNewlines) }
+        var edited = applyScratchThat(in: text)
+        edited = edited.replacingOccurrences(of: filler, with: "$1", options: .regularExpression)
+        edited = edited.replacingOccurrences(of: #"(?i)\bnew paragraph\b[,.]?"#,
+            with: "\n\n", options: .regularExpression)
+        edited = edited.replacingOccurrences(of: #"(?i)\bnew line\b[,.]?"#,
+            with: "\n", options: .regularExpression)
+        edited = formatRepeatedMarkers(in: edited, pattern: bullet) { _ in "• " }
+        edited = formatNumberedList(in: edited)
+        edited = edited.replacingOccurrences(
+            of: #"[ \t]+([,.;:!?])"#, with: "$1", options: .regularExpression)
+        edited = edited.replacingOccurrences(
+            of: #"[ \t]+"#, with: " ", options: .regularExpression)
+        edited = edited.replacingOccurrences(
+            of: #" *\n *"#, with: "\n", options: .regularExpression)
+        edited = edited.replacingOccurrences(
+            of: #"\n{3,}"#, with: "\n\n", options: .regularExpression)
+        return capitalizeSentences(in: edited.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    private static func formatRepeatedMarkers(
+        in text: String, pattern: String, replacement: (NSTextCheckingResult) -> String
+    ) -> String {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        let matches = regex.matches(in: text, range: range)
+        guard matches.count >= 2 else { return text }
+        var output = text
+        for match in matches.reversed() {
+            guard let swiftRange = Range(match.range, in: output) else { continue }
+            output.replaceSubrange(swiftRange, with: "\n" + replacement(match))
+        }
+        return output.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func applyScratchThat(in text: String) -> String {
+        guard let regex = try? NSRegularExpression(
+            pattern: #"(?i)\b(?:scratch that|scratch it)\b[\s,:;-]*"#) else { return text }
+        var output = text
+        while let match = regex.firstMatch(in: output, range: NSRange(output.startIndex..<output.endIndex, in: output)),
+              let command = Range(match.range, in: output) {
+            let prefix = output[..<command.lowerBound]
+            let sentenceBoundary = prefix.lastIndex(where: { ".!?\n".contains($0) })
+            let keepEnd = sentenceBoundary.map { output.index(after: $0) } ?? output.startIndex
+            let kept = output[..<keepEnd].trimmingCharacters(in: .whitespacesAndNewlines)
+            let correction = output[command.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+            output = [kept, correction].filter { !$0.isEmpty }.joined(separator: kept.isEmpty ? "" : " ")
+        }
+        return output
+    }
+
+    private static func formatNumberedList(in text: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: numbered) else { return text }
+        let matches = regex.matches(in: text, range: NSRange(text.startIndex..<text.endIndex, in: text))
+        let values = matches.compactMap { match -> Int? in
+            guard let range = Range(match.range(at: 1), in: text) else { return nil }
+            let value = String(text[range]).lowercased()
+            return Int(value) ?? numberValues[value]
+        }
+        guard values.count >= 2, values == Array(values[0]..<(values[0] + values.count)) else { return text }
+        var output = text
+        for (match, value) in zip(matches, values).reversed() {
+            guard let range = Range(match.range, in: output) else { continue }
+            output.replaceSubrange(range, with: "\n\(value). ")
+        }
+        return output.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: #"[ \t]+(?=\n\d+[.][ \t])"#,
+                with: "", options: .regularExpression)
+    }
+
+    private static func capitalizeSentences(in text: String) -> String {
+        var output = text
+        for pattern in [#"(?m)^([ \t]*(?:[•*-]|\d+[.)])?[ \t]*)([a-z])"#,
+                        #"([.!?][ \t]+)([a-z])"#] {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            let matches = regex.matches(in: output, range: NSRange(output.startIndex..<output.endIndex, in: output))
+            for match in matches.reversed() {
+                guard let range = Range(match.range(at: 2), in: output) else { continue }
+                let suffix = output[range.lowerBound...].lowercased()
+                if suffix.hasPrefix("http://") || suffix.hasPrefix("https://")
+                    || suffix.hasPrefix("www.") { continue }
+                let token = output[range.lowerBound...].prefix { !$0.isWhitespace && !",;:!?".contains($0) }
+                if token.contains("@") || token.dropFirst().contains(where: \.isUppercase) { continue }
+                output.replaceSubrange(range, with: output[range].uppercased())
+            }
+        }
+        return output
+    }
+}
 
 enum DictationPunctuation {
     static func apply(to text: String, enabled: Bool) -> String {

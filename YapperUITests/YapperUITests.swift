@@ -282,6 +282,19 @@ final class YapperUITests: XCTestCase {
         copy.click()
         XCTAssertTrue(pasteboard.string(forType: .string)?.contains(corrected) == true)
         app.buttons["reviewSpeakers"].click()
+        let timestampToggle = app.switches["showTranscriptTimestamps"]
+        XCTAssertTrue(timestampToggle.waitForExistence(timeout: 5))
+        if (timestampToggle.value as? NSNumber)?.boolValue == true { timestampToggle.click() }
+        XCTAssertEqual(timestampToggle.value as? NSNumber, 0)
+        copy.click()
+        let paragraphCopy = try XCTUnwrap(pasteboard.string(forType: .string))
+        XCTAssertFalse(paragraphCopy.contains("[00:"))
+        XCTAssertTrue(paragraphCopy.contains(corrected))
+        capture(app.windows.firstMatch, name: "Paragraph transcript without timestamps")
+        timestampToggle.click()
+        copy.click()
+        XCTAssertTrue(pasteboard.string(forType: .string)?.contains("[00:") == true)
+        timestampToggle.click()
         app.buttons["confirmSingleSpeaker"].click()
         XCTAssertTrue(app.buttons["applySingleSpeaker"].waitForExistence(timeout: 5))
         app.buttons["Cancel"].click()
@@ -304,6 +317,7 @@ final class YapperUITests: XCTestCase {
         savedConversation.click()
         let savedSpeaker = app.buttons.matching(NSPredicate(format: "label == %@", "Rename \(speakerName)")).firstMatch
         XCTAssertTrue(savedSpeaker.waitForExistence(timeout: 5))
+        XCTAssertEqual(app.switches["showTranscriptTimestamps"].value as? NSNumber, 0)
         XCTAssertTrue(app.buttons["undoSingleSpeaker"].exists)
         app.buttons["undoSingleSpeaker"].click()
         XCTAssertTrue(app.buttons["confirmSingleSpeaker"].waitForExistence(timeout: 5))

@@ -15,13 +15,13 @@ Yapper records from the microphone or imports an audio file, transcribes it on y
 3. Allow microphone access for recording and Accessibility for global dictation and auto-paste. You can skip both permissions when you only want to import files.
 4. Download a model in AI Models and click Use. Transcribe Audio may ask for an additional speech or speaker model.
 
-The Mac installer is Developer ID signed and notarized by Apple. It requires macOS 14 or later on an Apple Silicon Mac. The current source version is 1.0.4, which fixes conversation imports from WhatsApp `.opus` files. The published installer remains 1.0.3 until the next notarized release.
+The Mac installer is Developer ID signed and notarized by Apple. It requires macOS 14 or later on an Apple Silicon Mac. The current source version is 1.1.0. It fixes WhatsApp `.opus` imports, adds the real four-layer Whisper Turbo model, records processing timings, improves offline dictation cleanup, and lets conversation transcripts switch between paragraphs and timestamps. The published installer remains 1.0.3 until the next notarized release.
 
 ## Windows preview
 
 **[Download the Windows 11 x64 preview](https://github.com/shishangia/yapper/releases/download/windows-v0.1.0-preview.2/Yapper-0.1.0-preview.2-win-x64-setup.exe)** | [Preview notes and checksum](https://github.com/shishangia/yapper/releases/tag/windows-v0.1.0-preview.2)
 
-The Windows app is a separate native implementation with the same visual identity and local-first behavior. It includes tray dictation, a configurable shortcut, the floating recording pill, file import, editable speaker turns, history, dictionary rules, and Light, Dark, and System themes. The default shortcut is Ctrl+Alt+Space because Fn is firmware-controlled on many Windows keyboards.
+The Windows app is a separate native implementation with the same visual identity and local-first behavior. It includes tray dictation, a configurable shortcut, the floating recording pill, file import, editable speaker turns, history, dictionary rules, and Light, Dark, and System themes. The current source version is preview 3; the download above remains preview 2 until the next installer is published. The default shortcut is Ctrl+Alt+Space because Fn is firmware-controlled on many Windows keyboards.
 
 Windows inference currently uses the CPU. Start with Whisper Tiny or Small on a modest PC. The installer is an unsigned preview, so Windows may show a SmartScreen warning. Do not weaken Windows security settings to install it. Windows data stays under `%LOCALAPPDATA%\Yapper` and does not sync with the Mac library. Physical microphone, shortcut, browser-paste, and performance testing still need to be completed on user hardware.
 
@@ -29,13 +29,17 @@ Windows inference currently uses the CPU. Start with Whisper Tiny or Small on a 
 
 - Hold or toggle a global shortcut for dictation, with clipboard restoration and a compact recording window.
 - Use local Whisper or Parakeet models. The selected model applies to dictation, microphone conversations, and imported files.
-- Import audio and video for conversation transcription. Mac 1.0.4 source also handles WhatsApp `.opus` files.
+- Import audio and video for conversation transcription. Mac 1.1.0 source also handles WhatsApp `.opus` files.
+- Switch conversation copy and reading views between clean paragraphs and timestamped turns without transcribing again.
+- Use offline dictation cleanup for safe filler removal, capitalization, explicit lists and paragraph commands, and bounded “scratch that” corrections.
 - Add optional local speaker labels for up to four people with Sortformer. Speaker names stay within one recording. Yapper does not store voice profiles or recognize people across recordings.
 - Review timestamped turns, correct text and speakers, and keep changes after reopening the app. Corrections do not create duplicate history or statistics entries.
 - Keep recordings, transcripts, dictionary entries, preferences, and model files in local app storage.
 - Cancel safely. Active native inference finishes before another job starts, but canceled results are not saved or pasted.
 
 Conversation transcripts bypass personal dictionary replacements and dictation cleanup. Yapper preserves the original recording and keeps uncertain speaker attribution visible for review.
+
+Auto Edit is deterministic. It follows explicit formatting commands but does not yet infer tone, rewrite prose, or guess list structure with a language model.
 
 ## Models, privacy, and limits
 

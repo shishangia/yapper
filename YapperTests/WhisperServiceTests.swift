@@ -42,10 +42,14 @@ final class WhisperServiceTests: XCTestCase {
     }
 
     func testModelLanguagesAndTokenizerMapping() throws {
-        let turbo = try XCTUnwrap(AIModel.availableModels.first { $0.variant == "openai_whisper-large-v3_turbo" })
+        let turbo = try XCTUnwrap(AIModel.availableModels.first { $0.name == "Whisper Large v3 Turbo" })
+        XCTAssertEqual(turbo.variant, "openai_whisper-large-v3-v20240930_turbo")
         XCTAssertTrue(turbo.supports(language: "hi"))
         XCTAssertTrue(turbo.supports(language: "mixed"))
         XCTAssertEqual(ModelStorage.whisperVariant(for: turbo.variant)?.description, "large-v3")
+        let legacy = try XCTUnwrap(AIModel.availableModels.first { $0.variant == "openai_whisper-large-v3_turbo" })
+        XCTAssertTrue(legacy.isLegacy)
+        XCTAssertNotEqual(AIModel.recommendedModel(for: .current, useCase: .dictation).variant, legacy.variant)
         let english = try XCTUnwrap(AIModel.availableModels.first { $0.variant == "openai_whisper-small.en" })
         XCTAssertFalse(english.supports(language: "hi"))
         XCTAssertTrue(english.supports(language: "auto"))
@@ -178,6 +182,64 @@ final class WhisperServiceTests: XCTestCase {
         }
     }
 
+    func testAutomaticLanguageDetectionIsExplicitForMultilingualWhisper() {
+        let automatic = WhisperService.dictationDecodingOptions(language: "auto")
+        XCTAssertNil(automatic.language)
+        XCTAssertTrue(automatic.detectLanguage)
+        let selected = WhisperService.dictationDecodingOptions(language: "zh")
+        XCTAssertEqual(selected.language, "zh")
+        XCTAssertFalse(selected.detectLanguage)
+        let englishOnly = WhisperService.dictationDecodingOptions(language: "auto", englishOnly: true)
+        XCTAssertEqual(englishOnly.language, "en")
+        XCTAssertFalse(englishOnly.detectLanguage)
+    }
+
+    func testSharedDictationCleanupFormatsExplicitCommands() {
+        let raw = "um this is a sentence. another one new paragraph bullet point apples bullet point bananas"
+        XCTAssertEqual(DictationCleanup.apply(to: raw, enabled: true),
+            "This is a sentence. Another one\n\n• Apples\n• Bananas")
+        XCTAssertEqual(DictationCleanup.apply(
+            to: "shopping list number one milk number two eggs number three tea", enabled: true),
+            "Shopping list\n1. Milk\n2. Eggs\n3. Tea")
+        XCTAssertEqual(DictationCleanup.apply(to: "first idea scratch that corrected idea", enabled: true),
+            "Corrected idea")
+        XCTAssertEqual(DictationCleanup.apply(to: "Keep this sentence. wrong words scratch that corrected words", enabled: true),
+            "Keep this sentence. Corrected words")
+    }
+
+    func testCleanupDoesNotGuessAmbiguousFillersOrLists() {
+        let text = "i like this, you know number one reason"
+        XCTAssertEqual(DictationCleanup.apply(to: text, enabled: true),
+            "I like this, you know number one reason")
+        XCTAssertEqual(DictationCleanup.apply(to: text, enabled: false), text)
+        XCTAssertEqual(DictationCleanup.apply(to: "visit https://example.com next", enabled: true),
+            "Visit https://example.com next")
+        XCTAssertEqual(DictationCleanup.apply(to: "me@example.com works on iPhone", enabled: true),
+            "me@example.com works on iPhone")
+        XCTAssertEqual(DictationCleanup.apply(to: "hello ગુજરાતી 你好", enabled: true),
+            "Hello ગુજરાતી 你好")
+    }
+
+    func testDetailedDictationSharesCleanupAcrossEnginesAndReportsTiming() async throws {
+        let whisper = StubSpeechEngine()
+        let parakeet = StubSpeechEngine()
+        let manager = TranscriptionManager(whisper: whisper, parakeet: parakeet,
+            gate: NativeInferenceGate(), autoEditEnabled: { true })
+        let output = try await manager.transcribeDetailed(audioFile: URL(fileURLWithPath: "/unused.wav"),
+            variant: "openai_whisper-large-v3_turbo", language: "auto")
+        XCTAssertEqual(output.text, "Raw words")
+        XCTAssertGreaterThanOrEqual(output.timing.queue, 0)
+        XCTAssertGreaterThanOrEqual(output.timing.modelPreparation, 0)
+        XCTAssertGreaterThanOrEqual(output.timing.inference, 0)
+        XCTAssertGreaterThanOrEqual(output.timing.cleanup, 0)
+        XCTAssertGreaterThanOrEqual(output.timing.total, output.timing.inference)
+
+        let parakeetOutput = try await manager.transcribeDetailed(
+            audioFile: URL(fileURLWithPath: "/unused.wav"), variant: ParakeetCatalog.v3Variant, language: "en")
+        XCTAssertEqual(parakeetOutput.text, "Raw words")
+        XCTAssertEqual(manager.currentModelVariant, ParakeetCatalog.v3Variant)
+    }
+
     func testNativeWhisperAndParakeetUseIsolatedCopies() async throws {
         guard ProcessInfo.processInfo.environment["YAPPER_NATIVE_TESTS"] == "1" else {
             throw XCTSkip("Opt-in local model smoke test")
@@ -250,5 +312,12 @@ final class WhisperServiceTests: XCTestCase {
         )
 
         XCTAssertEqual(normalized, "")
+    }
+
+    func testNormalizedTranscriptionPreservesParagraphBreaks() {
+        let normalized = WhisperService.normalizedTranscription(
+            from: " first line  \n \n \n second line "
+        )
+        XCTAssertEqual(normalized, "first line\n\nsecond line")
     }
 }

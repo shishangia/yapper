@@ -24,6 +24,17 @@ private final class WaitingProcessor: ConversationProcessing {
 
 @MainActor
 final class ConversationSessionTests: XCTestCase {
+    func testTimestampChoiceDefaultsToParagraphsAndPersists() throws {
+        let suite = "Yapper-Session-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let first = ConversationSession(history: HistoryService(defaults: defaults), defaults: defaults)
+        XCTAssertFalse(first.includeTimestamps)
+        first.includeTimestamps = true
+        let reopened = ConversationSession(history: HistoryService(defaults: defaults), defaults: defaults)
+        XCTAssertTrue(reopened.includeTimestamps)
+    }
+
     func testSessionOutlivesItsViewsAndSavesOnce() async throws {
         let suite = "Yapper-Session-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
@@ -47,7 +58,7 @@ final class ConversationSessionTests: XCTestCase {
         XCTAssertEqual(history.items.count, 1)
         XCTAssertEqual(history.statsEntries.count, 1)
         let item = try XCTUnwrap(history.items.first)
-        XCTAssertEqual(item.modelUsed, "Whisper Large v3 Turbo")
+        XCTAssertEqual(item.modelUsed, "Whisper Large v3 (legacy Turbo download)")
         history.addConversation(try XCTUnwrap(item.conversation), duration: 1, id: item.id)
         XCTAssertEqual(history.items.count, 1)
         XCTAssertEqual(history.statsEntries.count, 1)

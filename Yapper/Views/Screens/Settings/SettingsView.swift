@@ -285,7 +285,7 @@ struct GeneralSettingsTab: View {
                         }
 
                         Text(
-                            "Auto Edit removes common filler words like \"um\" and \"uh\" after transcription. It stays fully offline and does not rewrite the meaning of what you said."
+                            "Auto Edit removes safe filler words, capitalizes sentences, and formats explicit commands such as “new paragraph,” “bullet point,” and “number one.” It runs locally. Conversation transcripts stay unchanged."
                         )
                         .font(Typography.captionSmall)
                         .foregroundStyle(Color.textMuted)

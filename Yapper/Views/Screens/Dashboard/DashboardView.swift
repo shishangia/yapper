@@ -231,7 +231,8 @@ struct DashboardView: View {
             transcriptionStatus = "Transcribing..."
 
             do {
-                let text = try await transcription.transcribe(audioFile: url, variant: variant, language: language)
+                let output = try await transcription.transcribeDetailed(audioFile: url, variant: variant, language: language)
+                let text = output.text
                 let duration = try await getAudioDuration(url: url)
                 let modelName =
                     AIModel.availableModels.first(where: { $0.variant == variant })?.name
@@ -243,7 +244,8 @@ struct DashboardView: View {
                         duration: duration,
                         audioFileURL: url,
                         modelUsed: modelName,
-                        transcriptionTime: nil
+                        transcriptionTime: output.timing.total,
+                        dictationTiming: output.timing
                     )
                     transcriptionStatus = "Done!"
                     isTranscribing = false

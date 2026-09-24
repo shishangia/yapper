@@ -58,12 +58,19 @@ struct TranscribeAudioView: View {
                                 .labelsHidden().accessibilityIdentifier("speakerMode")
                             }
                         }
+                        GridRow {
+                            Text("Timestamps").foregroundStyle(Color.textSecondary)
+                            Toggle("Include in transcript", isOn: $session.includeTimestamps)
+                                .accessibilityIdentifier("includeTimestamps")
+                        }
                     }
                     .disabled(session.isBusy)
                     if session.detectSpeakers && session.singleSpeaker {
                         Text("One speaker skips speaker detection and word alignment. You still get timestamped passages, without uncertain speaker labels.")
                             .font(Typography.caption).foregroundStyle(Color.textSecondary)
                     }
+                    Text("You can switch between paragraph and timestamped views after processing. Timing data is always retained.")
+                        .font(Typography.caption).foregroundStyle(Color.textSecondary)
                     Text("Mixed languages and overlapping speech can produce errors. You can edit words and speaker labels after processing.")
                         .font(Typography.bodySmall).foregroundStyle(Color.textSecondary)
                     if session.isBusy || session.phase != .idle {

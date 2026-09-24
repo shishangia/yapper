@@ -6,7 +6,7 @@ $testRoot = $env:YAPPER_TEST_ROOT
 New-Item -ItemType Directory -Path $testRoot | Out-Null
 $fixture = [ordered]@{
     Version = 1
-    Recordings = @([ordered]@{Id='71a528e0-d4fd-4bfa-bdcd-d0c30c09e42c';Date='2026-01-01T12:00:00Z';Text='Hello there';Duration=2;AudioPath='missing-test-audio.wav';Model='Synthetic fixture';Conversation=@{SpeakerDetectionRequested=$true;Segments=@(@{Id=0;Start=0;End=1;Text='Hello';SpeakerId='1'},@{Id=1;Start=1;End=2;Text=' there';SpeakerId='2'});SpeakerNames=@{'1'='Test Alice';'2'='Test Bob'}}})
+    Recordings = @([ordered]@{Id='71a528e0-d4fd-4bfa-bdcd-d0c30c09e42c';Date='2026-01-01T12:00:00Z';Text='Hello there';Duration=2;AudioPath='missing-test-audio.wav';Model='Synthetic fixture';Timing=@{Decode=.1;Queue=.2;ModelPreparation=.3;Inference=.4;SpeakerDetection=.5;Cleanup=.01};Conversation=@{SpeakerDetectionRequested=$true;Segments=@(@{Id=0;Start=0;End=1;Text='Hello';SpeakerId='1'},@{Id=1;Start=1;End=2;Text=' there';SpeakerId='2'});SpeakerNames=@{'1'='Test Alice';'2'='Test Bob'}}})
     Usage = @()
     Dictionary = @()
 }
@@ -53,12 +53,20 @@ try {
             Capture-Window $window "$appearance-$route"
         }
     }
+    Select-Page 'sidebar.transcribeAudio'
+    $timestamps = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'includeTimestamps'))
+    if (!$timestamps) { throw 'Timestamp preference missing' }
+    $toggle = $timestamps.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern)
+    if ($toggle.Current.ToggleState -ne [System.Windows.Automation.ToggleState]::Off) { throw 'New transcripts should default to paragraphs' }
+    $toggle.Toggle()
     $saved = Get-Content (Join-Path $testRoot 'library.json') -Raw | ConvertFrom-Json
     if ($saved.Preferences.Theme -ne 'Dark') { throw 'Theme did not persist' }
     Select-Page 'sidebar.history'
     $entry = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem))
     if (!$entry) { throw 'Synthetic history entry did not load' }
     $entry.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+    $timing = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, 'Processing 1.51s · decode 0.10s · wait 0.20s · model 0.30s · speech 0.40s · speakers 0.50s · cleanup 0.01s'))
+    if (!$timing) { throw 'Processing timing details missing' }
     $review = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, 'Review / edit turns'))
     $review.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
     $editor = $null
@@ -68,6 +76,11 @@ try {
         if (!$editor) { Start-Sleep -Milliseconds 100 }
     }
     if (!$editor) { throw 'Transcript editor did not open' }
+    $editorTimestamps = $editor.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'showTranscriptTimestamps'))
+    if (!$editorTimestamps) { throw 'Transcript timestamp switch missing' }
+    $editorToggle = $editorTimestamps.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern)
+    if ($editorToggle.Current.ToggleState -ne [System.Windows.Automation.ToggleState]::On) { throw 'Legacy transcript should keep timestamps' }
+    $editorToggle.Toggle()
     Capture-Window $editor 'Dark-editor'
     $editor.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern).Close()
     Stop-Process -Id $process.Id
@@ -83,7 +96,7 @@ try {
     if (!$pill) { throw 'Floating recorder did not appear' }
     Capture-Window $pill 'Dark-recorder'
     $restored = Get-Content (Join-Path $testRoot 'library.json') -Raw | ConvertFrom-Json
-    if ($restored.Preferences.Theme -ne 'Dark' -or $restored.Recordings.Count -ne 1) { throw 'Relaunch changed theme or library' }
+    if ($restored.Preferences.Theme -ne 'Dark' -or !$restored.Preferences.IncludeTimestamps -or $restored.Recordings.Count -ne 1 -or $restored.Recordings[0].Conversation.TimestampsVisible) { throw 'Relaunch changed theme, timestamps, or library' }
     Write-Host 'PASS sidebar, light/dark themes, persistence, floating recorder, history and editor'
 } finally {
     if (!$process.HasExited) { Stop-Process -Id $process.Id }

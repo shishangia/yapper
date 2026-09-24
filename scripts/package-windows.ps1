@@ -19,7 +19,7 @@ $compiler = "${env:ProgramFiles(x86)}/Inno Setup 6/ISCC.exe"
 if (!(Test-Path $compiler)) { throw 'Install Inno Setup 6 on the build machine to package the installer.' }
 & $compiler "$root/windows/Yapper.Windows/Installer.iss"
 if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
-$installer = Join-Path $output 'Yapper-0.1.0-preview.2-win-x64-setup.exe'
+$installer = Join-Path $output 'Yapper-0.1.0-preview.3-win-x64-setup.exe'
 $hash = (Get-FileHash -Algorithm SHA256 $installer).Hash.ToLowerInvariant()
 "$hash  $(Split-Path -Leaf $installer)" | Set-Content "$installer.sha256" -Encoding ascii
 Write-Host "Installer: $installer"

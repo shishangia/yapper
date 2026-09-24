@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using Yapper.Core;
 using Button = System.Windows.Controls.Button;
@@ -37,6 +38,10 @@ public sealed class TranscriptEditor : Window
         });
         AddButton(actions, "Undo one speaker", () => Change(t => t.UndoSingleSpeaker()));
         AddButton(actions, "Copy transcript", () => System.Windows.Clipboard.SetText(Current.FormattedText()));
+        var timestamps = new CheckBox { Content = "Show timestamps", IsChecked = Current.ShowsTimestamps, VerticalAlignment = VerticalAlignment.Center };
+        AutomationProperties.SetAutomationId(timestamps, "showTranscriptTimestamps");
+        timestamps.Click += (_, _) => Change(t => t.WithTimestamps(timestamps.IsChecked == true));
+        actions.Children.Add(timestamps);
         DockPanel.SetDock(actions, Dock.Top); root.Children.Add(actions);
         DockPanel.SetDock(status, Dock.Bottom); root.Children.Add(status);
         var grid = new Grid(); grid.ColumnDefinitions.Add(new() { Width = new GridLength(260) }); grid.ColumnDefinitions.Add(new());

@@ -24,6 +24,12 @@ struct ConversationTranscriptView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             if let conversation {
+                Toggle("Show timestamps", isOn: Binding(
+                    get: { conversation.showsTimestamps },
+                    set: { _ = historyService.setTimestampsVisible(itemID: itemID, visible: $0) }
+                ))
+                .toggleStyle(.switch)
+                .accessibilityIdentifier("showTranscriptTimestamps")
                 if conversation.unassignedCount > 0 {
                     HStack {
                         Label("Underlined words need speaker review", systemImage: "person.crop.circle.badge.questionmark")
@@ -75,11 +81,13 @@ struct ConversationTranscriptView: View {
                     }
                 }
                 if !reviewing {
-                    ForEach(conversation.readingBlocks) { block in
+                    ForEach(conversation.displayedBlocks) { block in
                         VStack(alignment: .leading, spacing: 8) {
                             HStack(spacing: 10) {
-                                Text(ConversationTranscript.timestamp(block.start))
-                                    .font(Typography.captionSmall).monospacedDigit().foregroundStyle(Color.textMuted)
+                                if conversation.showsTimestamps {
+                                    Text(ConversationTranscript.timestamp(block.start))
+                                        .font(Typography.captionSmall).monospacedDigit().foregroundStyle(Color.textMuted)
+                                }
                                 if conversation.speakerDetectionRequested {
                                     if let id = block.speakerID {
                                         Button(conversation.speakerName(for: id)) {

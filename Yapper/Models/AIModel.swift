@@ -19,6 +19,9 @@ struct AIModel: Identifiable, Equatable {
     /// variant name (e.g. Parakeet). When nil, falls back to the Whisper
     /// `.en` suffix convention.
     var englishOnlyOverride: Bool? = nil
+    /// Compatibility entry for an old model identifier. New installs should
+    /// not be offered this download, but existing selections must keep working.
+    var isLegacy: Bool = false
 
     var languageSupportLabel: String {
         isEnglishOnly ? "English-only" : "Multilingual"
@@ -51,13 +54,24 @@ struct AIModel: Identifiable, Equatable {
             minimumRAMGB: 16
         ),
         AIModel(
-            name: "Whisper Large v3 Turbo",
+            name: "Whisper Large v3 (legacy Turbo download)",
             variant: "openai_whisper-large-v3_turbo",
-            details: "Faster Large v3 variant for dictation and conversations.",
+            details: "The full 32-layer model previously labeled Turbo. Kept so existing downloads continue to work.",
+            size: "~3 GB",
+            speed: 4.0,
+            accuracy: 9.5,
+            expectedSizeBytes: 2_800_000_000,
+            minimumRAMGB: 16,
+            isLegacy: true
+        ),
+        AIModel(
+            name: "Whisper Large v3 Turbo",
+            variant: "openai_whisper-large-v3-v20240930_turbo",
+            details: "OpenAI's four-layer Turbo model for faster multilingual dictation and conversations.",
             size: "1.6 GB",
             speed: 7.0,
             accuracy: 9.5,
-            expectedSizeBytes: 1_400_000_000,
+            expectedSizeBytes: 1_500_000_000,
             minimumRAMGB: 8
         ),
         AIModel(
@@ -189,7 +203,7 @@ struct AIModel: Identifiable, Equatable {
         for capability: DeviceCapability = .current,
         useCase: UseCase = .dictation
     ) -> AIModel {
-        let fits = availableModels.filter { capability.ramGB >= $0.minimumRAMGB }
+        let fits = availableModels.filter { !$0.isLegacy && capability.ramGB >= $0.minimumRAMGB }
         let pool = fits.isEmpty ? availableModels : fits
         return pool.max {
             recommendationScore($0, capability: capability, useCase: useCase)

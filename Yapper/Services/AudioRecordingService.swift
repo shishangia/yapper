@@ -4,7 +4,9 @@ import CoreMedia
 import Foundation
 
 class AudioRecordingService: NSObject, ObservableObject {
-    static let shared = AudioRecordingService()  // Shared instance for settings/dashboard sync
+    // Finished chunks are reserved for an opt-in streaming path. Normal
+    // dictation writes only the complete recording.
+    static let shared = AudioRecordingService(generatesChunks: false)
 
     // Chunk publisher: emits the URL of each completed ~4-second audio chunk while recording
     let chunkPublisher = PassthroughSubject<URL, Never>()
@@ -119,9 +121,10 @@ class AudioRecordingService: NSObject, ObservableObject {
     }
 
     private let generatesChunks: Bool
+    var generatesStreamingChunks: Bool { generatesChunks }
 
     override convenience init() {
-        self.init(generatesChunks: true)
+        self.init(generatesChunks: false)
     }
 
     init(generatesChunks: Bool) {

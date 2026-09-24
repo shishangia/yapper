@@ -198,6 +198,19 @@ struct HistoryDetailView: View {
                                 .foregroundStyle(.white)
                         }
                     }
+                    if let timing = item.dictationTiming {
+                        DisclosureGroup("Processing details") {
+                            VStack(spacing: 8) {
+                                timingRow("Waiting", timing.queue)
+                                timingRow("Model preparation", timing.modelPreparation)
+                                timingRow("Speech recognition", timing.inference)
+                                timingRow("Text cleanup", timing.cleanup)
+                            }
+                            .padding(.top, 6)
+                        }
+                        .font(Typography.bodySmall)
+                        .foregroundStyle(.gray)
+                    }
                 }
             }
             .padding()
@@ -248,6 +261,14 @@ struct HistoryDetailView: View {
         let minutes = Int(time) / 60
         let seconds = Int(time) % 60
         return String(format: "%d:%02d", minutes, seconds)
+    }
+
+    private func timingRow(_ title: String, _ seconds: TimeInterval) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Text(String(format: "%.2fs", seconds)).monospacedDigit()
+        }
     }
 }
 

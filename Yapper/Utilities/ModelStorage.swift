@@ -12,6 +12,7 @@ import WhisperKit
 
 enum ModelStorage {
     static func whisperVariant(for variant: String) -> ModelVariant? {
+        if variant.contains("large-v3-v20240930") { return .largev3 }
         let name = variant.replacingOccurrences(of: "openai_whisper-", with: "")
             .replacingOccurrences(of: "_turbo", with: "")
         return ModelVariant.allCases.first { $0.description == name }

@@ -43,7 +43,7 @@ jobs:
         shell: pwsh
         run: |
           $install = Join-Path $env:RUNNER_TEMP 'Yapper-installed'
-          $setup = Start-Process "$PWD/dist/windows/Yapper-0.1.0-preview.2-win-x64-setup.exe" -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$install") -Wait -PassThru
+          $setup = Start-Process "$PWD/dist/windows/Yapper-0.1.0-preview.3-win-x64-setup.exe" -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$install") -Wait -PassThru
           if ($setup.ExitCode -ne 0) { throw "Installer failed: $($setup.ExitCode)" }
           ./scripts/test-windows-ui.ps1 -AppPath "$install/Yapper.exe"
           Copy-Item (Join-Path $env:RUNNER_TEMP 'windows-screenshots') 'dist/windows/windows-screenshots' -Recurse

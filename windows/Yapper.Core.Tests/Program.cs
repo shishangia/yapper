@@ -22,6 +22,18 @@ var tests = new (string Name, Action Run)[]
         Equal(transcript.PlainText, corrected.PlainText);
         Equal(transcript.FormattedText(), corrected.UndoSingleSpeaker().FormattedText());
     }),
+    ("paragraph presentation preserves words and timestamps can return", () =>
+    {
+        var transcript = new Transcript { SpeakerDetectionRequested = true, Segments =
+            [new(0, 0, 1, "Hello", "1"), new(1, 4, 5, " again", "1"), new(2, 7, 8, " Reply", "2")] };
+        var paragraph = transcript.WithTimestamps(false);
+        True(!paragraph.FormattedText().Contains("[00:"));
+        True(paragraph.FormattedText().Contains("Speaker 1: Hello again"));
+        Equal(transcript.PlainText, paragraph.PlainText);
+        True(paragraph.WithTimestamps(true).FormattedText().Contains("[00:00:00]"));
+        var legacy = JsonSerializer.Deserialize<Transcript>("{\"segments\":[],\"speakerDetectionRequested\":false}")!;
+        True(legacy.ShowsTimestamps);
+    }),
     ("rename edit merge and persisted undo", () =>
     {
         var transcript = new Transcript { SpeakerDetectionRequested = true, Segments = [new(0, 0, 1, "One", "1"), new(1, 2, 3, " two", "2")] };
@@ -66,6 +78,16 @@ var tests = new (string Name, Action Run)[]
         foreach (var text in new[] { "A full sentence.", "U.S.", "Wait...", "Really?" }) Equal(text, DictationText.Process(text, [], true, false));
         Equal("3.14", DictationText.Process("3.14.", [], true, false));
         Equal("Hello.", DictationText.Process("Hello.", [], false, false));
+        Equal("This is a sentence. Another one\n\n• Apples\n• Bananas", DictationText.Process(
+            "um this is a sentence. another one new paragraph bullet point apples bullet point bananas", [], false, true));
+        Equal("Shopping list\n1. Milk\n2. Eggs\n3. Tea", DictationText.Process(
+            "shopping list number one milk number two eggs number three tea", [], false, true));
+        Equal("Keep this sentence. Corrected words", DictationText.Process(
+            "Keep this sentence. wrong words scratch that corrected words", [], false, true));
+        Equal("I like this, you know number one reason", DictationText.Process(
+            "i like this, you know number one reason", [], false, true));
+        Equal("me@example.com works on iPhone", DictationText.Process(
+            "me@example.com works on iPhone", [], false, true));
     }),
     ("cancellation keeps busy ownership and rejects stale finish", () =>
     {
@@ -77,13 +99,28 @@ var tests = new (string Name, Action Run)[]
     ("theme and automatic-check preferences survive old libraries", () =>
     {
         var preferences = JsonSerializer.Deserialize<Preferences>("{\"SelectedModel\":\"whisper-small\"}")!;
-        Equal("System", preferences.Theme); True(preferences.AutoCheckUpdates);
+        Equal("System", preferences.Theme); True(preferences.AutoCheckUpdates); True(!preferences.IncludeTimestamps);
         WithLibrary(root =>
         {
             var store = new LibraryStore(root);
             store.Save(store.Data with { Preferences = preferences with { Theme = "Dark", AutoCheckUpdates = false } });
             var reopened = new LibraryStore(root);
             Equal("Dark", reopened.Data.Preferences.Theme); True(!reopened.Data.Preferences.AutoCheckUpdates);
+        });
+    }),
+    ("processing timing is optional and survives persistence", () =>
+    {
+        WithLibrary(root =>
+        {
+            var store = new LibraryStore(root);
+            var oldId = Guid.NewGuid();
+            store.Add(new(oldId, DateTimeOffset.UtcNow, "Legacy", 1, "old.wav", "test"));
+            var timing = new ProcessingTiming(.1, .2, .3, .4, .5, .6);
+            store.Add(new(Guid.NewGuid(), DateTimeOffset.UtcNow, "Measured", 1, "new.wav", "test", Timing: timing));
+            var reopened = new LibraryStore(root);
+            True(reopened.Data.Recordings.First(r => r.Id == oldId).Timing is null);
+            Equal(timing, reopened.Data.Recordings.First().Timing);
+            Equal(2, reopened.Data.Usage.Count);
         });
     }),
     ("updates select only verified newer Windows assets", () =>

@@ -9,7 +9,7 @@ namespace Yapper.Windows;
 
 public sealed class AppUpdates
 {
-    public static string CurrentVersion => (Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.1.0-preview.2").Split('+')[0];
+    public static string CurrentVersion => (Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.1.0-preview.3").Split('+')[0];
     private static readonly HttpClient Client = new(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromMinutes(10) };
     public async Task<WindowsUpdate?> Check(CancellationToken token)
     {

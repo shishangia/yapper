@@ -51,6 +51,21 @@ final class HistoryServiceTests: XCTestCase {
         XCTAssertEqual(decoded.count, 1)
         XCTAssertEqual(decoded.first?.transcript, transcript)
     }
+
+    func testDictationTimingPersistsWithoutBreakingLegacyHistory() throws {
+        let timing = DictationTiming(queue: 0.1, modelPreparation: 0.2, inference: 1.3, cleanup: 0.01)
+        service.addItem(transcript: "Measured", duration: 2, transcriptionTime: timing.total,
+            dictationTiming: timing)
+        let reopened = HistoryService(defaults: defaults)
+        XCTAssertEqual(reopened.items.first?.dictationTiming, timing)
+        XCTAssertEqual(reopened.items.first?.transcriptionTime, timing.total)
+
+        let legacy = #"[{"id":"00000000-0000-0000-0000-000000000001","date":0,"transcript":"old","duration":1}]"#.data(using: .utf8)!
+        defaults.set(legacy, forKey: "history_items")
+        let legacyStore = HistoryService(defaults: defaults)
+        XCTAssertNil(legacyStore.items.first?.dictationTiming)
+        XCTAssertEqual(defaults.data(forKey: "history_items"), legacy)
+    }
     
     func testDeleteItem() {
         service.addItem(transcript: "Item 1", duration: 1.0)
@@ -134,6 +149,26 @@ final class HistoryServiceTests: XCTestCase {
         XCTAssertEqual(reopened.statsEntries.count, 2)
         XCTAssertEqual(defaults.data(forKey: "history_stats_entries"), stats)
         XCTAssertEqual(renamed.date, first.date)
+    }
+
+    func testTimestampPresentationPersistsWithoutChangingStatsOrOtherRecordings() throws {
+        let conversation = ConversationTranscript(segments: [
+            .init(id: 0, start: 0, end: 1, text: " Hello", speakerID: "1"),
+            .init(id: 1, start: 3, end: 4, text: " again", speakerID: "1"),
+        ], speakerDetectionRequested: true)
+        let first = try XCTUnwrap(service.addConversation(conversation, duration: 4))
+        let second = try XCTUnwrap(service.addConversation(conversation, duration: 4))
+        let stats = defaults.data(forKey: "history_stats_entries")
+
+        XCTAssertTrue(service.setTimestampsVisible(itemID: first.id, visible: false))
+        let reopened = HistoryService(defaults: defaults)
+        let changed = try XCTUnwrap(reopened.items.first { $0.id == first.id })
+        XCTAssertFalse(try XCTUnwrap(changed.conversation).showsTimestamps)
+        XCTAssertFalse(changed.displayText.contains("[00:"))
+        XCTAssertTrue(try XCTUnwrap(reopened.items.first { $0.id == second.id }.flatMap(\.conversation)).showsTimestamps)
+        XCTAssertEqual(defaults.data(forKey: "history_stats_entries"), stats)
+        XCTAssertEqual(reopened.items.count, 2)
+        XCTAssertFalse(service.setTimestampsVisible(itemID: UUID(), visible: false))
     }
 
     func testRenameValidationAndReset() throws {

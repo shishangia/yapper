@@ -5,9 +5,11 @@
     <Compile Include="../Yapper.Windows/ModelStore.cs" Link="ModelStore.cs" />
     <Compile Include="../Yapper.Windows/SpeechService.cs" Link="SpeechService.cs" />
     <Compile Include="../Yapper.Windows/AppUpdates.cs" Link="AppUpdates.cs" />
+    <Compile Include="../Yapper.Windows/AudioDecoder.cs" Link="AudioDecoder.cs" />
     <PackageReference Include="Whisper.net" Version="1.9.1" />
     <PackageReference Include="Whisper.net.Runtime" Version="1.9.1" />
     <PackageReference Include="org.k2fsa.sherpa.onnx" Version="1.13.8" />
     <PackageReference Include="SharpCompress" Version="0.49.1" />
+    <PackageReference Include="NAudio" Version="2.3.0" />
   </ItemGroup>
 </Project>

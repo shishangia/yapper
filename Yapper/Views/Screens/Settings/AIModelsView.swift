@@ -15,9 +15,15 @@ struct AIModelsView: View {
 
     private var engineGroups: [(title: String, subtitle: String, models: [AIModel])] {
         [
-            ("Parakeet", "NVIDIA · on-device speech recognition", AIModel.models(for: .parakeet)),
-            ("Whisper", "OpenAI · on-device speech recognition", AIModel.models(for: .whisper)),
+            ("Parakeet", "NVIDIA · on-device speech recognition", visibleModels(for: .parakeet)),
+            ("Whisper", "OpenAI · on-device speech recognition", visibleModels(for: .whisper)),
         ]
+    }
+
+    private func visibleModels(for engine: TranscriptionEngineKind) -> [AIModel] {
+        AIModel.models(for: engine).filter { model in
+            !model.isLegacy || model.variant == selectedModel || ModelStorage.transcriptionModelReady(model.variant)
+        }
     }
 
     var body: some View {

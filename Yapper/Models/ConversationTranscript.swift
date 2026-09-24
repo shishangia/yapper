@@ -15,6 +15,9 @@ struct ConversationTranscript: Codable, Equatable, Sendable {
     var speakerDetectionRequested: Bool
     var warning: String?
     var singleSpeakerUndo: SpeakerAssignmentSnapshot? = nil
+    /// Optional for backward-compatible decoding. Existing transcripts keep
+    /// the timestamped presentation they were saved with before this setting.
+    var timestampsVisible: Bool? = nil
 
     var plainText: String { segments.map(\.text).joined() }
     var speakerIDs: [String] {
@@ -29,6 +32,7 @@ struct ConversationTranscript: Codable, Equatable, Sendable {
     }
 
     var unassignedCount: Int { speakerDetectionRequested ? segments.filter { $0.speakerID == nil }.count : 0 }
+    var showsTimestamps: Bool { timestampsVisible ?? true }
 
     var readingBlocks: [ConversationReadingBlock] {
         var blocks: [ConversationReadingBlock] = []
@@ -75,20 +79,46 @@ struct ConversationTranscript: Codable, Equatable, Sendable {
         return blocks
     }
 
+    /// Paragraph mode ignores silent gaps. It keeps real speaker changes, but
+    /// a transcript without speaker labels becomes one continuous paragraph.
+    var paragraphBlocks: [ConversationReadingBlock] {
+        guard speakerDetectionRequested else {
+            return segments.isEmpty ? [] : [ConversationReadingBlock(segments: segments, speakerID: nil)]
+        }
+        return readingBlocks.reduce(into: []) { blocks, block in
+            if let previous = blocks.last, previous.speakerID == block.speakerID {
+                blocks[blocks.count - 1].segments.append(contentsOf: block.segments)
+            } else {
+                blocks.append(block)
+            }
+        }
+    }
+
+    var displayedBlocks: [ConversationReadingBlock] {
+        showsTimestamps ? readingBlocks : paragraphBlocks
+    }
+
     func readingText(for block: ConversationReadingBlock) -> String {
         block.segments.map(\.text).joined().trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     var formattedText: String {
-        let text = readingBlocks.map { block in
-            let label = speakerDetectionRequested ? " \(block.speakerID.map { speakerName(for: $0) } ?? "Needs review"):" : ""
+        let text = displayedBlocks.map { block in
             let passage = block.segments.map { segment in
                 guard speakerDetectionRequested && segment.speakerID == nil else { return segment.text }
                 let trailing = String(segment.text.reversed().prefix(while: \.isWhitespace).reversed())
                 return String(segment.text.dropLast(trailing.count)) + "†" + trailing
             }.joined().trimmingCharacters(in: .whitespacesAndNewlines)
-            return "[\(Self.timestamp(block.start))]\(label) \(passage)"
-        }.joined(separator: "\n")
+            if showsTimestamps {
+                let label = speakerDetectionRequested
+                    ? " \(block.speakerID.map { speakerName(for: $0) } ?? "Needs review"):" : ""
+                return "[\(Self.timestamp(block.start))]\(label) \(passage)"
+            }
+            if speakerDetectionRequested {
+                return "\(block.speakerID.map { speakerName(for: $0) } ?? "Needs review"): \(passage)"
+            }
+            return passage
+        }.joined(separator: showsTimestamps ? "\n" : "\n\n")
         return unassignedCount > 0 ? text + "\n\n† Speaker attribution needs review for the marked words." : text
     }
 
