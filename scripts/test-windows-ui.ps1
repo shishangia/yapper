@@ -96,7 +96,10 @@ try {
     if (!$pill) { throw 'Floating recorder did not appear' }
     Capture-Window $pill 'Dark-recorder'
     $restored = Get-Content (Join-Path $testRoot 'library.json') -Raw | ConvertFrom-Json
-    if ($restored.Preferences.Theme -ne 'Dark' -or !$restored.Preferences.IncludeTimestamps -or $restored.Recordings.Count -ne 1 -or $restored.Recordings[0].Conversation.TimestampsVisible) { throw 'Relaunch changed theme, timestamps, or library' }
+    if ($restored.Preferences.Theme -ne 'Dark') { throw "Theme did not survive relaunch: $($restored.Preferences.Theme)" }
+    if (!$restored.Preferences.IncludeTimestamps) { throw 'New-transcript timestamp preference did not survive relaunch' }
+    if ($restored.Recordings.Count -ne 1) { throw "Library count changed on relaunch: $($restored.Recordings.Count)" }
+    if ($restored.Recordings[0].Conversation.TimestampsVisible -ne $false) { throw "Recording timestamp view did not persist: $($restored.Recordings[0].Conversation.TimestampsVisible)" }
     Write-Host 'PASS sidebar, light/dark themes, persistence, floating recorder, history and editor'
 } finally {
     if (!$process.HasExited) { Stop-Process -Id $process.Id }
