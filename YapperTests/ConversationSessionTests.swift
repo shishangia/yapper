@@ -35,11 +35,26 @@ final class ConversationSessionTests: XCTestCase {
         XCTAssertTrue(reopened.includeTimestamps)
     }
 
+    func testHinglishLanguageIsDefaultAndPersists() throws {
+        let suite = "Yapper-Session-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set("openai_whisper-large-v3", forKey: ModelSelection.defaultsKey)
+        let first = ConversationSession(history: HistoryService(defaults: defaults), defaults: defaults)
+        XCTAssertEqual(first.language, "hinglish")
+        XCTAssertEqual(first.selectedModel, AIModel.hinglishVariant)
+        first.selectLanguage("zh")
+        let reopened = ConversationSession(history: HistoryService(defaults: defaults), defaults: defaults)
+        XCTAssertEqual(reopened.language, "zh")
+        XCTAssertEqual(reopened.selectedModel, "openai_whisper-large-v3")
+    }
+
     func testSessionOutlivesItsViewsAndSavesOnce() async throws {
         let suite = "Yapper-Session-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set("openai_whisper-large-v3_turbo", forKey: ModelSelection.defaultsKey)
+        defaults.set("auto", forKey: "transcriptionLanguage")
         let history = HistoryService(defaults: defaults)
         let started = expectation(description: "processing started")
         let processor = WaitingProcessor(started: started)
@@ -70,6 +85,7 @@ final class ConversationSessionTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set("openai_whisper-large-v3_turbo", forKey: ModelSelection.defaultsKey)
+        defaults.set("auto", forKey: "transcriptionLanguage")
         let history = HistoryService(defaults: defaults)
         let started = expectation(description: "processing started")
         let processor = WaitingProcessor(started: started)

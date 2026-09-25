@@ -4,17 +4,21 @@ import SwiftUI
 struct AIModelsView: View {
     @ObservedObject private var downloadService = ModelDownloadService.shared
     @AppStorage(ModelSelection.defaultsKey) private var selectedModel: String = ModelSelection.none
+    @AppStorage("transcriptionLanguage") private var transcriptionLanguage = ModelSelection.defaultLanguage
     @AppStorage("modelUseCase") private var useCaseRaw: String = AIModel.UseCase.dictation.rawValue
 
     private var capability: DeviceCapability { .current }
     private var useCase: AIModel.UseCase { AIModel.UseCase(rawValue: useCaseRaw) ?? .dictation }
     private var recommendedModel: AIModel { AIModel.recommendedModel(for: capability, useCase: useCase) }
     private var selectedModelObject: AIModel? {
-        AIModel.availableModels.first { $0.variant == selectedModel }
+        let variant = ModelSelection.displayedVariant(selectedModel, language: transcriptionLanguage)
+        return AIModel.availableModels.first { $0.variant == variant }
     }
 
     private var engineGroups: [(title: String, subtitle: String, models: [AIModel])] {
         [
+            ("Hinglish", "Hindi + English · natural Latin-script output",
+             AIModel.availableModels.filter(\.isHinglish)),
             ("Parakeet", "NVIDIA · on-device speech recognition", visibleModels(for: .parakeet)),
             ("Whisper", "OpenAI · on-device speech recognition", visibleModels(for: .whisper)),
         ]
@@ -22,7 +26,9 @@ struct AIModelsView: View {
 
     private func visibleModels(for engine: TranscriptionEngineKind) -> [AIModel] {
         AIModel.models(for: engine).filter { model in
-            !model.isLegacy || model.variant == selectedModel || ModelStorage.transcriptionModelReady(model.variant)
+            !model.isSpecialized
+                && (!model.isLegacy || model.variant == selectedModel
+                    || ModelStorage.transcriptionModelReady(model.variant))
         }
     }
 

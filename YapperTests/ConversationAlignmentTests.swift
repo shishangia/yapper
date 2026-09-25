@@ -57,6 +57,19 @@ final class ConversationAlignmentTests: XCTestCase {
         XCTAssertEqual(result.plainText, " reply")
     }
 
+    func testWholeSegmentFallbackRequiresOneTurnToCoverIt() {
+        let segment = ConversationWord(
+            text: " Whole phrase", start: 1, end: 3, hasReliableTiming: false,
+            allowsWholeRangeAssignment: true)
+        let covered = ConversationAlignment.align(words: [segment],
+            turns: [.init(speakerID: "a", start: 0.5, end: 3.5)], detectSpeakers: true)
+        XCTAssertEqual(covered.segments.first?.speakerID, "1")
+        let boundary = ConversationAlignment.align(words: [segment], turns: [
+            .init(speakerID: "a", start: 0.5, end: 2), .init(speakerID: "b", start: 2, end: 3.5)
+        ], detectSpeakers: true)
+        XCTAssertNil(boundary.segments.first?.speakerID)
+    }
+
     func testPartialWordMetadataPreservesAllSourceText() {
         let text = "  um hello, missing words world!  "
         for words in [

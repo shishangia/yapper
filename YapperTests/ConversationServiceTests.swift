@@ -1,4 +1,5 @@
 import XCTest
+import FluidAudio
 @testable import Yapper
 
 @MainActor
@@ -134,5 +135,14 @@ final class ConversationServiceTests: XCTestCase {
             _ = try await processor.transcribe(audio, variant: "openai_whisper-large-v3_turbo", language: "auto", wordTimestamps: true) { _ in }
             XCTFail("Missing models must not trigger a download")
         } catch { XCTAssertEqual(error.localizedDescription, ConversationError.modelsMissing.localizedDescription) }
+    }
+
+    func testNemotronSpeakerModelContractUsesEightSpeakerCheckpoint() {
+        XCTAssertEqual(LocalConversationProcessor.speakerConfig.numSpeakers, 8)
+        XCTAssertEqual(LocalConversationProcessor.speakerConfig.modelFileName,
+            "Nemotron3Diarizer_fast128.mlmodelc")
+        XCTAssertTrue(LocalConversationProcessor.speakerModelURL.path.contains("nemotron-3-diarization"))
+        XCTAssertEqual(LocalConversationProcessor.speakerVersionURL.lastPathComponent,
+            ModelNames.Nemotron3.weightsVersionFile)
     }
 }

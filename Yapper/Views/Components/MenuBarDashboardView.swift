@@ -4,11 +4,13 @@ import SwiftUI
 struct MenuBarDashboardView: View {
     @ObservedObject private var history = HistoryService.shared
     @AppStorage(ModelSelection.defaultsKey) private var selectedModel = ModelSelection.none
+    @AppStorage("transcriptionLanguage") private var transcriptionLanguage = ModelSelection.defaultLanguage
     let openDashboard: () -> Void
     let quit: () -> Void
 
     private var modelName: String {
-        AIModel.availableModels.first { $0.variant == selectedModel }?.name ?? "Choose a model to start"
+        let variant = ModelSelection.resolvedVariant(selectedModel, language: transcriptionLanguage)
+        return AIModel.availableModels.first { $0.variant == variant }?.name ?? "Choose a model to start"
     }
 
     var body: some View {

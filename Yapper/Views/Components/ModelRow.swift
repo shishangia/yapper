@@ -4,6 +4,7 @@ import SwiftUI
 struct ModelRow: View {
     let model: AIModel
     @Binding var selectedModel: String
+    @AppStorage("transcriptionLanguage") private var transcriptionLanguage = ModelSelection.defaultLanguage
     var isRecommended: Bool = false
 
     @ObservedObject var downloadService = ModelDownloadService.shared
@@ -16,7 +17,9 @@ struct ModelRow: View {
     var progress: Double { downloadService.downloadProgress[model.variant] ?? 0 }
     var isDownloading: Bool { downloadService.isDownloading[model.variant] ?? false }
     var isDownloaded: Bool { progress >= 1 && ModelStorage.transcriptionModelReady(model.variant) }
-    var isActive: Bool { selectedModel == model.variant }
+    var isActive: Bool {
+        ModelSelection.displayedVariant(selectedModel, language: transcriptionLanguage) == model.variant
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -212,12 +215,18 @@ struct ModelRow: View {
         Task { @MainActor in
             _ = await downloadService.deleteModel(variant: model.variant)
             if selectedModel == model.variant { selectedModel = ModelSelection.none }
+            if model.isHinglish { transcriptionLanguage = "auto" }
             isDeletingModel = false
         }
     }
 
     private func loadAndSelectModel() {
-        selectedModel = model.variant
+        if model.isHinglish {
+            transcriptionLanguage = ModelSelection.defaultLanguage
+        } else {
+            selectedModel = model.variant
+            if transcriptionLanguage == ModelSelection.defaultLanguage { transcriptionLanguage = "auto" }
+        }
         transcription.warmSelectedModel()
     }
 }

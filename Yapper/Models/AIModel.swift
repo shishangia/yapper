@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct AIModel: Identifiable, Equatable {
+    static let hinglishVariant = "oriserve_whisper-hindi2hinglish-apex"
+
     var id: String { variant }
     let name: String
     let variant: String
@@ -22,16 +24,26 @@ struct AIModel: Identifiable, Equatable {
     /// Compatibility entry for an old model identifier. New installs should
     /// not be offered this download, but existing selections must keep working.
     var isLegacy: Bool = false
+    /// Specialist models are shown in the catalog but are not suggested as a
+    /// general-purpose default for languages they were not trained on.
+    var isSpecialized: Bool = false
+    var downloadRepository: String? = nil
+    var downloadRevision: String? = nil
+    var downloadFolder: String? = nil
 
     var languageSupportLabel: String {
-        isEnglishOnly ? "English-only" : "Multilingual"
+        if isHinglish { return "Hindi + English · Latin script" }
+        return isEnglishOnly ? "English-only" : "Multilingual"
     }
+
+    var isHinglish: Bool { variant == Self.hinglishVariant }
 
     var isEnglishOnly: Bool {
         englishOnlyOverride ?? variant.hasSuffix(".en")
     }
 
     func supports(language: String) -> Bool {
+        if isHinglish { return ["auto", "en", "hi", "hinglish", "mr", "mixed"].contains(language) }
         if language == "auto" { return true }
         if isEnglishOnly { return language == "en" }
         if engine == .parakeet {
@@ -73,6 +85,20 @@ struct AIModel: Identifiable, Equatable {
             accuracy: 9.5,
             expectedSizeBytes: 1_500_000_000,
             minimumRAMGB: 8
+        ),
+        AIModel(
+            name: "Whisper Hinglish Turbo",
+            variant: hinglishVariant,
+            details: "Hindi and English speech in natural Latin script. Tested locally on mixed Hinglish audio.",
+            size: "1.6 GB",
+            speed: 7.0,
+            accuracy: 8.8,
+            expectedSizeBytes: 1_500_000_000,
+            minimumRAMGB: 8,
+            isSpecialized: true,
+            downloadRepository: ModelStorage.hinglishRepository,
+            downloadRevision: ModelStorage.hinglishRevision,
+            downloadFolder: ModelStorage.hinglishFolder
         ),
         AIModel(
             name: "Whisper Medium",
@@ -203,7 +229,9 @@ struct AIModel: Identifiable, Equatable {
         for capability: DeviceCapability = .current,
         useCase: UseCase = .dictation
     ) -> AIModel {
-        let fits = availableModels.filter { !$0.isLegacy && capability.ramGB >= $0.minimumRAMGB }
+        let fits = availableModels.filter {
+            !$0.isLegacy && !$0.isSpecialized && capability.ramGB >= $0.minimumRAMGB
+        }
         let pool = fits.isEmpty ? availableModels : fits
         return pool.max {
             recommendationScore($0, capability: capability, useCase: useCase)

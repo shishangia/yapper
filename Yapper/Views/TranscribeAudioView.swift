@@ -35,6 +35,7 @@ struct TranscribeAudioView: View {
                             Text("Language").foregroundStyle(Color.textSecondary)
                             Picker("Spoken language", selection: $session.language) {
                                 Text("Detect automatically").tag("auto")
+                                Text("Hinglish · Latin script").tag("hinglish")
                                 Text("English").tag("en")
                                 Text("Hindi").tag("hi")
                                 Text("Gujarati").tag("gu")
@@ -42,6 +43,7 @@ struct TranscribeAudioView: View {
                                 Text("Hindi, Gujarati & English (experimental)").tag("mixed")
                             }
                             .labelsHidden().accessibilityIdentifier("conversationLanguage")
+                            .onChange(of: session.language) { session.selectLanguage(session.language) }
                         }
                         GridRow {
                             Text("Speaker labels").foregroundStyle(Color.textSecondary)
@@ -52,7 +54,7 @@ struct TranscribeAudioView: View {
                             GridRow {
                                 Text("Participants").foregroundStyle(Color.textSecondary)
                                 Picker("Speakers", selection: $session.singleSpeaker) {
-                                    Text("Automatic · up to 4 speakers").tag(false)
+                                    Text("Automatic · up to 8 speakers").tag(false)
                                     Text("One speaker").tag(true)
                                 }
                                 .labelsHidden().accessibilityIdentifier("speakerMode")
@@ -83,7 +85,7 @@ struct TranscribeAudioView: View {
                                     .buttonStyle(.stPrimary).accessibilityIdentifier("importConversation")
                                 Button("Record microphone", systemImage: "mic", action: session.startRecording)
                                     .buttonStyle(.stSecondary).accessibilityIdentifier("startConversationRecording")
-                            } else if selectedModel.isEmpty {
+                            } else if session.selectedModel.isEmpty {
                                 Text("Choose a model in AI Models to get started.")
                                     .font(Typography.bodySmall).foregroundStyle(Color.textSecondary)
                             } else {
@@ -136,6 +138,7 @@ struct TranscribeAudioView: View {
         }
         .onAppear { session.refreshModels() }
         .onChange(of: selectedModel) { session.refreshModels() }
+        .onChange(of: session.language) { session.refreshModels() }
         .onChange(of: session.detectSpeakers) { session.refreshModels() }
         .onChange(of: session.singleSpeaker) { session.refreshModels() }
     }

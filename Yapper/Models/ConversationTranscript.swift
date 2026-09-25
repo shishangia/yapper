@@ -147,6 +147,10 @@ struct ConversationWord: Equatable, Sendable {
     let start: TimeInterval
     let end: TimeInterval
     var hasReliableTiming = true
+    /// A model without word-alignment heads may still provide a trustworthy
+    /// timestamp for the whole segment. Attribute it only when one speaker turn
+    /// covers that complete range.
+    var allowsWholeRangeAssignment = false
 }
 
 struct ConversationSpeakerTurn: Sendable {
@@ -194,7 +198,8 @@ enum ConversationAlignment {
         var segments: [ConversationSegment] = []
         for word in words where !word.text.isEmpty {
             var speaker: String?
-            if detectSpeakers, word.hasReliableTiming, word.start.isFinite, word.end.isFinite, word.end > word.start {
+            if detectSpeakers, (word.hasReliableTiming || word.allowsWholeRangeAssignment),
+               word.start.isFinite, word.end.isFinite, word.end > word.start {
                 let intersecting = validTurns.filter { min($0.end, word.end) > max($0.start, word.start) }
                 let speakers = Set(intersecting.map(\.speakerID))
                 // Never force overlapping voices or a boundary word onto one speaker.
@@ -229,7 +234,8 @@ enum ConversationAlignment {
             if !whitespaceOnly {
                 output.append(ConversationWord(text: gap, start: output.last?.end ?? start, end: word.start, hasReliableTiming: false))
             }
-            output.append(ConversationWord(text: (whitespaceOnly ? gap : "") + String(text[range]), start: word.start, end: word.end, hasReliableTiming: word.hasReliableTiming))
+            output.append(ConversationWord(text: (whitespaceOnly ? gap : "") + String(text[range]), start: word.start, end: word.end,
+                hasReliableTiming: word.hasReliableTiming, allowsWholeRangeAssignment: word.allowsWholeRangeAssignment))
             cursor = range.upperBound
         }
         if cursor < text.endIndex {

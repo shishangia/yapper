@@ -93,9 +93,9 @@ struct GeneralSettingsTab: View {
         true
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon: Bool = true
     @AppStorage("alwaysShowRecorderPill") private var alwaysShowRecorderPill: Bool = false
-    @AppStorage("transcriptionLanguage") private var transcriptionLanguage: String = "auto"
+    @AppStorage("transcriptionLanguage") private var transcriptionLanguage: String = ModelSelection.defaultLanguage
     @AppStorage("recentTranscriptionLanguages") private var recentLanguagesString: String = ""
-    @AppStorage("enableAutoEdit") private var enableAutoEdit: Bool = false
+    @AppStorage("enableAutoEdit") private var enableAutoEdit: Bool = true
     @AppStorage("trimDictationPeriod") private var trimDictationPeriod = true
 
     private var recentLanguageCodes: [String] {
@@ -327,6 +327,7 @@ struct GeneralSettingsTab: View {
                             .foregroundStyle(Color.textPrimary)
                         Spacer()
                         Menu {
+                            Button("Hinglish (Latin script)") { transcriptionLanguage = "hinglish" }
                             Button("Auto-detect spoken language") { transcriptionLanguage = "auto" }
                             if !recentLanguageCodes.isEmpty {
                                 Divider()
@@ -363,7 +364,7 @@ struct GeneralSettingsTab: View {
                         .menuStyle(.borderlessButton)
                     }
 
-                    Text("This is a hint for transcription. It does not choose an output language and it does not translate the result.")
+                    Text("Hinglish uses a dedicated local model to write Hindi and English in Latin script. Other choices are spoken-language hints and do not translate.")
                         .font(Typography.captionSmall)
                         .foregroundStyle(Color.textMuted)
                         .padding(.top, 4)
@@ -453,6 +454,7 @@ struct GeneralSettingsTab: View {
     }
 
     private func displayName(for code: String) -> String {
+        if code == "hinglish" { return "Hinglish (Latin script)" }
         if code == "auto" { return "Auto-detect" }
         return Self.whisperLanguages.first(where: { $0.code == code })?.name ?? code
     }
