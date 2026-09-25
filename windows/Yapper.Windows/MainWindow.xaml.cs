@@ -226,7 +226,7 @@ public partial class MainWindow : Window
     }
     private void StartRecording(bool dictation, IntPtr target)
     {
-        if (!models.Ready(Chosen)) { Status.Text = "Download the selected model first."; ShowWindow(); return; }
+        if (DownloadMissingModel(dictation ? "Dictation" : "Recording")) return;
         if (!Begin()) return;
         options = new(Chosen, SpokenLanguage, !dictation && DetectSpeakers.IsChecked == true, !dictation && SingleSpeaker.IsChecked == true,
             dictation, IncludeTimestamps.IsChecked == true, target, library.Data.Preferences, library.Data.Dictionary.ToArray());
@@ -241,6 +241,17 @@ public partial class MainWindow : Window
             RecordButton.Content = "Stop and transcribe";
         }
         catch (Exception error) { Status.Text = error.Message; Finish(); }
+    }
+    private bool DownloadMissingModel(string work)
+    {
+        if (models.Ready(Chosen)) return false;
+        ShowWindow();
+        if (jobs.IsBusy || updateBusy) { Status.Text = "Wait for the current job or update to finish."; return true; }
+        var message = $"Downloading {Chosen.Name}. {work} will work once it finishes.";
+        tray.ShowBalloonTip(6000, "Yapper", message, Forms.ToolTipIcon.Info);
+        DownloadModels(this, new RoutedEventArgs());
+        Status.Text = message;
+        return true;
     }
     private async Task WarmDuringRecording(JobOptions job)
     {
@@ -273,7 +284,7 @@ public partial class MainWindow : Window
     }
     private async void ImportAudio(object sender, RoutedEventArgs e)
     {
-        if (jobs.IsBusy) return;
+        if (jobs.IsBusy || DownloadMissingModel("Transcription")) return;
         var dialog = new Microsoft.Win32.OpenFileDialog { Filter = "Audio|*.wav;*.mp3;*.m4a;*.wma;*.aiff|All files|*.*" };
         if (dialog.ShowDialog(this) != true || !Begin()) return;
         options = new(Chosen, SpokenLanguage, DetectSpeakers.IsChecked == true, SingleSpeaker.IsChecked == true, false,
