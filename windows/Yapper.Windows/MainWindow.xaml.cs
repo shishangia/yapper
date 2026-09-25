@@ -260,7 +260,7 @@ public partial class MainWindow : Window
         {
             await audio.Stop();
             cancellation!.Token.ThrowIfCancellationRequested();
-            await Process(path);
+            await Process(path, true);
             completed = true;
         }
         catch (OperationCanceledException) { Status.Text = "Canceled. No transcript was saved."; }
@@ -279,19 +279,20 @@ public partial class MainWindow : Window
         options = new(Chosen, SpokenLanguage, DetectSpeakers.IsChecked == true, SingleSpeaker.IsChecked == true, false,
             IncludeTimestamps.IsChecked == true, IntPtr.Zero,
             library.Data.Preferences, library.Data.Dictionary.ToArray());
-        try { await Process(dialog.FileName); }
+        try { await Process(dialog.FileName, false); }
         catch (OperationCanceledException) { Status.Text = "Canceled. No transcript was saved."; }
         catch (Exception error) { Status.Text = "Could not transcribe. " + error.Message; }
         finally { Finish(); }
     }
-    private async Task Process(string source)
+    private async Task Process(string source, bool retained)
     {
         var job = options!;
         var id = activeId;
         var token = cancellation!.Token;
+        // Imports always copy, even from the Recordings folder: the source may be another history item's audio.
         var recordings = Path.GetFullPath(Path.Combine(library.Root, "Recordings")) + Path.DirectorySeparatorChar;
         var sourcePath = Path.GetFullPath(source);
-        var sourceIsRetainedRecording = sourcePath.StartsWith(recordings, StringComparison.OrdinalIgnoreCase);
+        var sourceIsRetainedRecording = retained && sourcePath.StartsWith(recordings, StringComparison.OrdinalIgnoreCase);
         var destination = sourceIsRetainedRecording
             ? sourcePath : Path.Combine(library.Root, "Recordings", Guid.NewGuid().ToString("N") + ".wav");
         var saved = false;
@@ -339,7 +340,7 @@ public partial class MainWindow : Window
     {
         if (retry is not { } retained || !Begin()) return;
         options = retained.Options;
-        try { await Process(retained.Path); }
+        try { await Process(retained.Path, true); }
         catch (OperationCanceledException) { Status.Text = "Canceled. No transcript was saved."; }
         catch (Exception error) { Status.Text = "Retry failed. " + error.Message; }
         finally { Finish(); }
