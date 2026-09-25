@@ -226,7 +226,7 @@ public partial class MainWindow : Window
     }
     private void StartRecording(bool dictation, IntPtr target)
     {
-        if (!models.Ready(Chosen)) { Status.Text = "Download the selected model first."; ShowWindow(); return; }
+        if (DownloadMissingModel(dictation ? "Dictation" : "Recording")) return;
         if (!Begin()) return;
         options = new(Chosen, SpokenLanguage, !dictation && DetectSpeakers.IsChecked == true, !dictation && SingleSpeaker.IsChecked == true,
             dictation, IncludeTimestamps.IsChecked == true, target, library.Data.Preferences, library.Data.Dictionary.ToArray());
@@ -241,6 +241,17 @@ public partial class MainWindow : Window
             RecordButton.Content = "Stop and transcribe";
         }
         catch (Exception error) { Status.Text = error.Message; Finish(); }
+    }
+    private bool DownloadMissingModel(string work)
+    {
+        if (models.Ready(Chosen)) return false;
+        ShowWindow();
+        if (jobs.IsBusy || updateBusy) { Status.Text = "Wait for the current job or update to finish."; return true; }
+        var message = $"Downloading {Chosen.Name}. {work} will work once it finishes.";
+        tray.ShowBalloonTip(6000, "Yapper", message, Forms.ToolTipIcon.Info);
+        DownloadModels(this, new RoutedEventArgs());
+        Status.Text = message;
+        return true;
     }
     private async Task WarmDuringRecording(JobOptions job)
     {
@@ -260,7 +271,7 @@ public partial class MainWindow : Window
         {
             await audio.Stop();
             cancellation!.Token.ThrowIfCancellationRequested();
-            await Process(path);
+            await Process(path, true);
             completed = true;
         }
         catch (OperationCanceledException) { Status.Text = "Canceled. No transcript was saved."; }
@@ -273,25 +284,26 @@ public partial class MainWindow : Window
     }
     private async void ImportAudio(object sender, RoutedEventArgs e)
     {
-        if (jobs.IsBusy) return;
+        if (jobs.IsBusy || DownloadMissingModel("Transcription")) return;
         var dialog = new Microsoft.Win32.OpenFileDialog { Filter = "Audio|*.wav;*.mp3;*.m4a;*.wma;*.aiff|All files|*.*" };
         if (dialog.ShowDialog(this) != true || !Begin()) return;
         options = new(Chosen, SpokenLanguage, DetectSpeakers.IsChecked == true, SingleSpeaker.IsChecked == true, false,
             IncludeTimestamps.IsChecked == true, IntPtr.Zero,
             library.Data.Preferences, library.Data.Dictionary.ToArray());
-        try { await Process(dialog.FileName); }
+        try { await Process(dialog.FileName, false); }
         catch (OperationCanceledException) { Status.Text = "Canceled. No transcript was saved."; }
         catch (Exception error) { Status.Text = "Could not transcribe. " + error.Message; }
         finally { Finish(); }
     }
-    private async Task Process(string source)
+    private async Task Process(string source, bool retained)
     {
         var job = options!;
         var id = activeId;
         var token = cancellation!.Token;
+        // Imports always copy, even from the Recordings folder: the source may be another history item's audio.
         var recordings = Path.GetFullPath(Path.Combine(library.Root, "Recordings")) + Path.DirectorySeparatorChar;
         var sourcePath = Path.GetFullPath(source);
-        var sourceIsRetainedRecording = sourcePath.StartsWith(recordings, StringComparison.OrdinalIgnoreCase);
+        var sourceIsRetainedRecording = retained && sourcePath.StartsWith(recordings, StringComparison.OrdinalIgnoreCase);
         var destination = sourceIsRetainedRecording
             ? sourcePath : Path.Combine(library.Root, "Recordings", Guid.NewGuid().ToString("N") + ".wav");
         var saved = false;
@@ -339,7 +351,7 @@ public partial class MainWindow : Window
     {
         if (retry is not { } retained || !Begin()) return;
         options = retained.Options;
-        try { await Process(retained.Path); }
+        try { await Process(retained.Path, true); }
         catch (OperationCanceledException) { Status.Text = "Canceled. No transcript was saved."; }
         catch (Exception error) { Status.Text = "Retry failed. " + error.Message; }
         finally { Finish(); }

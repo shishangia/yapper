@@ -277,7 +277,7 @@ struct MiniRecorderView: View {
         switch displayPhase {
         case .idle: return 58
         case .warming: return 200
-        case .processing: return 210
+        case .processing: return statusMessage.count > 28 ? 490 : 210  // long notices use the feedback width
         case .feedback: return 490
         case .recording: return expanded ? 460 : 250
         }
@@ -594,7 +594,12 @@ struct MiniRecorderView: View {
         guard let snapshot = job.snapshot, job.phase == .preparing else { return }
         guard !snapshot.model.isEmpty else { showError("No model selected", for: snapshot); return }
         guard ModelStorage.transcriptionModelReady(snapshot.model) else {
-            showError("Model not downloaded", for: snapshot)
+            // Start (or keep) the download instead of recording audio no model can transcribe yet.
+            let downloads = ModelDownloadService.shared
+            downloads.downloadModel(variant: snapshot.model)
+            let name = AIModel.availableModels.first { $0.variant == snapshot.model }?.name ?? "model"
+            let percent = downloads.downloadProgress[snapshot.model].map { " \(Int($0 * 100))%" } ?? ""
+            showError("Downloading \(name)\(percent). Dictate again when it finishes.", for: snapshot)
             return
         }
         do { try TranscriptionManager.validate(variant: snapshot.model, language: snapshot.language) }

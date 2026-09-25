@@ -214,21 +214,39 @@ final class WhisperServiceTests: XCTestCase {
         XCTAssertFalse(hinglish.detectLanguage)
     }
 
-    func testHinglishDefaultDoesNotReplaceExistingGeneralModelSelection() throws {
-        let suite = "Yapper-Model-Defaults-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        ModelSelection.registerDefaults(defaults)
-        XCTAssertEqual(defaults.string(forKey: "transcriptionLanguage"), "hinglish")
-        XCTAssertTrue(defaults.bool(forKey: "enableAutoEdit"))
-        XCTAssertNil(defaults.object(forKey: ModelSelection.defaultsKey))
-        defaults.set("openai_whisper-large-v3", forKey: ModelSelection.defaultsKey)
-        defaults.set("auto", forKey: "transcriptionLanguage")
-        defaults.set(false, forKey: "enableAutoEdit")
-        ModelSelection.registerDefaults(defaults)
-        XCTAssertEqual(defaults.string(forKey: ModelSelection.defaultsKey), "openai_whisper-large-v3")
-        XCTAssertEqual(defaults.string(forKey: "transcriptionLanguage"), "auto")
-        XCTAssertFalse(defaults.bool(forKey: "enableAutoEdit"))
+    func testRegisteredDefaultsKeepUpgradersAndExplicitChoices() throws {
+        func profile(_ values: [String: Any]) throws -> (UserDefaults, String) {
+            let suite = "Yapper-Model-Defaults-\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            values.forEach { defaults.set($1, forKey: $0) }
+            ModelSelection.registerDefaults(defaults, domain: suite)
+            return (defaults, suite)
+        }
+
+        let (fresh, freshSuite) = try profile([:])
+        defer { fresh.removePersistentDomain(forName: freshSuite) }
+        XCTAssertEqual(fresh.string(forKey: "transcriptionLanguage"), "hinglish")
+        XCTAssertTrue(fresh.bool(forKey: "enableAutoEdit"))
+        XCTAssertNil(fresh.persistentDomain(forName: freshSuite)?["transcriptionLanguage"])
+        // Finishing onboarding after the first launch must not turn a fresh install into an upgrader.
+        fresh.set(true, forKey: "hasCompletedOnboarding")
+        ModelSelection.registerDefaults(fresh, domain: freshSuite)
+        XCTAssertEqual(fresh.string(forKey: "transcriptionLanguage"), "hinglish")
+
+        let (upgrader, upgraderSuite) = try profile(
+            ["hasCompletedOnboarding": true, ModelSelection.defaultsKey: "openai_whisper-large-v3"])
+        defer { upgrader.removePersistentDomain(forName: upgraderSuite) }
+        XCTAssertEqual(upgrader.string(forKey: "transcriptionLanguage"), "auto")
+        XCTAssertFalse(upgrader.bool(forKey: "enableAutoEdit"))
+        XCTAssertEqual(upgrader.string(forKey: ModelSelection.defaultsKey), "openai_whisper-large-v3")
+        XCTAssertEqual(ModelSelection.selectedVariant(upgrader), "openai_whisper-large-v3")
+
+        let (explicit, explicitSuite) = try profile(["hasCompletedOnboarding": true,
+            "transcriptionLanguage": "hinglish", "enableAutoEdit": true])
+        defer { explicit.removePersistentDomain(forName: explicitSuite) }
+        XCTAssertEqual(explicit.string(forKey: "transcriptionLanguage"), "hinglish")
+        XCTAssertTrue(explicit.bool(forKey: "enableAutoEdit"))
+
         XCTAssertEqual(ModelSelection.resolvedVariant("openai_whisper-large-v3", language: "hinglish"),
             AIModel.hinglishVariant)
         XCTAssertEqual(ModelSelection.resolvedVariant("openai_whisper-large-v3", language: "zh"),
@@ -236,16 +254,38 @@ final class WhisperServiceTests: XCTestCase {
     }
 
     func testSharedDictationCleanupFormatsExplicitCommands() {
-        let raw = "um this is a sentence. another one new paragraph bullet point apples bullet point bananas"
+        let raw = "um this is a sentence. another one, new paragraph, bullet point apples bullet point bananas"
         XCTAssertEqual(DictationCleanup.apply(to: raw, enabled: true),
             "This is a sentence. Another one\n\n• Apples\n• Bananas")
         XCTAssertEqual(DictationCleanup.apply(
             to: "shopping list number one milk number two eggs number three tea", enabled: true),
             "Shopping list\n1. Milk\n2. Eggs\n3. Tea")
-        XCTAssertEqual(DictationCleanup.apply(to: "first idea scratch that corrected idea", enabled: true),
+        XCTAssertEqual(DictationCleanup.apply(to: "first idea, scratch that, corrected idea", enabled: true),
             "Corrected idea")
-        XCTAssertEqual(DictationCleanup.apply(to: "Keep this sentence. wrong words scratch that corrected words", enabled: true),
+        XCTAssertEqual(DictationCleanup.apply(to: "Keep this sentence. wrong words, scratch that. corrected words", enabled: true),
             "Keep this sentence. Corrected words")
+    }
+
+    func testCleanupCommandsRequireTheirOwnClause() {
+        XCTAssertEqual(DictationCleanup.apply(to: "I need to scratch that itch", enabled: true),
+            "I need to scratch that itch")
+        XCTAssertEqual(DictationCleanup.apply(to: "we launched a new line of shoes", enabled: true),
+            "We launched a new line of shoes")
+        XCTAssertEqual(DictationCleanup.apply(to: "we need a new paragraph for this", enabled: true),
+            "We need a new paragraph for this")
+        XCTAssertEqual(DictationCleanup.apply(to: "first line. New line. second line", enabled: true),
+            "First line.\nSecond line")
+        XCTAssertEqual(DictationCleanup.apply(to: "Scratch that. Start over", enabled: true), "Start over")
+        XCTAssertEqual(DictationCleanup.apply(to: "Keep this. Wrong words. Scratch that. Right words.", enabled: true),
+            "Keep this. Right words.")
+        XCTAssertEqual(DictationCleanup.apply(to: "first idea, scratch that", enabled: true), "")
+        XCTAssertEqual(DictationCleanup.apply(to: "email foo@example.com scratch that", enabled: true),
+            "Email foo@example.com scratch that")
+        XCTAssertEqual(DictationCleanup.apply(
+            to: "Write to foo@example.com. Wrong address, scratch that, use bar@example.com", enabled: true),
+            "Write to foo@example.com. Use bar@example.com")
+        XCTAssertEqual(DictationCleanup.apply(to: "Contact foo@example.com, scratch that, call me", enabled: true),
+            "Call me")
     }
 
     func testCleanupDoesNotGuessAmbiguousFillersOrLists() {

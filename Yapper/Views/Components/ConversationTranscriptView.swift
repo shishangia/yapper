@@ -109,8 +109,10 @@ struct ConversationTranscriptView: View {
                             Text(readingText(block, markUncertainty: conversation.speakerDetectionRequested))
                                 .font(Typography.bodyMedium).foregroundStyle(Color.textPrimary)
                                 .textSelection(.enabled).lineSpacing(5)
-                                .help(block.segments.contains { $0.speakerID == nil } && conversation.speakerDetectionRequested
-                                    ? "Underlined words have uncertain speaker attribution. Review to correct them." : "")
+                                .if(block.segments.contains { $0.speakerID == nil } && conversation.speakerDetectionRequested) {
+                                    $0.help("Underlined words have uncertain speaker attribution. Review to correct them.")
+                                        .accessibilityLabel("Needs review. \(block.segments.map(\.text).joined())")
+                                }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 6)
@@ -136,7 +138,7 @@ struct ConversationTranscriptView: View {
                                     .accessibilityLabel("Rename \(conversation.speakerName(for: id))")
                                     .accessibilityIdentifier("renameSpeaker-\(id)")
                                 } else {
-                                    Text("Speaker uncertain").foregroundStyle(Color.textSecondary)
+                                    Text("Needs review").foregroundStyle(Color.textSecondary)
                                 }
                             }
                             Spacer()
@@ -190,7 +192,7 @@ struct ConversationTranscriptView: View {
                 TextEditor(text: $editedText).frame(minHeight: 160).accessibilityIdentifier("editedTranscript")
                 if let conversation, conversation.speakerDetectionRequested {
                     Picker("Speaker", selection: $editedSpeaker) {
-                        Text("Speaker uncertain").tag("")
+                        Text("Needs review").tag("")
                         ForEach(conversation.speakerIDs, id: \.self) { id in
                             Text(conversation.speakerName(for: id)).tag(id)
                         }
@@ -293,7 +295,7 @@ struct ConversationTranscriptView: View {
     }
 
     @ViewBuilder private var errorMessage: some View {
-        if let error { Text(error).font(Typography.bodySmall).foregroundStyle(.red) }
+        if let error { Text(error).font(Typography.bodySmall).foregroundStyle(Color.accentError) }
     }
 
     private func saveName() {

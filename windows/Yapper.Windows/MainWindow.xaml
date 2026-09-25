@@ -17,7 +17,7 @@
           <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="232"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
             <DockPanel Margin="0,30,0,0">
               <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="22,12,18,28"><Image Source="Yapper.ico" Width="40" Height="40" Margin="0,0,10,0"/><TextBlock Text="Yapper" Foreground="{DynamicResource Ink}" FontWeight="SemiBold" FontSize="22" VerticalAlignment="Center"/></StackPanel>
-              <StackPanel DockPanel.Dock="Bottom" Margin="22,16,22,20"><Border Height="1" Background="{DynamicResource SubtleBorder}" Margin="0,0,0,14"/><TextBlock Text="Shivam" FontWeight="SemiBold" Foreground="{DynamicResource SecondaryInk}"/><TextBlock Text="Windows 1.1.1" Style="{StaticResource Caption}" Margin="0,6,0,0"/></StackPanel>
+              <StackPanel DockPanel.Dock="Bottom" Margin="22,16,22,20"><Border Height="1" Background="{DynamicResource SubtleBorder}" Margin="0,0,0,14"/><TextBlock Text="Shivam" FontWeight="SemiBold" Foreground="{DynamicResource SecondaryInk}"/><TextBlock Text="Windows 1.1.2" Style="{StaticResource Caption}" Margin="0,6,0,0"/></StackPanel>
               <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained"/></ScrollViewer>
             </DockPanel>
             <ContentPresenter Grid.Column="1" x:Name="PART_SelectedContentHost" ContentSource="SelectedContent" Margin="0"/>
@@ -41,7 +41,7 @@
             <TextBlock Text="Local conversation transcription" Style="{StaticResource SectionTitle}"/><TextBlock Text="On your computer · no dictionary replacements" Style="{StaticResource Caption}" Margin="0,0,0,20"/>
             <TextBlock Text="Transcription model" Foreground="{DynamicResource SecondaryInk}"/><ComboBox x:Name="ModelChoice" SelectionChanged="SelectModel" AutomationProperties.Name="Transcription model"/>
             <TextBlock Text="Language" Foreground="{DynamicResource SecondaryInk}" Margin="0,8,0,0"/><ComboBox x:Name="LanguageChoice" SelectionChanged="ChangePreferences" AutomationProperties.Name="Spoken language"><ComboBoxItem Content="Hinglish · Latin script" Tag="hinglish"/><ComboBoxItem Content="Auto-detect" Tag="auto"/><ComboBoxItem Content="English" Tag="en"/><ComboBoxItem Content="Hindi" Tag="hi"/><ComboBoxItem Content="Gujarati" Tag="gu"/><ComboBoxItem Content="Chinese" Tag="zh"/></ComboBox>
-            <WrapPanel><CheckBox x:Name="DetectSpeakers" Content="Detect speakers · up to 8" IsChecked="True"/><CheckBox x:Name="SingleSpeaker" Content="One speaker (faster)"/></WrapPanel>
+            <WrapPanel><CheckBox x:Name="DetectSpeakers" Content="Detect speakers · up to 8" IsChecked="True"/><CheckBox x:Name="SingleSpeaker" Content="One speaker (faster)" IsEnabled="{Binding IsChecked, ElementName=DetectSpeakers}"/></WrapPanel>
             <CheckBox x:Name="IncludeTimestamps" Content="Include timestamps in transcript" Checked="ChangePreferences" Unchecked="ChangePreferences" AutomationProperties.AutomationId="includeTimestamps"/>
             <TextBlock Text="You can switch between paragraph and timestamped views after processing. Timing data is always retained." Style="{StaticResource Caption}"/>
             <TextBlock Text="Mixed languages and overlapping speech can produce errors. Review and edit the words and speaker labels after processing." Style="{StaticResource Caption}" Margin="0,4,0,14"/>

@@ -7,7 +7,7 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>1.1.1</Version>
+    <Version>1.1.2</Version>
     <AssemblyName>Yapper</AssemblyName>
     <ApplicationIcon>Yapper.ico</ApplicationIcon>
     <RootNamespace>Yapper.Windows</RootNamespace>

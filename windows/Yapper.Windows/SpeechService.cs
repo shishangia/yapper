@@ -17,6 +17,7 @@ public sealed class SpeechService(ModelStore models) : IDisposable
     private string? whisperModel;
     private string? whisperLanguage;
     private bool whisperDetailed;
+    private bool whisperCpu;
     private IProgress<(string Stage, double Value)>? whisperProgress;
     private OfflineRecognizer? parakeetRecognizer;
     private string? parakeetModel;
@@ -53,8 +54,20 @@ public sealed class SpeechService(ModelStore models) : IDisposable
                 : EnsureWhisper(model, language, speakers && !single, progress);
             var preparationSeconds = prepared ? prepare.Elapsed.TotalSeconds : 0;
             var inference = Stopwatch.StartNew();
-            var words = await Task.Run(async () => model.Id == "parakeet-v3"
-                ? Parakeet(samples) : await Whisper(samples), CancellationToken.None);
+            List<SpeechWord> words;
+            try
+            {
+                words = await Task.Run(async () => model.Id == "parakeet-v3"
+                    ? Parakeet(samples) : await Whisper(samples), CancellationToken.None);
+            }
+            catch (Exception error) when (model.Id != "parakeet-v3" && !whisperCpu && error is not OperationCanceledException)
+            {
+                // The GPU backend can fail at inference time; retry once on CPU and stay there for this session.
+                whisperCpu = true;
+                DisposeWhisper();
+                EnsureWhisper(model, language, speakers && !single, progress);
+                words = await Task.Run(() => Whisper(samples), CancellationToken.None);
+            }
             var inferenceSeconds = inference.Elapsed.TotalSeconds;
             cancellation.ThrowIfCancellationRequested();
             var transcript = Alignment.Align(words, [], speakers, single);
@@ -66,7 +79,7 @@ public sealed class SpeechService(ModelStore models) : IDisposable
                     if (!models.SpeakersReady) throw new InvalidOperationException("Speaker models have not been downloaded.");
                     progress.Report(("Separating speakers locally", 0));
                     var speakerClock = Stopwatch.StartNew();
-                    var turns = await Task.Run(() => Diarize(samples, progress), CancellationToken.None);
+                    var turns = await Task.Run(() => Diarize(samples, progress, cancellation), CancellationToken.None);
                     speakerSeconds = speakerClock.Elapsed.TotalSeconds;
                     cancellation.ThrowIfCancellationRequested();
                     transcript = Alignment.Align(words, turns, true);
@@ -94,21 +107,33 @@ public sealed class SpeechService(ModelStore models) : IDisposable
         var loadedModel = whisperModel != model.Id || whisperFactory is null;
         whisperProcessor?.Dispose();
         whisperProcessor = null;
-        if (loadedModel)
+        try
         {
-            whisperFactory?.Dispose();
-            whisperFactory = WhisperFactory.FromPath(models.PathFor(model, model.Required[0]));
+            if (loadedModel)
+            {
+                whisperFactory?.Dispose();
+                whisperFactory = null;
+                whisperFactory = WhisperFactory.FromPath(models.PathFor(model, model.Required[0]),
+                    new WhisperFactoryOptions { UseGpu = !whisperCpu });
+            }
+            whisperProgress = progress;
+            var factory = whisperFactory ?? throw new InvalidOperationException("Whisper model is not loaded.");
+            var builder = factory.CreateBuilder()
+                .WithThreads(Math.Clamp(Environment.ProcessorCount / 2, 1, 8))
+                .WithProgressHandler(p => whisperProgress?.Report(("Transcribing locally", p / 100d)));
+            if (model.Id == "whisper-hinglish") builder.WithLanguage("en");
+            else if (language == "auto") builder.WithLanguageDetection();
+            else builder.WithLanguage(language);
+            if (detailed) builder.WithTokenTimestamps();
+            whisperProcessor = builder.Build();
         }
-        whisperProgress = progress;
-        var factory = whisperFactory ?? throw new InvalidOperationException("Whisper model is not loaded.");
-        var builder = factory.CreateBuilder()
-            .WithThreads(Math.Clamp(Environment.ProcessorCount / 2, 1, 8))
-            .WithProgressHandler(p => whisperProgress?.Report(("Transcribing locally", p / 100d)));
-        if (model.Id == "whisper-hinglish") builder.WithLanguage("en");
-        else if (language == "auto") builder.WithLanguageDetection();
-        else builder.WithLanguage(language);
-        if (detailed) builder.WithTokenTimestamps();
-        whisperProcessor = builder.Build();
+        catch (Exception) when (!whisperCpu)
+        {
+            // A GPU backend that loads but cannot initialize the model falls back to CPU for this session.
+            whisperCpu = true;
+            DisposeWhisper();
+            return EnsureWhisper(model, language, detailed, progress);
+        }
         whisperModel = model.Id; whisperLanguage = decodingLanguage; whisperDetailed = detailed;
         DisposeParakeet();
         return true;
@@ -185,11 +210,18 @@ public sealed class SpeechService(ModelStore models) : IDisposable
         return words;
     }
 
-    private List<SpeakerTurn> Diarize(float[] samples, IProgress<(string, double)> progress)
+    private List<SpeakerTurn> Diarize(float[] samples, IProgress<(string, double)> progress, CancellationToken cancellation)
     {
         var directory = models.DirectoryFor("speakers-nemotron");
         diarizer ??= new NemotronDiarizer(Path.Combine(directory, ModelStore.NemotronGraph.File));
-        var turns = diarizer.Process(samples).ToList();
+        List<SpeakerTurn> turns;
+        try { turns = diarizer.Process(samples, cancellation).ToList(); }
+        catch
+        {
+            // The helper's stream state is unknown after any failure; the next job starts a fresh one.
+            diarizer.Dispose(); diarizer = null;
+            throw;
+        }
         progress.Report(("Separating speakers locally", 1));
         return turns;
     }
@@ -220,6 +252,8 @@ public sealed class SpeechService(ModelStore models) : IDisposable
 
     public void Dispose()
     {
+        // Never free native models under a running job; if it will not finish soon, process exit reclaims them.
+        if (!gate.Wait(TimeSpan.FromSeconds(3))) return;
         DisposeWhisper(); DisposeParakeet(); diarizer?.Dispose(); diarizer = null; gate.Dispose();
     }
 }

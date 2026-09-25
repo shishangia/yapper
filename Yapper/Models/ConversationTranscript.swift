@@ -27,7 +27,7 @@ struct ConversationTranscript: Codable, Equatable, Sendable {
     }
 
     func speakerName(for id: String?) -> String {
-        guard let id else { return "Speaker uncertain" }
+        guard let id else { return "Needs review" }
         return speakerNames[id] ?? "Speaker \(id)"
     }
 

@@ -175,9 +175,9 @@ enum DictationCleanup {
         guard enabled else { return text.trimmingCharacters(in: .whitespacesAndNewlines) }
         var edited = applyScratchThat(in: text)
         edited = edited.replacingOccurrences(of: filler, with: "$1", options: .regularExpression)
-        edited = edited.replacingOccurrences(of: #"(?i)\bnew paragraph\b[,.]?"#,
+        edited = edited.replacingOccurrences(of: command("new paragraph"),
             with: "\n\n", options: .regularExpression)
-        edited = edited.replacingOccurrences(of: #"(?i)\bnew line\b[,.]?"#,
+        edited = edited.replacingOccurrences(of: command("new line"),
             with: "\n", options: .regularExpression)
         edited = formatRepeatedMarkers(in: edited, pattern: bullet) { _ in "• " }
         edited = formatNumberedList(in: edited)
@@ -190,6 +190,12 @@ enum DictationCleanup {
         edited = edited.replacingOccurrences(
             of: #"\n{3,}"#, with: "\n\n", options: .regularExpression)
         return capitalizeSentences(in: edited.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    /// A spoken command only counts as its own clause: at the start or after punctuation,
+    /// and followed by punctuation or the end, so "a new line of shoes" stays prose.
+    private static func command(_ phrase: String) -> String {
+        #"(?i)(?:^|[,;:]|(?<=[.!?\n]))[ \t]*"# + phrase + #"(?=[ \t]*(?:[.,;:!?\n]|$))[ \t]*[,.]?"#
     }
 
     private static func formatRepeatedMarkers(
@@ -209,12 +215,19 @@ enum DictationCleanup {
 
     private static func applyScratchThat(in text: String) -> String {
         guard let regex = try? NSRegularExpression(
-            pattern: #"(?i)\b(?:scratch that|scratch it)\b[\s,:;-]*"#) else { return text }
+            pattern: command("(?:scratch that|scratch it)") + #"[\s,:;-]*"#) else { return text }
         var output = text
         while let match = regex.firstMatch(in: output, range: NSRange(output.startIndex..<output.endIndex, in: output)),
               let command = Range(match.range, in: output) {
-            let prefix = output[..<command.lowerBound]
-            let sentenceBoundary = prefix.lastIndex(where: { ".!?\n".contains($0) })
+            // Skip the command's own lead-in punctuation; a period only ends a sentence
+            // when whitespace follows it, so "foo@example.com" is not a boundary.
+            var prefix = output[..<command.lowerBound]
+            while let last = prefix.last, last.isWhitespace || ".,;:!?".contains(last) { prefix = prefix.dropLast() }
+            let sentenceBoundary = prefix.indices.last { index in
+                let next = prefix.index(after: index)
+                return prefix[index] == "\n"
+                    || (".!?".contains(prefix[index]) && next < prefix.endIndex && prefix[next].isWhitespace)
+            }
             let keepEnd = sentenceBoundary.map { output.index(after: $0) } ?? output.startIndex
             let kept = output[..<keepEnd].trimmingCharacters(in: .whitespacesAndNewlines)
             let correction = output[command.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
