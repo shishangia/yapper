@@ -1,0 +1,13 @@
+[package]
+name = "yapper-nemotron"
+version = "1.1.1"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
+ort = "=2.0.0-rc.13"
+realfft = "=3.5.0"
+serde_json = "=1.0.151"
+
+[target.'cfg(windows)'.dependencies]
+ort = { version = "=2.0.0-rc.13", features = ["directml"] }

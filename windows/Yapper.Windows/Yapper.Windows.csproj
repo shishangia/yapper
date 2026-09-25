@@ -7,7 +7,7 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>0.1.0-preview.3</Version>
+    <Version>1.1.1</Version>
     <AssemblyName>Yapper</AssemblyName>
     <ApplicationIcon>Yapper.ico</ApplicationIcon>
     <RootNamespace>Yapper.Windows</RootNamespace>
@@ -21,6 +21,7 @@
     <ProjectReference Include="../Yapper.Core/Yapper.Core.csproj" />
     <PackageReference Include="Whisper.net" Version="1.9.1" />
     <PackageReference Include="Whisper.net.Runtime" Version="1.9.1" />
+    <PackageReference Include="Whisper.net.Runtime.Vulkan" Version="1.9.1" />
     <PackageReference Include="org.k2fsa.sherpa.onnx" Version="1.13.8" />
     <PackageReference Include="NAudio" Version="2.3.0" />
     <PackageReference Include="SharpCompress" Version="0.49.1" />

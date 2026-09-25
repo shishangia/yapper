@@ -57,6 +57,12 @@
           "Whisper.net.Runtime.Metal": "1.9.1"
         }
       },
+      "Whisper.net.Runtime.Vulkan": {
+        "type": "Direct",
+        "requested": "[1.9.1, )",
+        "resolved": "1.9.1",
+        "contentHash": "2kynHvbAczuEYHKRIR9NYg8xiXaGZHW3hb1Ts+N2dNcmVpA87xJWxA07yDiFnf5+vXz428wK57YWNvxqTJdkKw=="
+      },
       "Microsoft.Extensions.AI.Abstractions": {
         "type": "Transitive",
         "resolved": "10.2.0",

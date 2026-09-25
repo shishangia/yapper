@@ -20,7 +20,7 @@ public sealed class SpeechService(ModelStore models) : IDisposable
     private IProgress<(string Stage, double Value)>? whisperProgress;
     private OfflineRecognizer? parakeetRecognizer;
     private string? parakeetModel;
-    private OfflineSpeakerDiarization? diarizer;
+    private NemotronDiarizer? diarizer;
 
     public async Task Warm(SpeechModel model, string language, bool detailed, CancellationToken cancellation)
     {
@@ -44,6 +44,8 @@ public sealed class SpeechService(ModelStore models) : IDisposable
         {
             if (!models.Ready(model)) throw new InvalidOperationException("Download the selected model first.");
             if (model.Id == "parakeet-v3" && language is not ("auto" or "en")) throw new InvalidOperationException("Choose Whisper for Hindi, Gujarati, or Chinese.");
+            if (model.Id == "whisper-hinglish" && language is "gu" or "zh")
+                throw new InvalidOperationException("Choose a multilingual Whisper model for Gujarati or Chinese.");
             cancellation.ThrowIfCancellationRequested();
             progress.Report(("Transcribing locally", 0));
             var prepare = Stopwatch.StartNew();
@@ -82,7 +84,8 @@ public sealed class SpeechService(ModelStore models) : IDisposable
 
     private bool EnsureWhisper(SpeechModel model, string language, bool detailed, IProgress<(string, double)> progress)
     {
-        if (whisperModel == model.Id && whisperLanguage == language && whisperDetailed == detailed
+        var decodingLanguage = model.Id == "whisper-hinglish" ? "en" : language;
+        if (whisperModel == model.Id && whisperLanguage == decodingLanguage && whisperDetailed == detailed
             && whisperFactory is not null && whisperProcessor is not null)
         {
             whisperProgress = progress;
@@ -101,10 +104,12 @@ public sealed class SpeechService(ModelStore models) : IDisposable
         var builder = factory.CreateBuilder()
             .WithThreads(Math.Clamp(Environment.ProcessorCount / 2, 1, 8))
             .WithProgressHandler(p => whisperProgress?.Report(("Transcribing locally", p / 100d)));
-        if (language == "auto") builder.WithLanguageDetection(); else builder.WithLanguage(language);
+        if (model.Id == "whisper-hinglish") builder.WithLanguage("en");
+        else if (language == "auto") builder.WithLanguageDetection();
+        else builder.WithLanguage(language);
         if (detailed) builder.WithTokenTimestamps();
         whisperProcessor = builder.Build();
-        whisperModel = model.Id; whisperLanguage = language; whisperDetailed = detailed;
+        whisperModel = model.Id; whisperLanguage = decodingLanguage; whisperDetailed = detailed;
         DisposeParakeet();
         return true;
     }
@@ -182,21 +187,11 @@ public sealed class SpeechService(ModelStore models) : IDisposable
 
     private List<SpeakerTurn> Diarize(float[] samples, IProgress<(string, double)> progress)
     {
-        if (diarizer is null)
-        {
-            var config = new OfflineSpeakerDiarizationConfig();
-            config.Segmentation.Pyannote.Model = Path.Combine(models.DirectoryFor("speakers"), "model.onnx");
-            config.Embedding.Model = Path.Combine(models.DirectoryFor("speakers"), "speaker.onnx");
-            config.Clustering.NumClusters = -1;
-            config.Clustering.Threshold = .5f;
-            diarizer = new OfflineSpeakerDiarization(config);
-        }
-        var callback = new OfflineSpeakerDiarizationProgressCallback((done, total, _) =>
-        {
-            progress.Report(("Separating speakers locally", (double)done / Math.Max(1, total)));
-            return 0;
-        });
-        return diarizer.ProcessWithCallback(samples, callback, IntPtr.Zero).Select(s => new SpeakerTurn(s.Speaker.ToString(), s.Start, s.End)).ToList();
+        var directory = models.DirectoryFor("speakers-nemotron");
+        diarizer ??= new NemotronDiarizer(Path.Combine(directory, ModelStore.NemotronGraph.File));
+        var turns = diarizer.Process(samples).ToList();
+        progress.Report(("Separating speakers locally", 1));
+        return turns;
     }
 
     public async Task Unload(string modelId)
@@ -206,7 +201,7 @@ public sealed class SpeechService(ModelStore models) : IDisposable
         {
             if (whisperModel == modelId) DisposeWhisper();
             if (parakeetModel == modelId) DisposeParakeet();
-            if (modelId == "speakers") { diarizer?.Dispose(); diarizer = null; }
+            if (modelId is "speakers" or "speakers-nemotron") { diarizer?.Dispose(); diarizer = null; }
         }
         finally { gate.Release(); }
     }

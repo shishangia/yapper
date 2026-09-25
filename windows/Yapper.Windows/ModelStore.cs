@@ -23,30 +23,40 @@ public sealed class ModelStore
             new("ggml-small.bin", Whisper + "ggml-small.bin", "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b", 487601967), ["ggml-small.bin"]),
         new("whisper-turbo", "Whisper Large v3 Turbo", "Multilingual · 1.6 GB · needs more memory and time on CPU", 7, 9.5,
             new("ggml-large-v3-turbo.bin", Whisper + "ggml-large-v3-turbo.bin", "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69", 1624555275), ["ggml-large-v3-turbo.bin"]),
+        new("whisper-hinglish", "Whisper Hinglish Turbo", "Hindi and English · natural Latin script · 624 MB", 7.5, 8.8,
+            new("ggml-hindi2hinglish-apex-q5_1.bin",
+                "https://huggingface.co/voquill/whisper-hindi2hinglish-apex-ggml/resolve/c088f27bb726fd6335eab0041787564045c1ef48/ggml-hindi2hinglish-apex-q5_1.bin",
+                "be4392ef7d61721933868bbf7824a2c06f341f22238616067a2719ef62b79d1d", 624065675),
+            ["ggml-hindi2hinglish-apex-q5_1.bin"]),
         new("whisper-large", "Whisper Large v3", "Multilingual · 3.1 GB · at least 16 GB RAM recommended", 4, 9.5,
             new("ggml-large-v3.bin", Whisper + "ggml-large-v3.bin", "64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2", 3095033483), ["ggml-large-v3.bin"]),
         new("parakeet-v3", "Parakeet TDT v3", "25 European languages · 487 MB · not Hindi/Gujarati/Chinese", 9.7, 9.2,
             new("parakeet.tar.bz2", "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2", "5793d0fd397c5778d2cf2126994d58e9d56b1be7c04d13c7a15bb1b4eafb16bf", 487170055, true),
             ["encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt"])
     ];
-    public static readonly ModelAsset Segmentation = new("segmentation.tar.bz2",
-        "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2",
-        "24615ee884c897d9d2ba09bb4d30da6bb1b15e685065962db5b02e76e4996488", 6958444, true);
-    public static readonly ModelAsset Embedding = new("speaker.onnx",
-        "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx",
-        "1a331345f04805badbb495c775a6ddffcdd1a732567d5ec8b3d5749e3c7a5e4b", 39593761);
+    private const string Nemotron = "https://huggingface.co/onnx-community/Nemotron-3-Diarization-ONNX/resolve/353b6f8ad2cac3580e982d7fbdf0a010786b0406/onnx/";
+    public static readonly ModelAsset NemotronGraph = new("model_quantized.onnx", Nemotron + "model_quantized.onnx",
+        "fff7d18c7439c9fdc1c6c4dfec924cb42d3344264ca879780dfaf7ee886e6c1e", 364375);
+    public static readonly ModelAsset NemotronWeights = new("model_quantized.onnx_data", Nemotron + "model_quantized.onnx_data",
+        "002d7483e1c865c35c82220fdb378f185ff213c6d35922b38ae421c8ec72c338", 120479872);
     public string Root { get; }
     private static readonly HttpClient Client = new() { Timeout = Timeout.InfiniteTimeSpan };
     public ModelStore(string root) { Root = Path.Combine(root, "Models"); Directory.CreateDirectory(Root); }
     public string DirectoryFor(string id) => Path.Combine(Root, id);
     public string PathFor(SpeechModel model, string file) => Path.Combine(DirectoryFor(model.Id), file);
     public bool Ready(SpeechModel model) => model.Required.All(f => File.Exists(PathFor(model, f))) && File.Exists(Path.Combine(DirectoryFor(model.Id), ".complete"));
-    public bool SpeakersReady => File.Exists(Path.Combine(DirectoryFor("speakers"), "model.onnx")) && File.Exists(Path.Combine(DirectoryFor("speakers"), "speaker.onnx")) && File.Exists(Path.Combine(DirectoryFor("speakers"), ".complete"));
+    public bool SpeakersReady => File.Exists(Path.Combine(DirectoryFor("speakers-nemotron"), NemotronGraph.File))
+        && File.Exists(Path.Combine(DirectoryFor("speakers-nemotron"), NemotronWeights.File))
+        && File.Exists(Path.Combine(DirectoryFor("speakers-nemotron"), ".complete"));
 
     public async Task Download(SpeechModel model, bool speakers, IProgress<(string Stage, double Value)> progress, CancellationToken cancellation)
     {
         if (!Ready(model)) await DownloadSet(model.Id, [model.Asset], model.Required, progress, cancellation);
-        if (speakers && !SpeakersReady) await DownloadSet("speakers", [Segmentation, Embedding], ["model.onnx", "speaker.onnx"], progress, cancellation);
+        if (speakers && !SpeakersReady)
+        {
+            await DownloadSet("speakers-nemotron", [NemotronGraph, NemotronWeights],
+                [NemotronGraph.File, NemotronWeights.File], progress, cancellation);
+        }
     }
 
     private async Task DownloadSet(string id, ModelAsset[] assets, string[] required, IProgress<(string, double)> progress, CancellationToken cancellation)
@@ -96,7 +106,7 @@ public sealed class ModelStore
                         cancellation.ThrowIfCancellationRequested();
                         if (reader.Entry.IsDirectory) continue;
                         if (!string.IsNullOrEmpty(reader.Entry.LinkTarget)) throw new InvalidDataException("Links are not allowed in model archives.");
-                        var name = Path.GetFileName(reader.Entry.Key);
+                        var name = Path.GetFileName((reader.Entry.Key ?? "").Replace('\\', '/'));
                         if (string.IsNullOrEmpty(name) || !required.Contains(name)) continue;
                         expanded += reader.Entry.Size;
                         if (expanded > 4L * 1024 * 1024 * 1024) throw new InvalidDataException("Model archive is too large.");

@@ -61,6 +61,9 @@ try {
     $toggle.Toggle()
     $saved = Get-Content (Join-Path $testRoot 'library.json') -Raw | ConvertFrom-Json
     if ($saved.Preferences.Theme -ne 'Dark') { throw 'Theme did not persist' }
+    if ($saved.Preferences.Language -ne 'hinglish') { throw "New library did not default to Hinglish: $($saved.Preferences.Language)" }
+    if ($saved.Preferences.SelectedModel -ne 'whisper-small') { throw 'Hinglish mode overwrote the saved general model' }
+    if (!$saved.Preferences.AutoEdit) { throw 'New library did not enable local dictation cleanup' }
     Select-Page 'sidebar.history'
     $entry = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem))
     if (!$entry) { throw 'Synthetic history entry did not load' }

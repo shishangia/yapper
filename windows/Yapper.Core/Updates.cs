@@ -14,11 +14,11 @@ public sealed record ReleaseInfo(
     [property: JsonPropertyName("draft")] bool Draft,
     [property: JsonPropertyName("prerelease")] bool Prerelease,
     [property: JsonPropertyName("assets")] ReleaseAsset[] Assets);
-public sealed record WindowsUpdate(string Version, string Notes, ReleaseAsset Asset);
+public sealed record WindowsUpdate(string Tag, string Version, string Notes, ReleaseAsset Asset);
 
 public static partial class UpdatePolicy
 {
-    [GeneratedRegex(@"^windows-v(\d+\.\d+\.\d+)(?:-preview\.(\d+))?$")]
+    [GeneratedRegex(@"^(?:windows-)?v(\d+\.\d+\.\d+)(?:-preview\.(\d+))?$")]
     private static partial Regex TagPattern();
     [GeneratedRegex(@"^sha256:[a-fA-F0-9]{64}$")]
     private static partial Regex DigestPattern();
@@ -41,14 +41,14 @@ public static partial class UpdatePolicy
             if (release.Draft || parsed is null || (current.Preview == int.MaxValue && release.Prerelease)) continue;
             if (release.Prerelease != (parsed.Value.Preview != int.MaxValue)) continue;
             if (parsed.Value.Version < current.Version || parsed.Value.Version == current.Version && parsed.Value.Preview <= current.Preview) continue;
-            var version = release.Tag["windows-v".Length..];
+            var version = release.Tag[(release.Tag.StartsWith("windows-") ? "windows-v" : "v").Length..];
             var name = $"Yapper-{version}-win-x64-setup.exe";
             var matches = release.Assets.Where(a => a.Name == name).ToArray();
             if (matches.Length != 1) continue;
             var asset = matches[0];
             if (asset.Size <= 0 || asset.Size > 1_000_000_000 || asset.Digest is null || !DigestPattern().IsMatch(asset.Digest)) continue;
             if (!TrustedAsset(asset.Url, release.Tag, name)) continue;
-            candidates.Add((new(version, release.Body ?? "", asset), parsed.Value.Version, parsed.Value.Preview));
+            candidates.Add((new(release.Tag, version, release.Body ?? "", asset), parsed.Value.Version, parsed.Value.Preview));
         }
         return candidates.OrderByDescending(c => c.Version).ThenByDescending(c => c.Preview).Select(c => c.Update).FirstOrDefault();
     }

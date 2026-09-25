@@ -9,7 +9,7 @@ namespace Yapper.Windows;
 
 public sealed class AppUpdates
 {
-    public static string CurrentVersion => (Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.1.0-preview.3").Split('+')[0];
+    public static string CurrentVersion => (Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "1.1.1").Split('+')[0];
     private static readonly HttpClient Client = new(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromMinutes(10) };
     public async Task<WindowsUpdate?> Check(CancellationToken token)
     {
@@ -41,7 +41,7 @@ public sealed class AppUpdates
     public async Task<string> Download(WindowsUpdate update, string directory, IProgress<double> progress, CancellationToken token)
     {
         var asset = update.Asset;
-        if (!UpdatePolicy.TrustedAsset(asset.Url, "windows-v" + update.Version, asset.Name) || asset.Digest is null
+        if (!UpdatePolicy.TrustedAsset(asset.Url, update.Tag, asset.Name) || asset.Digest is null
             || !System.Text.RegularExpressions.Regex.IsMatch(asset.Digest, "^sha256:[a-fA-F0-9]{64}$") || asset.Size <= 0 || asset.Size > 1_000_000_000)
             throw new InvalidDataException("Untrusted update asset.");
         Directory.CreateDirectory(directory);

@@ -20,6 +20,12 @@ if (args.Length < 2) throw new ArgumentException("Usage: native-tests <isolated-
 var root = Path.GetFullPath(args[0]);
 var audio = Path.GetFullPath(args[1]);
 if (!Directory.Exists(root)) Directory.CreateDirectory(root);
+if (OperatingSystem.IsWindows() && !Directory.Exists(Path.Combine(AppContext.BaseDirectory, "runtimes", "vulkan", "win-x64")))
+    throw new Exception("The packaged Vulkan Whisper runtime is missing.");
+var helper = Environment.GetEnvironmentVariable("YAPPER_NEMOTRON_HELPER") ?? Path.Combine(AppContext.BaseDirectory, "Yapper.Nemotron.exe");
+if (OperatingSystem.IsWindows() && (!File.Exists(helper)
+    || !File.Exists(Path.Combine(Path.GetDirectoryName(helper)!, "DirectML.dll"))))
+    throw new Exception("The packaged Nemotron DirectML runtime is missing.");
 var model = ModelStore.Catalog.Single(m => m.Id == (args.Length > 2 ? args[2] : "whisper-tiny"));
 var models = new ModelStore(root);
 var progress = new Progress<(string Stage, double Value)>(p => { if (p.Value >= .99) Console.WriteLine(p.Stage); });
@@ -53,8 +59,12 @@ if (string.IsNullOrWhiteSpace(single.PlainText) || single.Segments.Any(s => s.Sp
 var multiResult = await service.Transcribe(samples, model, "en", true, false, progress, CancellationToken.None);
 var multi = multiResult.Transcript;
 if (string.IsNullOrWhiteSpace(multi.PlainText) || multi.Warning is not null) throw new Exception("Native speaker pipeline failed: " + multi.Warning);
+if (model.Id == "whisper-hinglish" && multi.PlainText.Any(c => c is >= '\u0900' and <= '\u097F'))
+    throw new Exception("Hinglish model returned Devanagari output.");
 var reused = await service.Transcribe(samples, model, "en", true, false, progress, CancellationToken.None);
 if (reused.ModelPreparationSeconds != 0) throw new Exception("Resident model and processor were rebuilt.");
+if (reused.SpeakerDetectionSeconds <= 0 || reused.SpeakerDetectionSeconds > multiResult.SpeakerDetectionSeconds * 1.5 + .25)
+    throw new Exception("Resident Nemotron helper was not reused.");
 var canceled = new CancellationTokenSource(); canceled.Cancel();
 try { await service.Transcribe(samples, model, "en", false, false, progress, canceled.Token); throw new Exception("Cancellation ignored"); }
 catch (OperationCanceledException) { }
