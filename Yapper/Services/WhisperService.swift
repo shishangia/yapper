@@ -179,8 +179,7 @@ class WhisperService {
         do {
             // Prefer the current Application Support location; fall back to the legacy
             // Documents location so users who downloaded before the move keep working.
-            let newModelFolder = ModelStorage.whisperKitModelsDir
-                .appendingPathComponent(variant)
+            let newModelFolder = ModelStorage.transcriptionModelDirectory(for: variant)
             var modelFolder = newModelFolder
             if !FileManager.default.fileExists(atPath: newModelFolder.path),
                 let legacyFolder = ModelStorage.legacyModelsDir?.appendingPathComponent(variant),
@@ -206,7 +205,9 @@ class WhisperService {
                 computeOptions: ModelComputeOptions(),  // Uses GPU + Neural Engine
                 verbose: false,
                 logLevel: .error,
-                prewarm: true,  // Built-in model specialization (replaces manual warmup)
+                // The UI warms the selected model before recording. Avoid WhisperKit's
+                // load-unload-load prewarm cycle, which roughly doubles every cold load.
+                prewarm: false,
                 load: true,
                 download: false  // Already downloaded via ModelDownloadService
             )
@@ -331,7 +332,12 @@ class WhisperService {
             let offset = Double(range.lowerBound) / 16000
             let end = Double(range.upperBound) / 16000
             var options = Self.conversationDecodingOptions(wordTimestamps: wordTimestamps)
-            if AIModel.availableModels.first(where: { $0.variant == currentModelVariant })?.isEnglishOnly == true {
+            if currentModelVariant == AIModel.hinglishVariant {
+                // This fine-tune uses Whisper's English token to emit Roman-script
+                // Hindi/English rather than translating speech into English.
+                options.language = "en"
+                options.detectLanguage = false
+            } else if AIModel.availableModels.first(where: { $0.variant == currentModelVariant })?.isEnglishOnly == true {
                 options.language = "en"
                 options.detectLanguage = false
             } else if language == "mixed" {
@@ -350,17 +356,27 @@ class WhisperService {
                         return [ConversationWord(text: segment.text, start: offset + Double(segment.start),
                             end: offset + Double(segment.end), hasReliableTiming: false)]
                     }
-                    return ConversationAlignment.preservingText(segment.text,
-                        words: (segment.words ?? []).map {
+                    let timedWords = (segment.words ?? []).map {
                             ConversationWord(text: $0.word, start: offset + Double($0.start), end: offset + Double($0.end))
-                        }, start: offset + Double(segment.start), end: offset + Double(segment.end))
+                        }
+                    if timedWords.isEmpty {
+                        return [ConversationWord(
+                            text: segment.text, start: offset + Double(segment.start),
+                            end: offset + Double(segment.end), hasReliableTiming: false,
+                            allowsWholeRangeAssignment: true)]
+                    }
+                    return ConversationAlignment.preservingText(
+                        segment.text, words: timedWords, start: offset + Double(segment.start),
+                        end: offset + Double(segment.end))
                 }
                 let preserved = ConversationAlignment.preservingText(
                     (output.isEmpty ? "" : " ") + result.text, words: words, start: offset, end: end)
                 output.append(contentsOf: preserved.map { word in
                     let reliable = word.start >= offset && word.end <= end + 0.2 && word.end > word.start
                     return ConversationWord(text: word.text, start: min(end, max(offset, word.start)),
-                        end: min(end, max(offset, word.end)), hasReliableTiming: word.hasReliableTiming && reliable)
+                        end: min(end, max(offset, word.end)),
+                        hasReliableTiming: word.hasReliableTiming && reliable,
+                        allowsWholeRangeAssignment: word.allowsWholeRangeAssignment)
                 })
             }
             progress(Double(index + 1) / Double(max(1, ranges.count)))
@@ -389,6 +405,9 @@ class WhisperService {
     }
 
     private func decodingOptions(for language: String) -> DecodingOptions {
+        if currentModelVariant == AIModel.hinglishVariant {
+            return Self.dictationDecodingOptions(language: "en")
+        }
         let englishOnly = AIModel.availableModels.first { $0.variant == currentModelVariant }?.isEnglishOnly == true
         return Self.dictationDecodingOptions(language: language, englishOnly: englishOnly)
     }
@@ -396,7 +415,10 @@ class WhisperService {
     static func dictationDecodingOptions(language: String, englishOnly: Bool = false) -> DecodingOptions {
         var options = DecodingOptions()
         options.task = .transcribe
-        if englishOnly {
+        if language == "hinglish" {
+            options.language = "en"
+            options.detectLanguage = false
+        } else if englishOnly {
             options.language = "en"
             options.detectLanguage = false
         } else if language == "auto" {

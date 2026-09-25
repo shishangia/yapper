@@ -12,7 +12,8 @@ final class YapperUITests: XCTestCase {
         let app = XCUIApplication()
         addTeardownBlock { @MainActor in app.terminate() }
         app.launchArguments = ["--uitesting", "--test-onboarding", "--test-permissions-denied", "-ApplePersistenceIgnoreState", "YES",
-            "-legacyImportOffered", "YES", "-selectedModelVariant", "openai_whisper-large-v3_turbo", "-selectedHotkey", "rightOption", "-recordingMode", "1"]
+            "-legacyImportOffered", "YES", "-selectedModelVariant", "openai_whisper-large-v3_turbo",
+            "-transcriptionLanguage", "auto", "-selectedHotkey", "rightOption", "-recordingMode", "1"]
         app.launch()
         if !app.windows.firstMatch.waitForExistence(timeout: 3) { openDashboard() }
         XCTAssertTrue(app.buttons["Get Started"].firstMatch.waitForExistence(timeout: 10))
@@ -52,7 +53,7 @@ final class YapperUITests: XCTestCase {
     func testEscapeDismissesRecorderWithoutReleasingBusyJob() throws {
         let app = XCUIApplication()
         addTeardownBlock { @MainActor in app.terminate() }
-        app.launchArguments = ["--uitesting", "-ApplePersistenceIgnoreState", "YES", "-alwaysShowRecorderPill", "YES", "-selectedModelVariant", ""]
+        app.launchArguments = ["--uitesting", "-ApplePersistenceIgnoreState", "YES", "-alwaysShowRecorderPill", "YES", "-selectedModelVariant", "", "-transcriptionLanguage", "auto"]
         app.launchEnvironment["YAPPER_RECORDER_PREVIEW"] = "cancelable"
         app.launch()
         openDashboard()
@@ -71,7 +72,7 @@ final class YapperUITests: XCTestCase {
     func testMissingPastePermissionShowsCopyRecovery() throws {
         let app = XCUIApplication()
         addTeardownBlock { @MainActor in app.terminate() }
-        app.launchArguments = ["--uitesting", "-ApplePersistenceIgnoreState", "YES", "-alwaysShowRecorderPill", "YES", "-selectedModelVariant", ""]
+        app.launchArguments = ["--uitesting", "-ApplePersistenceIgnoreState", "YES", "-alwaysShowRecorderPill", "YES", "-selectedModelVariant", "", "-transcriptionLanguage", "auto"]
         app.launchEnvironment["YAPPER_RECORDER_PREVIEW"] = "permission-feedback"
         app.launch()
         let recorder = app.dialogs["yapper.recorder"]
@@ -87,7 +88,8 @@ final class YapperUITests: XCTestCase {
             let app = XCUIApplication()
             addTeardownBlock { @MainActor in app.terminate() }
             app.launchArguments = ["--uitesting", "-ApplePersistenceIgnoreState", "YES", "-appTheme", appearance,
-                "-showMenuBarIcon", "YES", "-selectedModelVariant", "openai_whisper-large-v3_turbo"]
+                "-showMenuBarIcon", "YES", "-selectedModelVariant", "openai_whisper-large-v3_turbo",
+                "-transcriptionLanguage", "auto"]
             app.launch()
             openDashboard()
             XCTAssertTrue(app.buttons["sidebar.aiModels"].waitForExistence(timeout: 10))
@@ -124,7 +126,8 @@ final class YapperUITests: XCTestCase {
             app.terminate()
             for phase in ["idle", "recording", "processing", "warming"] {
                 app.launchArguments = ["--uitesting", "-ApplePersistenceIgnoreState", "YES", "-appTheme", appearance,
-                    "-alwaysShowRecorderPill", "YES", "-selectedModelVariant", ""]
+                    "-alwaysShowRecorderPill", "YES", "-selectedModelVariant", "",
+                    "-transcriptionLanguage", "auto"]
                 app.launchEnvironment["YAPPER_RECORDER_PREVIEW"] = phase
                 app.launch()
                 openDashboard()
@@ -157,7 +160,7 @@ final class YapperUITests: XCTestCase {
         let app = XCUIApplication()
         let home = String(cString: try XCTUnwrap(getpwuid(getuid())).pointee.pw_dir)
         let fixture = home + "/Library/Application Support/Yapper-Dev/TestAudio/conversation.wav"
-        app.launchArguments = ["--uitesting", "-ApplePersistenceIgnoreState", "YES", "-selectedModelVariant", "openai_whisper-large-v3_turbo"]
+        app.launchArguments = ["--uitesting", "-ApplePersistenceIgnoreState", "YES", "-selectedModelVariant", "openai_whisper-large-v3_turbo", "-transcriptionLanguage", "auto"]
         addTeardownBlock { @MainActor in app.terminate() }
         app.launch()
         openDashboard()
@@ -198,7 +201,7 @@ final class YapperUITests: XCTestCase {
         let fixture = URL(fileURLWithPath: home)
             .appendingPathComponent("Library/Application Support/Yapper-Dev/TestAudio/conversation.wav")
         XCTAssertTrue(FileManager.default.fileExists(atPath: fixture.path), fixture.path)
-        app.launchArguments = ["--uitesting", "-ApplePersistenceIgnoreState", "YES", "-selectedModelVariant", "openai_whisper-large-v3_turbo"]
+        app.launchArguments = ["--uitesting", "-ApplePersistenceIgnoreState", "YES", "-selectedModelVariant", "openai_whisper-large-v3_turbo", "-transcriptionLanguage", "auto"]
         addTeardownBlock { @MainActor in app.terminate() }
         app.launch()
         openDashboard()

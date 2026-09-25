@@ -18,7 +18,7 @@ final class ConversationSession {
     var includeTimestamps = false {
         didSet { defaults.set(includeTimestamps, forKey: Self.timestampsDefaultsKey) }
     }
-    var language = "auto"
+    var language = ModelSelection.defaultLanguage
     private(set) var phase: Phase = .idle
     private(set) var resultID: UUID?
     private(set) var sourceName = ""
@@ -32,7 +32,10 @@ final class ConversationSession {
     private var jobSingleSpeaker = false
     private var jobIncludeTimestamps = true
     @ObservationIgnored private let defaults: UserDefaults
-    var selectedModel: String { defaults.string(forKey: ModelSelection.defaultsKey) ?? ModelSelection.none }
+    var selectedModel: String {
+        ModelSelection.resolvedVariant(
+            defaults.string(forKey: ModelSelection.defaultsKey) ?? ModelSelection.none, language: language)
+    }
     var modelName: String {
         let variant = isBusy ? (activeModel ?? selectedModel) : selectedModel
         return AIModel.availableModels.first { $0.variant == variant }?.name ?? "No model selected"
@@ -50,6 +53,7 @@ final class ConversationSession {
         self.suppliedHistory = history
         self.defaults = defaults
         includeTimestamps = defaults.object(forKey: Self.timestampsDefaultsKey) as? Bool ?? false
+        language = defaults.string(forKey: "transcriptionLanguage") ?? ModelSelection.defaultLanguage
     }
 
     var isBusy: Bool {
@@ -77,6 +81,12 @@ final class ConversationSession {
     func refreshModels() {
         modelsReady = LocalConversationProcessor.transcriptionModelsReady(variant: selectedModel)
             && (!detectSpeakers || singleSpeaker || LocalConversationProcessor.speakerModelsReady)
+    }
+
+    func selectLanguage(_ value: String) {
+        language = value
+        defaults.set(value, forKey: "transcriptionLanguage")
+        refreshModels()
     }
 
     func importFile(_ source: URL) {

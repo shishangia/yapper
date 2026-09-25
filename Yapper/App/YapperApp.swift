@@ -18,6 +18,7 @@ enum YapperLauncher {
         if AppEnvironment.isRunningTests {
             NSApplication.shared.run()
         } else {
+            ModelSelection.registerDefaults()
             YapperApp.main()
         }
     }

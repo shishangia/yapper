@@ -58,6 +58,7 @@ public partial class MainWindow : Window
         ModelChoice.SelectedItem = ModelStore.Catalog.FirstOrDefault(m => m.Id == library.Data.Preferences.SelectedModel) ?? ModelStore.Catalog[1];
         ModelsList.SelectedItem = ModelChoice.SelectedItem;
         LanguageChoice.SelectedItem = LanguageChoice.Items.Cast<ComboBoxItem>().FirstOrDefault(i => (string)i.Tag == library.Data.Preferences.Language) ?? LanguageChoice.Items[0];
+        SyncDisplayedModel();
         HotkeyChoice.SelectedItem = HotkeyChoice.Items.Cast<ComboBoxItem>().FirstOrDefault(i => (string)i.Content == library.Data.Preferences.Hotkey) ?? HotkeyChoice.Items[0];
         ToggleMode.IsChecked = library.Data.Preferences.ToggleRecording;
         RestoreClipboard.IsChecked = library.Data.Preferences.RestoreClipboard;
@@ -101,8 +102,23 @@ public partial class MainWindow : Window
         UpdateReady();
     }
 
-    private SpeechModel Chosen => (SpeechModel)ModelChoice.SelectedItem;
+    private SpeechModel Chosen => SpokenLanguage == "hinglish"
+        ? ModelStore.Catalog.Single(m => m.Id == "whisper-hinglish")
+        : (SpeechModel)ModelChoice.SelectedItem;
     private string SpokenLanguage => (string)((ComboBoxItem)LanguageChoice.SelectedItem).Tag;
+    private void SyncDisplayedModel()
+    {
+        var hinglish = SpokenLanguage == "hinglish";
+        var model = hinglish
+            ? ModelStore.Catalog.Single(m => m.Id == "whisper-hinglish")
+            : ModelStore.Catalog.FirstOrDefault(m => m.Id == library.Data.Preferences.SelectedModel) ?? ModelStore.Catalog[1];
+        var wasInitialized = initialized;
+        initialized = false;
+        ModelChoice.SelectedItem = model;
+        ModelsList.SelectedItem = model;
+        ModelChoice.IsEnabled = !hinglish;
+        initialized = wasInitialized;
+    }
     private IProgress<(string Stage, double Value)> Reporter
     {
         get
@@ -171,6 +187,7 @@ public partial class MainWindow : Window
             RestoreClipboard = RestoreClipboard.IsChecked == true, TrimPeriod = TrimPeriod.IsChecked == true,
             AutoEdit = AutoEdit.IsChecked == true, AutoCheckUpdates = AutoCheckUpdates.IsChecked == true,
             IncludeTimestamps = IncludeTimestamps.IsChecked == true } });
+        SyncDisplayedModel();
         UpdateReady();
     }
     private bool Begin()
@@ -352,11 +369,27 @@ public partial class MainWindow : Window
     private void SelectModel(object sender, SelectionChangedEventArgs e)
     {
         if (!initialized || ModelChoice.SelectedItem is not SpeechModel model) return;
+        if (model.Id == "whisper-hinglish")
+        {
+            LanguageChoice.SelectedItem = LanguageChoice.Items.Cast<ComboBoxItem>().Single(i => (string)i.Tag == "hinglish");
+            return;
+        }
         library.Save(library.Data with { Preferences = library.Data.Preferences with { SelectedModel = model.Id } });
         ModelsList.SelectedItem = model;
         UpdateReady();
     }
-    private void ChooseCatalogModel(object sender, SelectionChangedEventArgs e) { if (initialized && ModelsList.SelectedItem is SpeechModel model) ModelChoice.SelectedItem = model; }
+    private void ChooseCatalogModel(object sender, SelectionChangedEventArgs e)
+    {
+        if (!initialized || ModelsList.SelectedItem is not SpeechModel model) return;
+        if (model.Id == "whisper-hinglish")
+        {
+            LanguageChoice.SelectedItem = LanguageChoice.Items.Cast<ComboBoxItem>().Single(i => (string)i.Tag == "hinglish");
+            return;
+        }
+        if (SpokenLanguage == "hinglish")
+            LanguageChoice.SelectedItem = LanguageChoice.Items.Cast<ComboBoxItem>().Single(i => (string)i.Tag == "auto");
+        ModelChoice.SelectedItem = model;
+    }
     private void SelectRecording(object sender, SelectionChangedEventArgs e) { if (HistoryList.SelectedItem is Recording item) { selected = item; ShowTranscript(); } }
     private void CopyTranscript(object sender, RoutedEventArgs e) { if (selected is not null) { System.Windows.Clipboard.SetText(selected.DisplayText); Status.Text = "Copied."; } }
     private void PlayAudio(object sender, RoutedEventArgs e)
@@ -379,10 +412,13 @@ public partial class MainWindow : Window
     private async void DeleteModel(object sender, RoutedEventArgs e)
     {
         if (jobs.IsBusy || updateBusy) { Status.Text = "Wait for processing or updating to finish before deleting models."; return; }
-        if (MessageBox.Show(this, "Delete " + Chosen.Name + "? Your recordings are not affected.", "Yapper", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
-        await speech.Unload(Chosen.Id);
-        var path = models.DirectoryFor(Chosen.Id);
+        var model = ModelsList.SelectedItem as SpeechModel ?? Chosen;
+        if (MessageBox.Show(this, "Delete " + model.Name + "? Your recordings are not affected.", "Yapper", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+        await speech.Unload(model.Id);
+        var path = models.DirectoryFor(model.Id);
         if (Directory.Exists(path)) Directory.Delete(path, true);
+        if (model.Id == "whisper-hinglish" && SpokenLanguage == "hinglish")
+            LanguageChoice.SelectedItem = LanguageChoice.Items.Cast<ComboBoxItem>().Single(i => (string)i.Tag == "auto");
         _ = RefreshModelStorage(); UpdateReady();
     }
     private void AddRule(object sender, RoutedEventArgs e)
@@ -436,7 +472,7 @@ public partial class MainWindow : Window
         if (availableUpdate is null || updateBusy) return;
         if (jobs.IsBusy) { UpdateStatus.Text = "Finish recording or transcription before installing."; return; }
         var update = availableUpdate;
-        if (MessageBox.Show(this, $"Download Yapper {update.Version} from GitHub and close Yapper to run its installer?\n\nWindows preview installers are unsigned. Windows security prompts stay enabled. Your library will remain in place.", "Update Yapper", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+        if (MessageBox.Show(this, $"Download Yapper {update.Version} from GitHub and close Yapper to run its installer?\n\nWindows installers are currently unsigned. Windows security prompts stay enabled. Your library will remain in place.", "Update Yapper", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
         if (jobs.IsBusy) { UpdateStatus.Text = "A recording started. Finish it before installing."; return; }
         updateBusy = true;
         InstallUpdateButton.IsEnabled = CheckUpdatesButton.IsEnabled = false;

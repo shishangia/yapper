@@ -1,0 +1,17 @@
+NVIDIA Open Model License Agreement
+
+The Nemotron 3 Diarization model is licensed by NVIDIA Corporation under the
+NVIDIA Open Model License Agreement, version 1.1 (OpenMDW). Yapper downloads
+the model only after the user requests speaker detection and does not bundle
+the model weights in the installer.
+
+Official license text:
+https://developer.download.nvidia.com/licenses/nvidia-open-model-license-agreement-june-2024.pdf
+
+Model page:
+https://huggingface.co/nvidia/Nemotron-3-Diarization
+
+Required attribution notice:
+"Licensed by NVIDIA Corporation under the NVIDIA Open Model License"
+
+Version release date: June 14, 2024.

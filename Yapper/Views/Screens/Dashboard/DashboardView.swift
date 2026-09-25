@@ -12,7 +12,7 @@ struct DashboardView: View {
     @State private var leftColumnHeight: CGFloat = 0
 
     @AppStorage(ModelSelection.defaultsKey) private var selectedModel: String = ModelSelection.none
-    @AppStorage("transcriptionLanguage") private var transcriptionLanguage: String = "auto"
+    @AppStorage("transcriptionLanguage") private var transcriptionLanguage: String = ModelSelection.defaultLanguage
     @AppStorage("selectedHotkey") private var selectedHotkey: HotkeyOption = .fn
     @AppStorage("recordingMode") private var recordingMode = 0
     @State private var showFileImporter = false
@@ -170,6 +170,7 @@ struct DashboardView: View {
         }
         .onAppear { transcription.warmSelectedModel() }
         .onChange(of: selectedModel) { transcription.warmSelectedModel() }
+        .onChange(of: transcriptionLanguage) { transcription.warmSelectedModel() }
     }
 
     // MARK: - Helpers
@@ -224,7 +225,7 @@ struct DashboardView: View {
     }
 
     private func startTranscription(url: URL) {
-        let variant = selectedModel
+        let variant = ModelSelection.resolvedVariant(selectedModel, language: transcriptionLanguage)
         let language = transcriptionLanguage
         Task {
             isTranscribing = true

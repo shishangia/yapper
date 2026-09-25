@@ -100,6 +100,10 @@ var tests = new (string Name, Action Run)[]
     {
         var preferences = JsonSerializer.Deserialize<Preferences>("{\"SelectedModel\":\"whisper-small\"}")!;
         Equal("System", preferences.Theme); True(preferences.AutoCheckUpdates); True(!preferences.IncludeTimestamps);
+        Equal("hinglish", preferences.Language);
+        Equal("hinglish", new Preferences().Language); True(new Preferences().AutoEdit);
+        var explicitChoices = JsonSerializer.Deserialize<Preferences>("{\"Language\":\"auto\",\"AutoEdit\":false}")!;
+        Equal("auto", explicitChoices.Language); True(!explicitChoices.AutoEdit);
         WithLibrary(root =>
         {
             var store = new LibraryStore(root);
@@ -138,6 +142,10 @@ var tests = new (string Name, Action Run)[]
         True(UpdatePolicy.Select([newer with { Assets = [newer.Assets[0] with { Digest = null }] }], "0.1.0-preview.2") is null);
         True(UpdatePolicy.Select([newer with { Assets = [newer.Assets[0] with { Url = "https://example.com/update.exe" }] }], "0.1.0-preview.2") is null);
         Equal("0.1.0", UpdatePolicy.Select([Release("0.1.0", false)], "0.1.0-preview.2")!.Version);
+        var shared = newer with { Tag = "v1.1.1", Prerelease = false,
+            Assets = [new("Yapper-1.1.1-win-x64-setup.exe", "https://github.com/shishangia/yapper/releases/download/v1.1.1/Yapper-1.1.1-win-x64-setup.exe", 100, "sha256:" + new string('b', 64))] };
+        Equal("1.1.1", UpdatePolicy.Select([shared], "0.1.0-preview.2")!.Version);
+        Equal("v1.1.1", UpdatePolicy.Select([shared], "0.1.0-preview.2")!.Tag);
         True(!UpdatePolicy.TrustedAsset("https://github.com.evil.test/shishangia/yapper/releases/download/a/b", "a", "b"));
     }),
     ("corrupt library is not overwritten", () =>

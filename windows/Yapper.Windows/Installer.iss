@@ -1,4 +1,4 @@
-#define AppVersion "0.1.0-preview.3"
+#define AppVersion "1.1.1"
 [Setup]
 AppId={{19F43172-BD41-4AB7-9C15-0522D0AC6050}
 AppName=Yapper
@@ -18,6 +18,7 @@ SolidCompression=yes
 WizardStyle=modern
 SetupIconFile=Yapper.ico
 CloseApplications=yes
+RestartApplications=no
 UninstallDisplayIcon={app}\Yapper.exe
 LicenseFile=..\..\LICENSE
 [Files]

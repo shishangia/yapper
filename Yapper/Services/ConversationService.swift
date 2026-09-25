@@ -12,12 +12,18 @@ protocol ConversationProcessing {
 
 @MainActor
 final class LocalConversationProcessor: ConversationProcessing {
-    static let speakerModelName = "SortformerNvidiaLow_v2.1.mlmodelc"
-    static var diarizerDirectory: URL { ModelStorage.whisperKitBase.appendingPathComponent("SpeakerModels") }
-    static var speakerModelURL: URL { diarizerDirectory.appendingPathComponent("sortformer/\(speakerModelName)") }
+    static let speakerConfig = Nemotron3Config.fast128
+    static var diarizerDirectory: URL { ModelStorage.nemotronSpeakerDirectory }
+    static var speakerModelURL: URL {
+        diarizerDirectory.appendingPathComponent("monolithic/\(speakerConfig.modelFileName)")
+    }
+    static var speakerVersionURL: URL {
+        diarizerDirectory.appendingPathComponent(ModelNames.Nemotron3.weightsVersionFile)
+    }
     static var speechModelURL: URL {
         ModelStorage.whisperKitBase.appendingPathComponent("SpeechModels/silero-vad/\(ModelNames.VAD.sileroVadFile)")
     }
+    private let speakerEngine = LocalNemotronSpeakerEngine()
 
     static var speechModelReady: Bool {
         ["coremldata.bin", "model.mil", "weights/weight.bin"].allSatisfy {
@@ -31,9 +37,12 @@ final class LocalConversationProcessor: ConversationProcessing {
     }
 
     static var speakerModelsReady: Bool {
-        ["coremldata.bin", "model0/weights/0-weight.bin", "model1/weights/1-weight.bin"].allSatisfy {
+        let version = try? String(contentsOf: speakerVersionURL, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return version == ModelNames.Nemotron3.weightsVersion && ["coremldata.bin", "weights/weight.bin"].allSatisfy {
             FileManager.default.fileExists(atPath: speakerModelURL.appendingPathComponent($0).path)
-        }
+        } && FileManager.default.fileExists(atPath:
+            diarizerDirectory.appendingPathComponent(ModelNames.Nemotron3.silenceEmbeddingFile).path)
     }
 
     static func downloadModels(variant: String, speakers: Bool, progress: @escaping @Sendable (String, Double) -> Void) async throws {
@@ -41,12 +50,14 @@ final class LocalConversationProcessor: ConversationProcessing {
             progress("Downloading transcription model", value)
         }
         if AIModel.engineKind(for: variant) == .whisper && !speechModelReady {
-            try await DownloadUtils.downloadRepo(.vad, to: ModelStorage.whisperKitBase.appendingPathComponent("SpeechModels")) {
-                progress("Downloading speech detection model", $0.fractionCompleted)
-            }
+            _ = try await ModelHub.loadModels(
+                .vad, modelNames: Array(ModelNames.VAD.requiredModels),
+                directory: ModelStorage.whisperKitBase.appendingPathComponent("SpeechModels"),
+                progressHandler: { progress("Downloading speech detection model", $0.fractionCompleted) })
         }
         if speakers && !speakerModelsReady {
-            try await DownloadUtils.downloadRepo(.sortformer, to: diarizerDirectory, variant: speakerModelName) {
+            _ = try await Nemotron3Models.loadFromHuggingFace(
+                config: speakerConfig, cacheDirectory: ModelStorage.fluidAudioModelsDir) {
                 progress("Downloading speaker models", $0.fractionCompleted)
             }
         }
@@ -60,24 +71,53 @@ final class LocalConversationProcessor: ConversationProcessing {
 
     func diarize(_ url: URL, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationSpeakerTurn] {
         guard Self.speakerModelsReady else { throw ConversationError.modelsMissing }
-        let modelURL = Self.speakerModelURL
-        return try await Task.detached(priority: .userInitiated) {
-            let config = SortformerConfig.balancedV2_1
+        let result = try await speakerEngine.process(
+            url, config: Self.speakerConfig, modelURL: Self.speakerModelURL,
+            silenceURL: Self.diarizerDirectory.appendingPathComponent(
+                ModelNames.Nemotron3.silenceEmbeddingFile))
+        progress(1)
+        return result
+    }
+}
+
+/// Keeps the compiled speaker model resident between jobs without running model
+/// preparation or inference on the main actor. Each call creates a fresh diarizer,
+/// so speaker-cache state never leaks between recordings.
+private actor LocalNemotronSpeakerEngine {
+    private var models: Nemotron3Models?
+
+    func process(
+        _ url: URL, config: Nemotron3Config, modelURL: URL, silenceURL: URL
+    ) async throws -> [ConversationSpeakerTurn] {
+        let samples = try AudioConverter().resampleAudioFile(url)
+        let loaded: Nemotron3Models
+        if let models {
+            loaded = models
+        } else {
             let mlConfig = MLModelConfiguration()
             mlConfig.computeUnits = .all
             let model = try MLModel(contentsOf: modelURL, configuration: mlConfig)
-            let models = try SortformerModels(config: config, main: model)
-            let diarizer = SortformerDiarizer(config: config)
-            diarizer.initialize(models: models)
-            let timeline = try diarizer.processComplete(audioFileURL: url) { completed, total, _ in
-                progress(Double(completed) / Double(max(1, total)))
+            let data = try Data(contentsOf: silenceURL)
+            guard data.count == config.preEncoderDims * MemoryLayout<Float>.size else {
+                throw ConversationError.invalidSpeakerModels
             }
-            return timeline.speakers.flatMap { id, speaker in
-                speaker.finalizedSegments.map {
-                    ConversationSpeakerTurn(speakerID: String(id), start: Double($0.startTime), end: Double($0.endTime))
-                }
-            }.sorted { $0.start < $1.start }
-        }.value
+            let silenceEmbedding = data.withUnsafeBytes {
+                Array($0.bindMemory(to: Float.self))
+            }
+            loaded = try Nemotron3Models(
+                config: config, model: model, silenceEmbedding: silenceEmbedding)
+            models = loaded
+        }
+        let diarizer = Nemotron3Diarizer(config: config, models: loaded)
+        let output = try diarizer.processComplete(samples)
+        return Nemotron3Diarizer.segments(
+            probabilities: output.probabilities, frameCount: output.frameCount
+        ).map {
+            ConversationSpeakerTurn(
+                speakerID: String($0.speakerIndex + 1),
+                start: Double($0.startSeconds),
+                end: Double($0.endSeconds))
+        }
     }
 }
 

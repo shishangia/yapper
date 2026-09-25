@@ -19,4 +19,32 @@ enum ModelSelection {
 
     /// Value meaning "no model selected yet" — the single shared default.
     static let none = ""
+    static let defaultLanguage = "hinglish"
+
+    /// Hinglish is an output format backed by its specialist local model. The
+    /// normal model selection remains available for every other language.
+    static func resolvedVariant(_ selected: String, language: String) -> String {
+        language == defaultLanguage ? AIModel.hinglishVariant : selected
+    }
+
+    /// Existing explicit language choices remain untouched by registered defaults.
+    static func registerDefaults(_ defaults: UserDefaults = .standard) {
+        defaults.register(defaults: [
+            "transcriptionLanguage": defaultLanguage,
+            "enableAutoEdit": true,
+        ])
+    }
+
+    static func selectedVariant(
+        _ defaults: UserDefaults = .standard, language: String? = nil
+    ) -> String {
+        let output = language ?? defaults.string(forKey: "transcriptionLanguage") ?? defaultLanguage
+        return resolvedVariant(defaults.string(forKey: defaultsKey) ?? none, language: output)
+    }
+
+    static func displayedVariant(
+        _ selected: String, language: String
+    ) -> String {
+        resolvedVariant(selected, language: language)
+    }
 }

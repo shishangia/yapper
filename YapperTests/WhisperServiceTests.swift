@@ -42,6 +42,12 @@ final class WhisperServiceTests: XCTestCase {
     }
 
     func testModelLanguagesAndTokenizerMapping() throws {
+        let hinglish = try XCTUnwrap(AIModel.availableModels.first { $0.variant == AIModel.hinglishVariant })
+        XCTAssertTrue(hinglish.isHinglish)
+        XCTAssertTrue(hinglish.supports(language: "auto"))
+        XCTAssertTrue(hinglish.supports(language: "hi"))
+        XCTAssertFalse(hinglish.supports(language: "zh"))
+        XCTAssertEqual(ModelStorage.whisperVariant(for: hinglish.variant)?.description, "large-v3")
         let turbo = try XCTUnwrap(AIModel.availableModels.first { $0.name == "Whisper Large v3 Turbo" })
         XCTAssertEqual(turbo.variant, "openai_whisper-large-v3-v20240930_turbo")
         XCTAssertTrue(turbo.supports(language: "hi"))
@@ -72,6 +78,17 @@ final class WhisperServiceTests: XCTestCase {
         let missing = ASRResult(text: "No timing", confidence: 1, duration: 2, processingTime: 1)
         XCTAssertEqual(ParakeetEngine.words(from: missing, duration: 2).map(\.text).joined(), "No timing")
         XCTAssertFalse(ParakeetEngine.words(from: missing, duration: 2)[0].hasReliableTiming)
+    }
+
+    func testWholeRangeAssignmentMetadataSurvivesTextPreservation() {
+        let words = ConversationAlignment.preservingText(
+            " whole phrase",
+            words: [.init(text: " whole phrase", start: 1, end: 2,
+                hasReliableTiming: false, allowsWholeRangeAssignment: true)],
+            start: 1, end: 2)
+        XCTAssertEqual(words.count, 1)
+        XCTAssertFalse(words[0].hasReliableTiming)
+        XCTAssertTrue(words[0].allowsWholeRangeAssignment)
     }
 
     func testSharedEngineReusesAndReleasesModels() async throws {
@@ -192,6 +209,30 @@ final class WhisperServiceTests: XCTestCase {
         let englishOnly = WhisperService.dictationDecodingOptions(language: "auto", englishOnly: true)
         XCTAssertEqual(englishOnly.language, "en")
         XCTAssertFalse(englishOnly.detectLanguage)
+        let hinglish = WhisperService.dictationDecodingOptions(language: "hinglish")
+        XCTAssertEqual(hinglish.language, "en")
+        XCTAssertFalse(hinglish.detectLanguage)
+    }
+
+    func testHinglishDefaultDoesNotReplaceExistingGeneralModelSelection() throws {
+        let suite = "Yapper-Model-Defaults-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        ModelSelection.registerDefaults(defaults)
+        XCTAssertEqual(defaults.string(forKey: "transcriptionLanguage"), "hinglish")
+        XCTAssertTrue(defaults.bool(forKey: "enableAutoEdit"))
+        XCTAssertNil(defaults.object(forKey: ModelSelection.defaultsKey))
+        defaults.set("openai_whisper-large-v3", forKey: ModelSelection.defaultsKey)
+        defaults.set("auto", forKey: "transcriptionLanguage")
+        defaults.set(false, forKey: "enableAutoEdit")
+        ModelSelection.registerDefaults(defaults)
+        XCTAssertEqual(defaults.string(forKey: ModelSelection.defaultsKey), "openai_whisper-large-v3")
+        XCTAssertEqual(defaults.string(forKey: "transcriptionLanguage"), "auto")
+        XCTAssertFalse(defaults.bool(forKey: "enableAutoEdit"))
+        XCTAssertEqual(ModelSelection.resolvedVariant("openai_whisper-large-v3", language: "hinglish"),
+            AIModel.hinglishVariant)
+        XCTAssertEqual(ModelSelection.resolvedVariant("openai_whisper-large-v3", language: "zh"),
+            "openai_whisper-large-v3")
     }
 
     func testSharedDictationCleanupFormatsExplicitCommands() {
@@ -250,8 +291,15 @@ final class WhisperServiceTests: XCTestCase {
         let root = AppEnvironment.applicationSupportDirectory.appendingPathComponent("NativeSmoke")
         try fm.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: root) }
-        let audio = root.appendingPathComponent("conversation.wav")
-        try fm.copyItem(at: fixtures.appendingPathComponent("TestAudio/conversation.wav"), to: audio)
+        let sourceAudio = ProcessInfo.processInfo.environment["YAPPER_NATIVE_AUDIO_FIXTURE"]
+            .map(URL.init(fileURLWithPath:))
+            ?? fixtures.appendingPathComponent("TestAudio/conversation.wav")
+        let copiedAudio = root.appendingPathComponent("conversation")
+            .appendingPathExtension(sourceAudio.pathExtension)
+        try fm.copyItem(at: sourceAudio, to: copiedAudio)
+        let prepared = try await ConversationAudioStorage.prepareForProcessing(copiedAudio)
+        defer { prepared.removeTemporaryFile() }
+        let audio = prepared.processingURL
         let directories = ["models", "SpeechModels", "FluidAudio"]
         defer {
             for name in directories { try? fm.removeItem(at: AppEnvironment.applicationSupportDirectory.appendingPathComponent(name)) }
@@ -262,13 +310,40 @@ final class WhisperServiceTests: XCTestCase {
             try fm.copyItem(at: fixtures.appendingPathComponent(name), to: destination)
         }
         let manager = TranscriptionManager.shared
-        for variant in ["openai_whisper-large-v3_turbo", ParakeetCatalog.v3Variant] {
+        let variants = (ProcessInfo.processInfo.environment["YAPPER_NATIVE_VARIANT"]).map { [$0] }
+            ?? ["openai_whisper-large-v3_turbo", AIModel.hinglishVariant, ParakeetCatalog.v3Variant]
+        for variant in variants {
             let words = try await NativeInferenceGate.shared.run {
-                try await manager.transcribeConversationWhileLocked(audioFile: audio, variant: variant, language: "en") { _ in }
+                try await manager.transcribeConversationWhileLocked(
+                    audioFile: audio, variant: variant,
+                    language: variant == AIModel.hinglishVariant ? "hinglish" : "en") { _ in }
             }
             XCTAssertFalse(words.map(\.text).joined().trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            XCTAssertTrue(words.contains { $0.hasReliableTiming })
+            if variant == AIModel.hinglishVariant {
+                XCTAssertTrue(words.contains { $0.hasReliableTiming || $0.allowsWholeRangeAssignment })
+                let text = words.map(\.text).joined()
+                XCTAssertFalse(text.unicodeScalars.contains { (0x0900...0x097F).contains(Int($0.value)) })
+                let expected = ProcessInfo.processInfo.environment["YAPPER_HINGLISH_EXPECTED"]?
+                    .split(separator: ",").map(String.init) ?? []
+                for phrase in expected {
+                    XCTAssertTrue(text.localizedCaseInsensitiveContains(phrase),
+                        "Missing expected phrase: \(phrase)")
+                }
+            } else {
+                XCTAssertTrue(words.contains { $0.hasReliableTiming })
+            }
             XCTAssertEqual(manager.currentModelVariant, variant)
+        }
+        if ProcessInfo.processInfo.environment["YAPPER_SKIP_NATIVE_DIARIZATION"] != "1" {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: LocalConversationProcessor.speakerModelURL.path),
+                LocalConversationProcessor.speakerModelURL.path)
+            let processor = LocalConversationProcessor()
+            let first = try await processor.diarize(audio) { _ in }
+            let second = try await processor.diarize(audio) { _ in }
+            XCTAssertFalse(first.isEmpty)
+            XCTAssertEqual(second.map(\.speakerID), first.map(\.speakerID))
+            XCTAssertLessThanOrEqual(Set(first.map(\.speakerID)).count, 8)
+            XCTAssertTrue(first.allSatisfy { $0.start >= 0 && $0.end > $0.start })
         }
         await NativeInferenceGate.shared.run { await manager.unloadWhileLocked(variant: ParakeetCatalog.v3Variant) }
     }

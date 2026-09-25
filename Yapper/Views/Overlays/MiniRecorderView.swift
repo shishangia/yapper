@@ -15,9 +15,9 @@ struct MiniRecorderView: View {
 
     @AppStorage(ModelSelection.defaultsKey) private var selectedModel: String = ModelSelection.none
     @AppStorage("recordingMode") private var recordingMode: Int = 0
-    @AppStorage("transcriptionLanguage") private var transcriptionLanguage: String = "auto"
+    @AppStorage("transcriptionLanguage") private var transcriptionLanguage: String = ModelSelection.defaultLanguage
     @AppStorage("recentTranscriptionLanguages") private var recentLanguagesString: String = ""
-    private let quickLanguageDefaults = ["en", "es", "fr", "de", "hi", "pt", "ja", "zh"]
+    private let quickLanguageDefaults = ["hinglish", "en", "es", "fr", "de", "hi", "pt", "ja", "zh"]
 
     private var recentLanguageCodes: [String] {
         recentLanguagesString.split(separator: ",").map(String.init).filter { !$0.isEmpty }
@@ -27,7 +27,7 @@ struct MiniRecorderView: View {
         var orderedCodes: [String] = []
         let candidateCodes = [transcriptionLanguage] + recentLanguageCodes + quickLanguageDefaults
 
-        for code in candidateCodes where code != "auto" {
+        for code in candidateCodes where code != "auto" && code != "hinglish" {
             guard !orderedCodes.contains(code) else { continue }
             guard GeneralSettingsTab.whisperLanguages.contains(where: { $0.code == code }) else {
                 continue
@@ -48,6 +48,7 @@ struct MiniRecorderView: View {
     private func setLanguage(_ code: String) {
         transcriptionLanguage = code
         updateRecentLanguages(code: code)
+        transcription.warmSelectedModel()
     }
 
     private var currentLanguageLabel: String {
@@ -103,7 +104,9 @@ struct MiniRecorderView: View {
 
     /// Compact language label for the always-visible tag ("Auto" or "EN").
     private var currentLanguageShort: String {
-        transcriptionLanguage == "auto" ? "Auto" : transcriptionLanguage.uppercased()
+        if transcriptionLanguage == "auto" { return "Auto" }
+        if transcriptionLanguage == "hinglish" { return "Hinglish" }
+        return transcriptionLanguage.uppercased()
     }
 
     /// First word of the selected input device, for a compact chip ("MacBook").
@@ -133,11 +136,14 @@ struct MiniRecorderView: View {
 
     private var languageControl: some View {
         Menu {
+            Button("Hinglish · Latin script") { setLanguage("hinglish") }
             Button("Auto-detect") { setLanguage("auto") }
             if !quickLanguageCodes.isEmpty {
                 Divider()
                 ForEach(quickLanguageCodes, id: \.self) { code in
-                    if let lang = GeneralSettingsTab.whisperLanguages.first(where: { $0.code == code }) {
+                    if code == "hinglish" {
+                        Button("Hinglish · Latin script") { setLanguage(code) }
+                    } else if let lang = GeneralSettingsTab.whisperLanguages.first(where: { $0.code == code }) {
                         Button(lang.name) { setLanguage(code) }
                     }
                 }
@@ -540,10 +546,19 @@ struct MiniRecorderView: View {
     private var modelSelectionMenu: some View {
         ForEach(AIModel.availableModels.filter { !$0.isLegacy || $0.variant == selectedModel }) { model in
             Button {
-                selectedModel = model.variant
+                if model.isHinglish {
+                    transcriptionLanguage = ModelSelection.defaultLanguage
+                } else {
+                    selectedModel = model.variant
+                    if transcriptionLanguage == ModelSelection.defaultLanguage {
+                        transcriptionLanguage = "auto"
+                    }
+                }
                 transcription.warmSelectedModel()
             } label: {
-                if selectedModel == model.variant {
+                if ModelSelection.displayedVariant(
+                    selectedModel, language: transcriptionLanguage) == model.variant
+                {
                     Label(model.name, systemImage: "checkmark")
                 } else {
                     Text(model.name)
@@ -693,6 +708,7 @@ struct MiniRecorderView: View {
     }
 
     private func spokenLanguageDisplayName(for code: String) -> String {
+        if code == "hinglish" { return "Hinglish (Latin script)" }
         if code == "auto" { return "Auto-detect" }
         return GeneralSettingsTab.whisperLanguages.first(where: { $0.code == code })?.name ?? code
     }

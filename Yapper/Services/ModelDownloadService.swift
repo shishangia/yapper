@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import FluidAudio
 import WhisperKit
+import ArgmaxCore
 
 struct ModelCacheCleanupReport {
     let deletedPaths: [URL]
@@ -151,8 +152,18 @@ final class ModelDownloadService: ObservableObject {
                     version: version, progressHandler: { progress($0.fractionCompleted) })
             } else {
                 ModelStorage.ensureWhisperKitModelsDir()
-                _ = try await WhisperKit.download(variant: variant, downloadBase: ModelStorage.whisperKitBase,
-                    progressCallback: { progress($0.fractionCompleted) })
+                if let model = AIModel.availableModels.first(where: { $0.variant == variant }),
+                   let repository = model.downloadRepository, let revision = model.downloadRevision,
+                   let folder = model.downloadFolder {
+                    let hub = HubApiWrapper(downloadBase: ModelStorage.whisperKitBase)
+                    _ = try await hub.snapshot(
+                        from: .init(id: repository), revision: revision,
+                        matching: ["\(folder)/*"],
+                        progressHandler: { progress($0.fractionCompleted) })
+                } else {
+                    _ = try await WhisperKit.download(variant: variant, downloadBase: ModelStorage.whisperKitBase,
+                        progressCallback: { progress($0.fractionCompleted) })
+                }
             }
         }, downloadTokenizer: { variant in
             guard let model = ModelStorage.whisperVariant(for: variant) else { throw ConversationError.modelsMissing }
@@ -160,7 +171,7 @@ final class ModelDownloadService: ObservableObject {
         }, isReady: { variant in
             guard ModelStorage.transcriptionModelReady(variant) else { return false }
             if AIModel.engineKind(for: variant) == .parakeet { return true }
-            let bytes = Self.calculateDirectorySize(at: ModelStorage.whisperKitModelsDir.appendingPathComponent(variant))
+            let bytes = Self.calculateDirectorySize(at: ModelStorage.transcriptionModelDirectory(for: variant))
             return bytes >= Int64(Double(AIModel.expectedSize(for: variant)) * 0.8)
         }, didDownload: { _ in
             TranscriptionManager.shared.warmSelectedModel()
@@ -271,6 +282,13 @@ final class ModelDownloadService: ObservableObject {
             do {
                 if FileManager.default.fileExists(atPath: cacheDir.path) { try FileManager.default.removeItem(at: cacheDir) }
                 return "Deleted Parakeet model cache for \(variant)"
+            } catch { return error.localizedDescription }
+        }
+        if variant == AIModel.hinglishVariant {
+            let path = ModelStorage.transcriptionModelDirectory(for: variant)
+            do {
+                if FileManager.default.fileExists(atPath: path.path) { try FileManager.default.removeItem(at: path) }
+                return "Deleted Hinglish model cache"
             } catch { return error.localizedDescription }
         }
         let report = ModelCachePathResolver.removeVariantDirectories(for: variant,

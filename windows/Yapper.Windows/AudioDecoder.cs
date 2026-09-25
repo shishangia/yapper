@@ -22,7 +22,7 @@ public static class AudioDecoder
         while ((count = samples.Read(buffer, 0, buffer.Length)) > 0)
         {
             if (output.Count + count > 16000L * 60 * 120)
-                throw new InvalidDataException("This preview supports recordings up to two hours.");
+                throw new InvalidDataException("Yapper supports recordings up to two hours.");
             output.AddRange(buffer.AsSpan(0, count).ToArray());
             file?.WriteSamples(buffer, 0, count);
         }

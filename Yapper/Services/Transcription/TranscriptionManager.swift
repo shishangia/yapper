@@ -19,7 +19,7 @@ class TranscriptionManager {
 
     init(whisper: (any SpeechToTextEngine)? = nil, parakeet: (any SpeechToTextEngine)? = nil,
          gate: NativeInferenceGate? = nil,
-         selectedVariant: @escaping @MainActor () -> String = { UserDefaults.standard.string(forKey: ModelSelection.defaultsKey) ?? "" },
+         selectedVariant: @escaping @MainActor () -> String = { ModelSelection.selectedVariant() },
          modelReady: @escaping @MainActor (String) -> Bool = { ModelStorage.transcriptionModelReady($0) },
          autoEditEnabled: @escaping @MainActor () -> Bool = { UserDefaults.standard.bool(forKey: "enableAutoEdit") }) {
         self.whisper = whisper ?? WhisperService.shared
@@ -71,7 +71,7 @@ class TranscriptionManager {
     var currentModelVariant: String { activeEngine.currentModelVariant }
 
     func initialize() async throws {
-        try await loadModel(variant: UserDefaults.standard.string(forKey: ModelSelection.defaultsKey) ?? "")
+        try await loadModel(variant: ModelSelection.selectedVariant())
     }
 
     func loadModel(variant: String) async throws {
