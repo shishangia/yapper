@@ -10,7 +10,10 @@ struct MenuBarDashboardView: View {
 
     private var modelName: String {
         let variant = ModelSelection.resolvedVariant(selectedModel, language: transcriptionLanguage)
-        return AIModel.availableModels.first { $0.variant == variant }?.name ?? "Choose a model to start"
+        guard let name = AIModel.availableModels.first(where: { $0.variant == variant })?.name else {
+            return "Choose a model to start"
+        }
+        return ModelStorage.transcriptionModelReady(variant) ? name : "\(name) (not downloaded)"
     }
 
     var body: some View {
