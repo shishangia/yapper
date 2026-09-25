@@ -236,16 +236,38 @@ final class WhisperServiceTests: XCTestCase {
     }
 
     func testSharedDictationCleanupFormatsExplicitCommands() {
-        let raw = "um this is a sentence. another one new paragraph bullet point apples bullet point bananas"
+        let raw = "um this is a sentence. another one, new paragraph, bullet point apples bullet point bananas"
         XCTAssertEqual(DictationCleanup.apply(to: raw, enabled: true),
             "This is a sentence. Another one\n\n• Apples\n• Bananas")
         XCTAssertEqual(DictationCleanup.apply(
             to: "shopping list number one milk number two eggs number three tea", enabled: true),
             "Shopping list\n1. Milk\n2. Eggs\n3. Tea")
-        XCTAssertEqual(DictationCleanup.apply(to: "first idea scratch that corrected idea", enabled: true),
+        XCTAssertEqual(DictationCleanup.apply(to: "first idea, scratch that, corrected idea", enabled: true),
             "Corrected idea")
-        XCTAssertEqual(DictationCleanup.apply(to: "Keep this sentence. wrong words scratch that corrected words", enabled: true),
+        XCTAssertEqual(DictationCleanup.apply(to: "Keep this sentence. wrong words, scratch that. corrected words", enabled: true),
             "Keep this sentence. Corrected words")
+    }
+
+    func testCleanupCommandsRequireTheirOwnClause() {
+        XCTAssertEqual(DictationCleanup.apply(to: "I need to scratch that itch", enabled: true),
+            "I need to scratch that itch")
+        XCTAssertEqual(DictationCleanup.apply(to: "we launched a new line of shoes", enabled: true),
+            "We launched a new line of shoes")
+        XCTAssertEqual(DictationCleanup.apply(to: "we need a new paragraph for this", enabled: true),
+            "We need a new paragraph for this")
+        XCTAssertEqual(DictationCleanup.apply(to: "first line. New line. second line", enabled: true),
+            "First line.\nSecond line")
+        XCTAssertEqual(DictationCleanup.apply(to: "Scratch that. Start over", enabled: true), "Start over")
+        XCTAssertEqual(DictationCleanup.apply(to: "Keep this. Wrong words. Scratch that. Right words.", enabled: true),
+            "Keep this. Right words.")
+        XCTAssertEqual(DictationCleanup.apply(to: "first idea, scratch that", enabled: true), "")
+        XCTAssertEqual(DictationCleanup.apply(to: "email foo@example.com scratch that", enabled: true),
+            "Email foo@example.com scratch that")
+        XCTAssertEqual(DictationCleanup.apply(
+            to: "Write to foo@example.com. Wrong address, scratch that, use bar@example.com", enabled: true),
+            "Write to foo@example.com. Use bar@example.com")
+        XCTAssertEqual(DictationCleanup.apply(to: "Contact foo@example.com, scratch that, call me", enabled: true),
+            "Call me")
     }
 
     func testCleanupDoesNotGuessAmbiguousFillersOrLists() {
