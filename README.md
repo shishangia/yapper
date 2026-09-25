@@ -8,18 +8,18 @@ Yapper records from the microphone or imports an audio file, transcribes it on y
 
 ## Install
 
-**[Download Yapper for Mac](https://github.com/shishangia/yapper/releases/download/v1.1.1/Yapper-1.1.1-10-arm64.dmg)** | [Release notes and checksums](https://github.com/shishangia/yapper/releases/tag/v1.1.1)
+**[Download Yapper for Mac](https://github.com/shishangia/yapper/releases/download/v1.1.2/Yapper-1.1.2-11-arm64.dmg)** | [Release notes and checksums](https://github.com/shishangia/yapper/releases/tag/v1.1.2)
 
 1. Open the DMG and drag Yapper into Applications.
 2. Open Yapper from Applications.
 3. Allow microphone access for recording and Accessibility for global dictation and auto-paste. You can skip both permissions when you only want to import files.
 4. Download a model in AI Models and click Use. Transcribe Audio may ask for an additional speech or speaker model.
 
-The Mac installer is Developer ID signed and notarized by Apple. It requires macOS 14 or later on an Apple Silicon Mac. Version 1.1.1 handles WhatsApp `.opus` files, adds natural Latin-script Hinglish and the full Whisper Large v3 model, uses Nemotron 3 for faster speaker detection, records processing times, and lets conversation transcripts switch between paragraphs and timestamps.
+The Mac installer is Developer ID signed and notarized by Apple. It requires macOS 14 or later on an Apple Silicon Mac. Version 1.1.2 fixes dictation for people updating from 1.0.x. Since 1.1.1, Yapper handles WhatsApp `.opus` files, adds natural Latin-script Hinglish and the full Whisper Large v3 model, uses Nemotron 3 for faster speaker detection, records processing times, and lets conversation transcripts switch between paragraphs and timestamps.
 
 ## Windows
 
-**[Download Yapper for Windows 11 x64](https://github.com/shishangia/yapper/releases/download/v1.1.1/Yapper-1.1.1-win-x64-setup.exe)** | [Release notes and checksums](https://github.com/shishangia/yapper/releases/tag/v1.1.1)
+**[Download Yapper for Windows 11 x64](https://github.com/shishangia/yapper/releases/download/v1.1.2/Yapper-1.1.2-win-x64-setup.exe)** | [Release notes and checksums](https://github.com/shishangia/yapper/releases/tag/v1.1.2)
 
 The Windows app is a native implementation with the same visual identity and local-first behavior as the Mac app. It includes tray dictation, a configurable shortcut, the floating recording pill, file import, editable speaker turns, history, dictionary rules, and Light, Dark, and System themes. The default shortcut is Ctrl+Alt+Space because Fn is firmware-controlled on many Windows keyboards.
 
