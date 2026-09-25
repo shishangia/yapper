@@ -104,10 +104,27 @@ fn run() -> Result<(), String> {
 struct Model {
     session: Session,
     silence: Vec<f32>,
+    path: String,
+    gpu: bool,
 }
 
 impl Model {
     fn load(path: &str) -> Result<Self, String> {
+        // DirectML can register and still fail to load the graph; CPU always works.
+        let (session, gpu) = match Self::session(path, cfg!(target_os = "windows")) {
+            Ok(session) => (session, cfg!(target_os = "windows")),
+            Err(_) if cfg!(target_os = "windows") => (Self::session(path, false)?, false),
+            Err(error) => return Err(error),
+        };
+        Ok(Self {
+            session,
+            silence: Vec::new(),
+            path: path.to_string(),
+            gpu,
+        })
+    }
+
+    fn session(path: &str, gpu: bool) -> Result<Session, String> {
         let threads = std::thread::available_parallelism()
             .map_or(4, |n| n.get())
             .min(8);
@@ -116,21 +133,30 @@ impl Model {
             .with_intra_threads(threads)
             .map_err(err)?;
         #[cfg(target_os = "windows")]
-        {
+        if gpu {
             builder = builder
                 .with_memory_pattern(false)
                 .map_err(err)?
                 .with_execution_providers([DirectML::default().build().fail_silently()])
                 .map_err(err)?;
         }
-        let session = builder.commit_from_file(path).map_err(err)?;
-        Ok(Self {
-            session,
-            silence: Vec::new(),
-        })
+        #[cfg(not(target_os = "windows"))]
+        let _ = gpu;
+        builder.commit_from_file(path).map_err(err)
     }
 
     fn probabilities(&mut self, samples: &[f32]) -> Result<Vec<f32>, String> {
+        match self.infer(samples) {
+            Err(_) if self.gpu => {
+                self.session = Self::session(&self.path, false)?;
+                self.gpu = false;
+                self.infer(samples)
+            }
+            result => result,
+        }
+    }
+
+    fn infer(&mut self, samples: &[f32]) -> Result<Vec<f32>, String> {
         let spectrum = Spectrum::new(samples);
         let mel = MelFilters::new();
         let frames = spectrum.frames;
