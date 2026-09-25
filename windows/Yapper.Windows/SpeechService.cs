@@ -66,7 +66,7 @@ public sealed class SpeechService(ModelStore models) : IDisposable
                     if (!models.SpeakersReady) throw new InvalidOperationException("Speaker models have not been downloaded.");
                     progress.Report(("Separating speakers locally", 0));
                     var speakerClock = Stopwatch.StartNew();
-                    var turns = await Task.Run(() => Diarize(samples, progress), CancellationToken.None);
+                    var turns = await Task.Run(() => Diarize(samples, progress, cancellation), CancellationToken.None);
                     speakerSeconds = speakerClock.Elapsed.TotalSeconds;
                     cancellation.ThrowIfCancellationRequested();
                     transcript = Alignment.Align(words, turns, true);
@@ -185,11 +185,18 @@ public sealed class SpeechService(ModelStore models) : IDisposable
         return words;
     }
 
-    private List<SpeakerTurn> Diarize(float[] samples, IProgress<(string, double)> progress)
+    private List<SpeakerTurn> Diarize(float[] samples, IProgress<(string, double)> progress, CancellationToken cancellation)
     {
         var directory = models.DirectoryFor("speakers-nemotron");
         diarizer ??= new NemotronDiarizer(Path.Combine(directory, ModelStore.NemotronGraph.File));
-        var turns = diarizer.Process(samples).ToList();
+        List<SpeakerTurn> turns;
+        try { turns = diarizer.Process(samples, cancellation).ToList(); }
+        catch
+        {
+            // The helper's stream state is unknown after any failure; the next job starts a fresh one.
+            diarizer.Dispose(); diarizer = null;
+            throw;
+        }
         progress.Report(("Separating speakers locally", 1));
         return turns;
     }
