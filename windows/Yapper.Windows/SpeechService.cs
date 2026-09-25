@@ -252,6 +252,8 @@ public sealed class SpeechService(ModelStore models) : IDisposable
 
     public void Dispose()
     {
+        // Never free native models under a running job; if it will not finish soon, process exit reclaims them.
+        if (!gate.Wait(TimeSpan.FromSeconds(3))) return;
         DisposeWhisper(); DisposeParakeet(); diarizer?.Dispose(); diarizer = null; gate.Dispose();
     }
 }
