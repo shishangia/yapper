@@ -28,11 +28,29 @@ enum ModelSelection {
     }
 
     /// Existing explicit language choices remain untouched by registered defaults.
-    static func registerDefaults(_ defaults: UserDefaults = .standard) {
+    static func registerDefaults(
+        _ defaults: UserDefaults = .standard, domain: String? = Bundle.main.bundleIdentifier
+    ) {
+        if let domain { keepLegacyDefaults(defaults, domain: domain) }
         defaults.register(defaults: [
             "transcriptionLanguage": defaultLanguage,
             "enableAutoEdit": true,
         ])
+    }
+
+    /// Before 1.1.1, "auto" and Auto Edit off were unsaved @AppStorage fallbacks. Persist them
+    /// once for installs that predate this check, so the new registered defaults only reach
+    /// fresh installs. Reads the persistent domain because registered defaults are process-wide.
+    private static func keepLegacyDefaults(_ defaults: UserDefaults, domain: String) {
+        let migratedKey = "didKeepLegacyLanguageDefaults"
+        let stored = defaults.persistentDomain(forName: domain) ?? [:]
+        guard stored[migratedKey] == nil else { return }
+        defaults.set(true, forKey: migratedKey)
+        let existingInstall = stored["hasCompletedOnboarding"] as? Bool == true
+            || stored[defaultsKey] != nil || stored["history_items"] != nil
+        guard existingInstall else { return }
+        if stored["transcriptionLanguage"] == nil { defaults.set("auto", forKey: "transcriptionLanguage") }
+        if stored["enableAutoEdit"] == nil { defaults.set(false, forKey: "enableAutoEdit") }
     }
 
     static func selectedVariant(

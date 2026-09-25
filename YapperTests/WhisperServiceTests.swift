@@ -214,21 +214,39 @@ final class WhisperServiceTests: XCTestCase {
         XCTAssertFalse(hinglish.detectLanguage)
     }
 
-    func testHinglishDefaultDoesNotReplaceExistingGeneralModelSelection() throws {
-        let suite = "Yapper-Model-Defaults-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        ModelSelection.registerDefaults(defaults)
-        XCTAssertEqual(defaults.string(forKey: "transcriptionLanguage"), "hinglish")
-        XCTAssertTrue(defaults.bool(forKey: "enableAutoEdit"))
-        XCTAssertNil(defaults.object(forKey: ModelSelection.defaultsKey))
-        defaults.set("openai_whisper-large-v3", forKey: ModelSelection.defaultsKey)
-        defaults.set("auto", forKey: "transcriptionLanguage")
-        defaults.set(false, forKey: "enableAutoEdit")
-        ModelSelection.registerDefaults(defaults)
-        XCTAssertEqual(defaults.string(forKey: ModelSelection.defaultsKey), "openai_whisper-large-v3")
-        XCTAssertEqual(defaults.string(forKey: "transcriptionLanguage"), "auto")
-        XCTAssertFalse(defaults.bool(forKey: "enableAutoEdit"))
+    func testRegisteredDefaultsKeepUpgradersAndExplicitChoices() throws {
+        func profile(_ values: [String: Any]) throws -> (UserDefaults, String) {
+            let suite = "Yapper-Model-Defaults-\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            values.forEach { defaults.set($1, forKey: $0) }
+            ModelSelection.registerDefaults(defaults, domain: suite)
+            return (defaults, suite)
+        }
+
+        let (fresh, freshSuite) = try profile([:])
+        defer { fresh.removePersistentDomain(forName: freshSuite) }
+        XCTAssertEqual(fresh.string(forKey: "transcriptionLanguage"), "hinglish")
+        XCTAssertTrue(fresh.bool(forKey: "enableAutoEdit"))
+        XCTAssertNil(fresh.persistentDomain(forName: freshSuite)?["transcriptionLanguage"])
+        // Finishing onboarding after the first launch must not turn a fresh install into an upgrader.
+        fresh.set(true, forKey: "hasCompletedOnboarding")
+        ModelSelection.registerDefaults(fresh, domain: freshSuite)
+        XCTAssertEqual(fresh.string(forKey: "transcriptionLanguage"), "hinglish")
+
+        let (upgrader, upgraderSuite) = try profile(
+            ["hasCompletedOnboarding": true, ModelSelection.defaultsKey: "openai_whisper-large-v3"])
+        defer { upgrader.removePersistentDomain(forName: upgraderSuite) }
+        XCTAssertEqual(upgrader.string(forKey: "transcriptionLanguage"), "auto")
+        XCTAssertFalse(upgrader.bool(forKey: "enableAutoEdit"))
+        XCTAssertEqual(upgrader.string(forKey: ModelSelection.defaultsKey), "openai_whisper-large-v3")
+        XCTAssertEqual(ModelSelection.selectedVariant(upgrader), "openai_whisper-large-v3")
+
+        let (explicit, explicitSuite) = try profile(["hasCompletedOnboarding": true,
+            "transcriptionLanguage": "hinglish", "enableAutoEdit": true])
+        defer { explicit.removePersistentDomain(forName: explicitSuite) }
+        XCTAssertEqual(explicit.string(forKey: "transcriptionLanguage"), "hinglish")
+        XCTAssertTrue(explicit.bool(forKey: "enableAutoEdit"))
+
         XCTAssertEqual(ModelSelection.resolvedVariant("openai_whisper-large-v3", language: "hinglish"),
             AIModel.hinglishVariant)
         XCTAssertEqual(ModelSelection.resolvedVariant("openai_whisper-large-v3", language: "zh"),
