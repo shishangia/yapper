@@ -10,6 +10,8 @@ cargo build --locked --manifest-path "$root/windows/Yapper.Nemotron/Cargo.toml" 
 if ($LASTEXITCODE -ne 0) { throw 'Nemotron helper build failed' }
 dotnet publish "$root/windows/Yapper.Windows/Yapper.Windows.csproj" -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:RestoreLockedMode=true -o $app
 if ($LASTEXITCODE -ne 0) { throw 'Windows publish failed' }
+$vulkanWhisper = Join-Path $app 'runtimes/vulkan/win-x64/whisper.dll'
+if (!(Test-Path $vulkanWhisper)) { throw 'The Vulkan Whisper runtime was not packaged.' }
 Copy-Item "$cargoTarget/x86_64-pc-windows-msvc/release/yapper-nemotron.exe" "$app/Yapper.Nemotron.exe"
 $directML = Join-Path $cargoTarget 'x86_64-pc-windows-msvc/release/DirectML.dll'
 if (!(Test-Path $directML)) { throw 'DirectML was not produced with the Nemotron helper.' }

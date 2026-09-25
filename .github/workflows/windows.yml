@@ -41,7 +41,6 @@ jobs:
           $voice.Speak('Hello, this is a local transcription test. We should meet tomorrow afternoon and review the report together.')
           $voice.Dispose()
           $env:YAPPER_NEMOTRON_HELPER = "$PWD/dist/windows/app/Yapper.Nemotron.exe"
-          Copy-Item dist/windows/app/DirectML.dll windows/Yapper.Native.Tests/bin/Release/net10.0/DirectML.dll
           dotnet run --project windows/Yapper.Native.Tests -c Release -- "$PWD/dist/windows/test-models" "$PWD/dist/windows/test-speech.wav"
           if ($LASTEXITCODE -ne 0) { throw 'Native speech test failed' }
       - name: Actual textbox paste and clipboard tests

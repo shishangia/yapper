@@ -20,8 +20,6 @@ if (args.Length < 2) throw new ArgumentException("Usage: native-tests <isolated-
 var root = Path.GetFullPath(args[0]);
 var audio = Path.GetFullPath(args[1]);
 if (!Directory.Exists(root)) Directory.CreateDirectory(root);
-if (OperatingSystem.IsWindows() && !Directory.Exists(Path.Combine(AppContext.BaseDirectory, "runtimes", "vulkan", "win-x64")))
-    throw new Exception("The packaged Vulkan Whisper runtime is missing.");
 var helper = Environment.GetEnvironmentVariable("YAPPER_NEMOTRON_HELPER") ?? Path.Combine(AppContext.BaseDirectory, "Yapper.Nemotron.exe");
 if (OperatingSystem.IsWindows() && (!File.Exists(helper)
     || !File.Exists(Path.Combine(Path.GetDirectoryName(helper)!, "DirectML.dll"))))
