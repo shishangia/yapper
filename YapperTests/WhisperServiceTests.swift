@@ -253,6 +253,37 @@ final class WhisperServiceTests: XCTestCase {
             "openai_whisper-large-v3")
     }
 
+    func testImplicitHinglishUpgradeDoesNotCreateAnEmptyModelSelection() throws {
+        for selection in [nil, "", AIModel.hinglishVariant] as [String?] {
+            let suite = "Yapper-Hinglish-Upgrade-\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            defaults.set(true, forKey: "hasCompletedOnboarding")
+            if let selection { defaults.set(selection, forKey: ModelSelection.defaultsKey) }
+            // This is the saved state of 1.1.1 after using its implicit Hinglish model.
+            defaults.set(Data("[]".utf8), forKey: "history_items")
+            ModelSelection.registerDefaults(defaults, domain: suite)
+            XCTAssertEqual(defaults.string(forKey: "transcriptionLanguage"), "hinglish")
+            XCTAssertTrue(defaults.bool(forKey: "enableAutoEdit"))
+            XCTAssertEqual(ModelSelection.selectedVariant(defaults), AIModel.hinglishVariant)
+            ModelSelection.registerDefaults(defaults, domain: suite)
+            XCTAssertEqual(ModelSelection.selectedVariant(defaults), AIModel.hinglishVariant)
+        }
+    }
+
+    func testMigrationPreservesExplicitChoicesWithoutAGeneralModel() throws {
+        let suite = "Yapper-Explicit-Upgrade-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: "hasCompletedOnboarding")
+        defaults.set("auto", forKey: "transcriptionLanguage")
+        defaults.set(false, forKey: "enableAutoEdit")
+        ModelSelection.registerDefaults(defaults, domain: suite)
+        XCTAssertEqual(defaults.string(forKey: "transcriptionLanguage"), "auto")
+        XCTAssertFalse(defaults.bool(forKey: "enableAutoEdit"))
+        XCTAssertNil(defaults.persistentDomain(forName: suite)?[ModelSelection.defaultsKey])
+    }
+
     func testSharedMacAndWindowsCleanupContract() throws {
         struct Example: Decodable { let input: String; let expected: String }
         let path = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
