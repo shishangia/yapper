@@ -7,6 +7,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <None Include="../../Tests/Fixtures/dictation-cleanup.json" Link="dictation-cleanup.json" CopyToOutputDirectory="PreserveNewest" />
     <ProjectReference Include="../Yapper.Core/Yapper.Core.csproj" />
   </ItemGroup>
 </Project>

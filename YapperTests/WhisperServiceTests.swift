@@ -253,6 +253,17 @@ final class WhisperServiceTests: XCTestCase {
             "openai_whisper-large-v3")
     }
 
+    func testSharedMacAndWindowsCleanupContract() throws {
+        struct Example: Decodable { let input: String; let expected: String }
+        let path = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../Tests/Fixtures/dictation-cleanup.json")
+        let examples = try JSONDecoder().decode([Example].self, from: Data(contentsOf: path))
+        for example in examples {
+            XCTAssertEqual(DictationCleanup.apply(to: example.input, enabled: true), example.expected, example.input)
+            XCTAssertEqual(DictationCleanup.apply(to: example.input, enabled: false), example.input)
+        }
+    }
+
     func testSharedDictationCleanupFormatsExplicitCommands() {
         let raw = "um this is a sentence. another one, new paragraph, bullet point apples bullet point bananas"
         XCTAssertEqual(DictationCleanup.apply(to: raw, enabled: true),
