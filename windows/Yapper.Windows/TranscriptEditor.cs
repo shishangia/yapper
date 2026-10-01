@@ -21,6 +21,10 @@ public sealed class TranscriptEditor : Window
     public TranscriptEditor(LibraryStore library, Guid id)
     {
         this.library = library; recordingId = id;
+        AutomationProperties.SetAutomationId(passages, "transcriptPassages");
+        AutomationProperties.SetAutomationId(text, "passageText");
+        AutomationProperties.SetAutomationId(name, "speakerName");
+        AutomationProperties.SetAutomationId(status, "editorStatus");
         SetResourceReference(StyleProperty, typeof(Window));
         Title = "Yapper · Review transcript"; Width = 860; Height = 660; MinWidth = 720; MinHeight = 500;
         Width = Math.Min(Width, SystemParameters.WorkArea.Width - 32);
@@ -82,12 +86,11 @@ public sealed class TranscriptEditor : Window
         var old = (passages.SelectedItem as TranscriptSegment)?.Id;
         passages.ItemsSource = Current.Segments;
         speakers.ItemsSource = new[] { new KeyValuePair<string, string>("", "Needs review") }.Concat(Current.SpeakerIds.Select(id => new KeyValuePair<string, string>(id, Current.SpeakerName(id)))).ToArray();
-        speakers.DisplayMemberPath = "Value"; speakers.SelectedValuePath = "Key";
+        speakers.SelectedValuePath = "Key";
         var speakerTemplate = new DataTemplate();
         var speakerText = new FrameworkElementFactory(typeof(TextBlock));
         speakerText.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding("Value"));
         speakerTemplate.VisualTree = speakerText;
-        speakers.DisplayMemberPath = "";
         speakers.ItemTemplate = speakerTemplate;
         passages.SelectedItem = Current.Segments.FirstOrDefault(s => s.Id == old) ?? Current.Segments.FirstOrDefault();
         SelectPassage();

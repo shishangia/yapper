@@ -79,11 +79,58 @@ try {
         if (!$editor) { Start-Sleep -Milliseconds 100 }
     }
     if (!$editor) { throw 'Transcript editor did not open' }
+    function Editor-Control([string]$id) {
+        $control = $editor.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, $id))
+        if (!$control) { throw "Editor control missing: $id" }
+        return $control
+    }
+    function Invoke-EditorAction([string]$label) {
+        $button = $editor.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, $label))
+        if (!$button) { throw "Editor action missing: $label" }
+        $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+    }
+    function Assert-EditorSaved {
+        $editorStatus = Editor-Control 'editorStatus'
+        $deadline = [DateTime]::UtcNow.AddSeconds(5)
+        while ($editorStatus.Current.Name -ne 'Saved. Usage statistics unchanged.' -and [DateTime]::UtcNow -lt $deadline) {
+            Start-Sleep -Milliseconds 100
+        }
+        if ($editorStatus.Current.Name -ne 'Saved. Usage statistics unchanged.') {
+            throw "Editor refresh failed: $($editorStatus.Current.Name)"
+        }
+    }
     $editorTimestamps = $editor.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'showTranscriptTimestamps'))
     if (!$editorTimestamps) { throw 'Transcript timestamp switch missing' }
     $editorToggle = $editorTimestamps.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern)
     if ($editorToggle.Current.ToggleState -ne [System.Windows.Automation.ToggleState]::On) { throw 'Legacy transcript should keep timestamps' }
-    $editorToggle.Toggle()
+    foreach ($expected in @($false, $true, $false)) {
+        $editorToggle.Toggle()
+        Assert-EditorSaved
+        $edited = Get-Content (Join-Path $testRoot 'library.json') -Raw | ConvertFrom-Json
+        if ($edited.Recordings[0].Conversation.TimestampsVisible -ne $expected) { throw 'Timestamp toggle was not saved' }
+    }
+    $passages = Editor-Control 'transcriptPassages'
+    $items = $passages.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem))
+    $items[1].GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+    $speakerName = (Editor-Control 'speakerName').GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
+    if ($speakerName.Current.Value -ne 'Test Bob') { throw 'Second passage speaker was not selected' }
+    $speakerName.SetValue('Test Robert')
+    Invoke-EditorAction 'Rename selected speaker'
+    Assert-EditorSaved
+    if ($speakerName.Current.Value -ne 'Test Robert') { throw 'Speaker name or selected passage was lost during refresh' }
+    $passageText = (Editor-Control 'passageText').GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
+    $passageText.SetValue('Updated reply')
+    Invoke-EditorAction 'Save passage'
+    Assert-EditorSaved
+    if ($passageText.Current.Value -ne 'Updated reply') { throw 'Passage text was lost during refresh' }
+    Invoke-EditorAction 'Copy transcript'
+    $deadline = [DateTime]::UtcNow.AddSeconds(5)
+    do {
+        $copied = (Get-Clipboard -Raw) -replace "`r`n", "`n"
+        if ($copied -eq "Test Alice: Hello`n`nTest Robert: Updated reply") { break }
+        Start-Sleep -Milliseconds 100
+    } while ([DateTime]::UtcNow -lt $deadline)
+    if ($copied -ne "Test Alice: Hello`n`nTest Robert: Updated reply") { throw "Copied transcript did not reflect the edits: $copied" }
     Capture-Window $editor 'Dark-editor'
     $editor.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern).Close()
     Stop-Process -Id $process.Id
@@ -103,6 +150,12 @@ try {
     if (!$restored.Preferences.IncludeTimestamps) { throw 'New-transcript timestamp preference did not survive relaunch' }
     if ($restored.Recordings.Count -ne 1) { throw "Library count changed on relaunch: $($restored.Recordings.Count)" }
     if ($restored.Recordings[0].Conversation.TimestampsVisible -ne $false) { throw "Recording timestamp view did not persist: $($restored.Recordings[0].Conversation.TimestampsVisible)" }
+    if ($restored.Recordings[0].Conversation.SpeakerNames.'2' -ne 'Test Robert') { throw 'Speaker rename did not survive relaunch' }
+    if ($restored.Recordings[0].Conversation.Segments[1].Text -ne 'Updated reply') { throw 'Passage edit did not survive relaunch' }
+    if ($restored.Recordings[0].Conversation.Segments[1].SpeakerId -ne '2') { throw 'Passage edit changed the speaker assignment' }
+    if ($restored.Recordings[0].Conversation.SpeakerNames.'1' -ne 'Test Alice') { throw 'Renaming changed another speaker' }
+    if ($restored.Usage.Count -ne 0) { throw 'Editor changes added usage statistics' }
+    Write-Host 'PASS editor repeated refresh, speaker rename, passage edit, copied output and relaunch persistence'
     Write-Host 'PASS sidebar, light/dark themes, persistence, floating recorder, history and editor'
 } finally {
     if (!$process.HasExited) { Stop-Process -Id $process.Id }
