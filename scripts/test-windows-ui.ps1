@@ -206,6 +206,9 @@ try {
     if ($restored.Usage.Count -ne 0) { throw 'Editor changes added usage statistics' }
     Write-Host 'PASS editor draft preservation, save/discard/cancel, Ctrl+S, accessible names, copied output and relaunch persistence'
     Write-Host 'PASS sidebar, light/dark themes, persistence, floating recorder, history and editor'
+} catch {
+    Write-Host $_.ScriptStackTrace
+    throw
 } finally {
     if (!$process.HasExited) { Stop-Process -Id $process.Id }
     Remove-Item Env:YAPPER_TEST_ROOT
