@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Input;
 using Yapper.Core;
 using Button = System.Windows.Controls.Button;
 using TextBox = System.Windows.Controls.TextBox;
@@ -17,6 +18,13 @@ public sealed class TranscriptEditor : Window
     private readonly ComboBox speakers = new();
     private readonly TextBox name = new();
     private readonly TextBlock status = new() { TextWrapping = TextWrapping.Wrap };
+    private TranscriptSegment? loadedPassage;
+    private string nameSpeaker = "", loadedName = "";
+    private bool refreshing;
+    private string SelectedSpeaker => speakers.SelectedValue as string ?? "";
+    private bool HasPassageEdits => loadedPassage is not null
+        && (text.Text != loadedPassage.Text || SelectedSpeaker != (loadedPassage.SpeakerId ?? ""));
+    private bool HasNameEdit => name.Text != loadedName;
     private Transcript Current => library.Data.Recordings.Single(r => r.Id == recordingId).Conversation!;
     public TranscriptEditor(LibraryStore library, Guid id)
     {
@@ -25,6 +33,22 @@ public sealed class TranscriptEditor : Window
         AutomationProperties.SetAutomationId(text, "passageText");
         AutomationProperties.SetAutomationId(name, "speakerName");
         AutomationProperties.SetAutomationId(status, "editorStatus");
+        AutomationProperties.SetAutomationId(speakers, "speakerAssignment");
+        AutomationProperties.SetName(passages, "Transcript passages");
+        AutomationProperties.SetName(text, "Passage text");
+        AutomationProperties.SetName(speakers, "Speaker assignment");
+        AutomationProperties.SetName(name, "Speaker name for this recording");
+        speakers.SelectedValuePath = "Key";
+        var speakerTemplate = new DataTemplate();
+        var speakerText = new FrameworkElementFactory(typeof(TextBlock));
+        speakerText.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding("Value"));
+        speakerTemplate.VisualTree = speakerText;
+        speakers.ItemTemplate = speakerTemplate;
+        CommandBindings.Add(new CommandBinding(ApplicationCommands.Save, (_, e) =>
+        { SaveEdits(); e.Handled = true; }, (_, e) =>
+        { e.CanExecute = HasPassageEdits || HasNameEdit; e.Handled = true; }));
+        InputBindings.Add(new KeyBinding(ApplicationCommands.Save, new KeyGesture(Key.S, ModifierKeys.Control)));
+        Closing += (_, e) => { if (!ResolveEdits()) e.Cancel = true; };
         SetResourceReference(StyleProperty, typeof(Window));
         Title = "Yapper · Review transcript"; Width = 860; Height = 660; MinWidth = 720; MinHeight = 500;
         Width = Math.Min(Width, SystemParameters.WorkArea.Width - 32);
@@ -38,10 +62,11 @@ public sealed class TranscriptEditor : Window
         var actions = new WrapPanel();
         AddButton(actions, "Confirm one speaker", () =>
         {
+            if (!ResolveEdits()) return;
             if (System.Windows.MessageBox.Show(this, "Assign every passage to one speaker? This can be undone.", "Yapper", MessageBoxButton.YesNo) == MessageBoxResult.Yes) Change(t => t.ConfirmSingleSpeaker());
         });
-        AddButton(actions, "Undo one speaker", () => Change(t => t.UndoSingleSpeaker()));
-        AddButton(actions, "Copy transcript", () => System.Windows.Clipboard.SetText(Current.FormattedText()));
+        AddButton(actions, "Undo one speaker", () => { if (ResolveEdits()) Change(t => t.UndoSingleSpeaker()); });
+        AddButton(actions, "Copy transcript", () => { if (ResolveEdits()) System.Windows.Clipboard.SetText(Current.FormattedText()); });
         var timestamps = new CheckBox { Content = "Show timestamps", IsChecked = Current.ShowsTimestamps, VerticalAlignment = VerticalAlignment.Center };
         AutomationProperties.SetAutomationId(timestamps, "showTranscriptTimestamps");
         timestamps.Checked += (_, _) => Change(t => t.WithTimestamps(true));
@@ -56,24 +81,41 @@ public sealed class TranscriptEditor : Window
         Grid.SetColumn(editorScroll, 1); grid.Children.Add(editorScroll);
         editor.Children.Add(new TextBlock { Text = "Passage text", FontWeight = FontWeights.Bold }); editor.Children.Add(text);
         editor.Children.Add(new TextBlock { Text = "Speaker assignment" }); editor.Children.Add(speakers);
-        var save = new WrapPanel(); AddButton(save, "Save passage", SavePassage); editor.Children.Add(save);
+        var save = new WrapPanel();
+        var saveButton = new Button { Content = "Save changes", Command = ApplicationCommands.Save, ToolTip = "Save passage and speaker name (Ctrl+S)" };
+        AutomationProperties.SetAcceleratorKey(saveButton, "Ctrl+S");
+        save.Children.Add(saveButton); editor.Children.Add(save);
         editor.Children.Add(new TextBlock { Text = "Speaker name (recording-specific)" }); editor.Children.Add(name);
         var naming = new WrapPanel();
         AddButton(naming, "Rename selected speaker", () =>
         {
-            if (speakers.SelectedValue is string speaker && speaker.Length > 0) Change(t => t.Rename(speaker, name.Text));
+            if (SelectedSpeaker.Length > 0) Change(t => t.Rename(SelectedSpeaker, name.Text), preserveName: false);
         });
-        AddButton(naming, "Add speaker", () => Change(t => t.AddSpeaker(name.Text)));
+        AddButton(naming, "Add speaker", () => Change(t => t.AddSpeaker(name.Text), preserveName: false));
         AddButton(naming, "Merge passage speaker into selected", () =>
         {
             if (passages.SelectedItem is TranscriptSegment old && old.SpeakerId is not null && speakers.SelectedValue is string target && target.Length > 0)
-                Change(t => t.Merge(old.SpeakerId, target));
+            {
+                if (ResolveEdits()) Change(t => t.Merge(old.SpeakerId, target));
+            }
         });
         editor.Children.Add(naming);
         editor.Children.Add(new TextBlock { Text = "Small uncertain passages stay in reading flow. Review assignments here; naming does not identify the same person in other recordings.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 14, 0, 0) });
         root.Children.Add(grid); Content = root;
-        passages.SelectionChanged += (_, _) => SelectPassage();
-        speakers.SelectionChanged += (_, _) => { if (speakers.SelectedValue is string speaker) name.Text = Current.SpeakerNames.GetValueOrDefault(speaker, ""); };
+        passages.SelectionChanged += (_, _) =>
+        {
+            if (refreshing || passages.SelectedItem is not TranscriptSegment next) return;
+            if (ResolveEdits()) Reload(next.Id);
+            else
+            {
+                refreshing = true;
+                passages.SelectedItem = Current.Segments.FirstOrDefault(s => s.Id == loadedPassage?.Id);
+                refreshing = false;
+            }
+        };
+        speakers.SelectionChanged += (_, _) => SelectSpeaker();
+        text.TextChanged += (_, _) => ShowDraftStatus();
+        name.TextChanged += (_, _) => ShowDraftStatus();
         Reload();
     }
     private static void AddButton(Panel panel, string label, Action action)
@@ -81,35 +123,88 @@ public sealed class TranscriptEditor : Window
         var button = new Button { Content = label };
         button.Click += (_, _) => action(); panel.Children.Add(button);
     }
-    private void Reload()
+    private void Reload(int? selectedId = null, bool preservePassage = false, bool preserveName = false)
     {
-        var old = (passages.SelectedItem as TranscriptSegment)?.Id;
-        passages.ItemsSource = Current.Segments;
-        speakers.ItemsSource = new[] { new KeyValuePair<string, string>("", "Needs review") }.Concat(Current.SpeakerIds.Select(id => new KeyValuePair<string, string>(id, Current.SpeakerName(id)))).ToArray();
-        speakers.SelectedValuePath = "Key";
-        var speakerTemplate = new DataTemplate();
-        var speakerText = new FrameworkElementFactory(typeof(TextBlock));
-        speakerText.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding("Value"));
-        speakerTemplate.VisualTree = speakerText;
-        speakers.ItemTemplate = speakerTemplate;
-        passages.SelectedItem = Current.Segments.FirstOrDefault(s => s.Id == old) ?? Current.Segments.FirstOrDefault();
-        SelectPassage();
+        var old = selectedId ?? loadedPassage?.Id;
+        var draftText = text.Text; var draftSpeaker = SelectedSpeaker; var draftName = name.Text;
+        var selectionStart = text.SelectionStart; var selectionLength = text.SelectionLength;
+        refreshing = true;
+        try
+        {
+            passages.ItemsSource = Current.Segments;
+            speakers.ItemsSource = new[] { new KeyValuePair<string, string>("", "Needs review") }.Concat(Current.SpeakerIds.Select(id => new KeyValuePair<string, string>(id, Current.SpeakerName(id)))).ToArray();
+            passages.SelectedItem = Current.Segments.FirstOrDefault(s => s.Id == old) ?? Current.Segments.FirstOrDefault();
+            loadedPassage = passages.SelectedItem as TranscriptSegment;
+            text.Text = preservePassage ? draftText : loadedPassage?.Text ?? "";
+            speakers.SelectedValue = preservePassage ? draftSpeaker : loadedPassage?.SpeakerId ?? "";
+            nameSpeaker = SelectedSpeaker;
+            loadedName = Current.SpeakerNames.GetValueOrDefault(nameSpeaker, "");
+            name.Text = preserveName ? draftName : loadedName;
+            if (preservePassage) text.Select(Math.Min(selectionStart, text.Text.Length), Math.Min(selectionLength, Math.Max(0, text.Text.Length - selectionStart)));
+            if (loadedPassage is not null) status.Text = $"{TimeSpan.FromSeconds(loadedPassage.Start):hh\\:mm\\:ss} to {TimeSpan.FromSeconds(loadedPassage.End):hh\\:mm\\:ss}";
+        }
+        finally { refreshing = false; }
     }
-    private void SelectPassage()
+    private void SelectSpeaker()
     {
-        if (passages.SelectedItem is not TranscriptSegment segment) return;
-        text.Text = segment.Text; speakers.SelectedValue = segment.SpeakerId ?? "";
-        status.Text = $"{TimeSpan.FromSeconds(segment.Start):hh\\:mm\\:ss} to {TimeSpan.FromSeconds(segment.End):hh\\:mm\\:ss}";
+        if (refreshing) return;
+        var target = SelectedSpeaker;
+        if (HasNameEdit)
+        {
+            var answer = System.Windows.MessageBox.Show(this, "Save the edited speaker name before changing the assignment?", "Unsaved speaker name", MessageBoxButton.YesNoCancel);
+            if (answer == MessageBoxResult.Cancel || answer == MessageBoxResult.Yes && !SaveName())
+            {
+                refreshing = true; speakers.SelectedValue = nameSpeaker; refreshing = false;
+                return;
+            }
+        }
+        refreshing = true;
+        nameSpeaker = target; loadedName = Current.SpeakerNames.GetValueOrDefault(target, ""); name.Text = loadedName;
+        refreshing = false;
+        ShowDraftStatus();
     }
-    private void SavePassage()
+    private bool SaveName()
     {
-        if (passages.SelectedItem is not TranscriptSegment segment) return;
-        var speaker = speakers.SelectedValue as string;
-        Change(t => t.Edit(segment.Id, text.Text, string.IsNullOrEmpty(speaker) ? null : speaker));
+        if (nameSpeaker.Length == 0) { status.Text = "Choose a speaker or use Add speaker to save this name."; return false; }
+        return Change(t => t.Rename(nameSpeaker, name.Text), preserveName: false);
     }
-    private void Change(Func<Transcript, Transcript> change)
+    private bool SaveEdits()
     {
-        try { library.UpdateConversation(recordingId, change); Reload(); status.Text = "Saved. Usage statistics unchanged."; }
-        catch (Exception error) { status.Text = error.Message; }
+        if (HasNameEdit && nameSpeaker.Length == 0) { status.Text = "Choose a speaker or use Add speaker to save this name."; return false; }
+        var editPassage = HasPassageEdits; var editName = HasNameEdit;
+        var passage = loadedPassage; var speaker = SelectedSpeaker;
+        return Change(t =>
+        {
+            if (editPassage && passage is not null) t = t.Edit(passage.Id, text.Text, speaker.Length == 0 ? null : speaker);
+            return editName ? t.Rename(nameSpeaker, name.Text) : t;
+        }, preservePassage: false, preserveName: false);
+    }
+    private bool ResolveEdits()
+    {
+        if (!HasPassageEdits && !HasNameEdit) return true;
+        var answer = System.Windows.MessageBox.Show(this, "Save your passage and speaker-name changes? Choose No to discard them, or Cancel to keep editing.", "Unsaved transcript changes", MessageBoxButton.YesNoCancel);
+        if (answer == MessageBoxResult.Yes) return SaveEdits();
+        if (answer == MessageBoxResult.No) { Reload(); return true; }
+        return false;
+    }
+    private void ShowDraftStatus()
+    {
+        if (refreshing) return;
+        status.Text = HasPassageEdits || HasNameEdit ? "Unsaved changes. Press Ctrl+S to save." : "No unsaved changes.";
+        CommandManager.InvalidateRequerySuggested();
+    }
+    private bool Change(Func<Transcript, Transcript> change, bool preservePassage = true, bool preserveName = true)
+    {
+        var keepPassage = preservePassage && HasPassageEdits;
+        var keepName = preserveName && HasNameEdit;
+        try
+        {
+            library.UpdateConversation(recordingId, change);
+            Reload(preservePassage: keepPassage, preserveName: keepName);
+            status.Text = HasPassageEdits || HasNameEdit ? "Change saved. Your draft is still unsaved. Press Ctrl+S to save." : "Saved. Usage statistics unchanged.";
+            CommandManager.InvalidateRequerySuggested();
+            return true;
+        }
+        catch (Exception error) { status.Text = error.Message; return false; }
     }
 }
