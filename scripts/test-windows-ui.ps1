@@ -115,7 +115,15 @@ try {
         if (!$dialog) { throw 'Unsaved changes prompt did not appear' }
         $button = $dialog.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, $answer))
         if (!$button) { throw "Unsaved changes prompt has no $answer button" }
-        $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+        # Native MessageBox controls use the platform keyboard accelerators.
+        $keys.SendKeys(@{ Cancel = '{ESC}'; No = '%n'; Yes = '%y' }[$answer])
+        $deadline = [DateTime]::UtcNow.AddSeconds(5)
+        do {
+            $dialog = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, 'Unsaved transcript changes'))
+            if (!$dialog) { break }
+            Start-Sleep -Milliseconds 100
+        } while ([DateTime]::UtcNow -lt $deadline)
+        if ($dialog) { throw "Unsaved changes prompt did not accept $answer" }
     }
     function Leave-Draft {
         (Editor-Control 'transcriptPassages').SetFocus()
