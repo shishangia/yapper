@@ -1,6 +1,18 @@
 param([Parameter(Mandatory=$true)][string]$AppPath)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class EditorTestInput {
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string className, string title);
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint process);
+    [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr dialog, int id);
+    [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
+    [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr window);
+}
+'@
 $env:YAPPER_TEST_ROOT = Join-Path $env:TEMP ("Yapper-UI-" + [guid]::NewGuid())
 $testRoot = $env:YAPPER_TEST_ROOT
 New-Item -ItemType Directory -Path $testRoot | Out-Null
@@ -107,23 +119,26 @@ try {
     }
     function Answer-UnsavedChanges([string]$answer) {
         $deadline = [DateTime]::UtcNow.AddSeconds(5)
-        $dialog = $null
-        while (!$dialog -and [DateTime]::UtcNow -lt $deadline) {
-            $dialog = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, 'Unsaved transcript changes'))
-            if (!$dialog) { Start-Sleep -Milliseconds 100 }
+        $dialogHandle = [IntPtr]::Zero
+        while ($dialogHandle -eq [IntPtr]::Zero -and [DateTime]::UtcNow -lt $deadline) {
+            $dialogHandle = [EditorTestInput]::FindWindow('#32770', 'Unsaved transcript changes')
+            if ($dialogHandle -eq [IntPtr]::Zero) { Start-Sleep -Milliseconds 100 }
         }
-        if (!$dialog) { throw 'Unsaved changes prompt did not appear' }
-        $button = $dialog.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, $answer))
-        if (!$button) { throw "Unsaved changes prompt has no $answer button" }
-        # Native MessageBox controls use the platform keyboard accelerators.
-        $keys.SendKeys(@{ Cancel = '{ESC}'; No = '%n'; Yes = '%y' }[$answer])
+        if ($dialogHandle -eq [IntPtr]::Zero) { throw 'Native unsaved changes prompt did not appear' }
+        $owner = [uint32]0
+        [void][EditorTestInput]::GetWindowThreadProcessId($dialogHandle, [ref]$owner)
+        if ($owner -ne $process.Id) { throw 'Unsaved changes dialog belongs to a different process' }
+        $buttonHandle = [EditorTestInput]::GetDlgItem($dialogHandle, @{ Cancel = 2; No = 7; Yes = 6 }[$answer])
+        if ($buttonHandle -eq [IntPtr]::Zero) { throw "Native unsaved changes prompt has no $answer button" }
+        [void][EditorTestInput]::SetForegroundWindow($dialogHandle)
+        # BM_CLICK invokes the real native button without requiring UIAutomation patterns.
+        if (![EditorTestInput]::PostMessage($buttonHandle, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)) { throw 'Could not click the native dialog button' }
         $deadline = [DateTime]::UtcNow.AddSeconds(5)
-        do {
-            $dialog = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, 'Unsaved transcript changes'))
-            if (!$dialog) { break }
+        while ([EditorTestInput]::IsWindow($dialogHandle) -and [DateTime]::UtcNow -lt $deadline) {
             Start-Sleep -Milliseconds 100
-        } while ([DateTime]::UtcNow -lt $deadline)
-        if ($dialog) { throw "Unsaved changes prompt did not accept $answer" }
+        }
+        if ([EditorTestInput]::IsWindow($dialogHandle)) { throw "Native unsaved changes prompt did not accept $answer" }
+        Write-Host "PASS native unsaved changes action: $answer"
     }
     function Leave-Draft {
         (Editor-Control 'transcriptPassages').SetFocus()
