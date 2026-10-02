@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct HistoryView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("selectedHotkey") private var selectedHotkey: HotkeyOption = .fn
     @AppStorage("recordingMode") private var recordingMode = 0
     @StateObject private var historyService = HistoryService.shared
@@ -79,7 +80,7 @@ struct HistoryView: View {
                                 item: item,
                                 isExpanded: expandedItemId == item.id,
                                 onToggle: {
-                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    withAnimation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.8)) {
                                         if expandedItemId == item.id {
                                             expandedItemId = nil
                                             audioPlayer.stop()
@@ -171,12 +172,12 @@ struct HistoryView: View {
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
         
-        withAnimation {
+        withAnimation(reduceMotion ? nil : .default) {
             showCopyToast = true
         }
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            withAnimation {
+            withAnimation(reduceMotion ? nil : .default) {
                 showCopyToast = false
             }
         }

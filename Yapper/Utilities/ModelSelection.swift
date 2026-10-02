@@ -46,9 +46,13 @@ enum ModelSelection {
         let stored = defaults.persistentDomain(forName: domain) ?? [:]
         guard stored[migratedKey] == nil else { return }
         defaults.set(true, forKey: migratedKey)
-        let existingInstall = stored["hasCompletedOnboarding"] as? Bool == true
-            || stored[defaultsKey] != nil || stored["history_items"] != nil
-        guard existingInstall else { return }
+        // Before Hinglish routing, a working install needed an explicit general model.
+        // Onboarding/history alone also describe a fresh 1.1.1 Hinglish install, which
+        // never saved a general model. Changing that profile to Auto leaves it unusable.
+        // For ambiguous profiles without a usable saved choice, keep the new defaults;
+        // registered defaults still cannot override an explicit language or Auto Edit value.
+        guard let selected = stored[defaultsKey] as? String,
+              !selected.isEmpty, selected != AIModel.hinglishVariant else { return }
         if stored["transcriptionLanguage"] == nil { defaults.set("auto", forKey: "transcriptionLanguage") }
         if stored["enableAutoEdit"] == nil { defaults.set(false, forKey: "enableAutoEdit") }
     }

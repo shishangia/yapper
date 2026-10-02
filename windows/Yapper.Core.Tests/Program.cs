@@ -79,15 +79,25 @@ var tests = new (string Name, Action Run)[]
         Equal("3.14", DictationText.Process("3.14.", [], true, false));
         Equal("Hello.", DictationText.Process("Hello.", [], false, false));
         Equal("This is a sentence. Another one\n\n• Apples\n• Bananas", DictationText.Process(
-            "um this is a sentence. another one new paragraph bullet point apples bullet point bananas", [], false, true));
+            "um this is a sentence. another one, new paragraph, bullet point apples bullet point bananas", [], false, true));
         Equal("Shopping list\n1. Milk\n2. Eggs\n3. Tea", DictationText.Process(
             "shopping list number one milk number two eggs number three tea", [], false, true));
         Equal("Keep this sentence. Corrected words", DictationText.Process(
-            "Keep this sentence. wrong words scratch that corrected words", [], false, true));
+            "Keep this sentence. wrong words, scratch that. corrected words", [], false, true));
         Equal("I like this, you know number one reason", DictationText.Process(
             "i like this, you know number one reason", [], false, true));
         Equal("me@example.com works on iPhone", DictationText.Process(
             "me@example.com works on iPhone", [], false, true));
+    }),
+    ("shared Mac and Windows cleanup contract", () =>
+    {
+        using var cases = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "dictation-cleanup.json")));
+        foreach (var item in cases.RootElement.EnumerateArray())
+        {
+            var input = item.GetProperty("input").GetString()!;
+            Equal(item.GetProperty("expected").GetString(), DictationText.Process(input, [], false, true));
+            Equal(input.Replace("\r\n", "\n").Replace('\r', '\n'), DictationText.Process(input, [], false, false));
+        }
     }),
     ("cancellation keeps busy ownership and rejects stale finish", () =>
     {
