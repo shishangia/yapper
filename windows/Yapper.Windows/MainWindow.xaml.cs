@@ -234,11 +234,11 @@ public partial class MainWindow : Window
         try
         {
             audio.Start(recordingPath, MicrophoneChoice.SelectedIndex);
-            _ = WarmDuringRecording(options);
             recorder.Present(true);
             Status.Text = "Recording microphone… Press the shortcut again or Stop when finished.";
             tray.Text = "Yapper · Recording";
             RecordButton.Content = "Stop and transcribe";
+            _ = WarmDuringRecording(options, cancellation!.Token);
         }
         catch (Exception error) { Status.Text = error.Message; Finish(); }
     }
@@ -253,9 +253,10 @@ public partial class MainWindow : Window
         Status.Text = message;
         return true;
     }
-    private async Task WarmDuringRecording(JobOptions job)
+    private async Task WarmDuringRecording(JobOptions job, CancellationToken cancellation)
     {
-        try { await speech.Warm(job.Model, job.Language, job.Speakers && !job.Single, CancellationToken.None); }
+        try { await speech.Warm(job.Model, job.Language, job.Speakers && !job.Single, cancellation); }
+        catch (OperationCanceledException) { }
         catch (Exception error) { Debug.WriteLine("Model warm-up failed; transcription will retry: " + error.Message); }
     }
     private async Task StopAndProcess()

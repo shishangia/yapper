@@ -1,0 +1,74 @@
+[
+  {
+    "input": "I need to scratch that itch",
+    "expected": "I need to scratch that itch"
+  },
+  {
+    "input": "we launched a new line of shoes",
+    "expected": "We launched a new line of shoes"
+  },
+  {
+    "input": "we need a new paragraph for this",
+    "expected": "We need a new paragraph for this"
+  },
+  {
+    "input": "Contact foo@example.com, scratch that, call me",
+    "expected": "Call me"
+  },
+  {
+    "input": "Write to foo@example.com. Wrong address, scratch that, use bar@example.com",
+    "expected": "Write to foo@example.com. Use bar@example.com"
+  },
+  {
+    "input": "email foo@example.com scratch that",
+    "expected": "Email foo@example.com scratch that"
+  },
+  {
+    "input": "Keep this. Wrong words. Scratch that. Right words.",
+    "expected": "Keep this. Right words."
+  },
+  {
+    "input": "first idea, scratch that",
+    "expected": ""
+  },
+  {
+    "input": "first idea scratch that corrected idea",
+    "expected": "First idea scratch that corrected idea"
+  },
+  {
+    "input": "first line. New line. second line",
+    "expected": "First line.\nSecond line"
+  },
+  {
+    "input": "first paragraph, new paragraph, second paragraph",
+    "expected": "First paragraph\n\nSecond paragraph"
+  },
+  {
+    "input": "Scratch that. Start over",
+    "expected": "Start over"
+  },
+  {
+    "input": "shopping list number one milk number two eggs number three tea",
+    "expected": "Shopping list\n1. Milk\n2. Eggs\n3. Tea"
+  },
+  {
+    "input": "um this is a sentence. another one, new paragraph, bullet point apples bullet point bananas",
+    "expected": "This is a sentence. Another one\n\n• Apples\n• Bananas"
+  },
+  {
+    "input": "i like this, you know number one reason",
+    "expected": "I like this, you know number one reason"
+  },
+  {
+    "input": "https://example.com/path",
+    "expected": "https://example.com/path"
+  },
+  {
+    "input": "www.example.com works on iPhone",
+    "expected": "www.example.com works on iPhone"
+  },
+  {
+    "input": "hello ગુજરાતી 你好",
+    "expected": "Hello ગુજરાતી 你好"
+  }
+]

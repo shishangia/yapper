@@ -109,8 +109,8 @@ public static class DictationText
     {
         text = Scratch(text);
         text = Regex.Replace(text, @"(?i)(^|[\s,.;:!?])(?:uh+|um+|umm+|uhm+|erm+|hmm+)(?=$|[\s,.;:!?])[,.;:!?]?", "$1");
-        text = Regex.Replace(text, @"(?i)\bnew paragraph\b[,.]?", "\n\n");
-        text = Regex.Replace(text, @"(?i)\bnew line\b[,.]?", "\n");
+        text = Regex.Replace(text, Command("new paragraph"), "\n\n");
+        text = Regex.Replace(text, Command("new line"), "\n");
         text = FormatBullets(text);
         text = FormatNumbers(text);
         text = Regex.Replace(text, @"[ \t]+([,.;:!?])", "$1");
@@ -120,13 +120,27 @@ public static class DictationText
         return Capitalize(text);
     }
 
+    // Commands must stand as their own clause, matching the Mac cleanup grammar.
+    private static string Command(string phrase) =>
+        @"(?i)(?:^|[,;:]|(?<=[.!?\n]))[ \t]*" + phrase + @"(?=[ \t]*(?:[.,;:!?\n]|$))[ \t]*[,.]?";
+
     private static string Scratch(string text)
     {
-        var command = new Regex(@"(?i)\b(?:scratch that|scratch it)\b[\s,:;-]*");
+        var command = new Regex(Command("(?:scratch that|scratch it)") + @"[\s,:;-]*");
         while (command.Match(text) is { Success: true } match)
         {
             var prefix = text[..match.Index];
-            var boundary = prefix.LastIndexOfAny(['.', '!', '?', '\n']);
+            while (prefix.Length > 0 && (char.IsWhiteSpace(prefix[^1]) || ".,;:!?".Contains(prefix[^1]))) prefix = prefix[..^1];
+            var boundary = -1;
+            for (var index = prefix.Length - 1; index >= 0; index--)
+            {
+                if (prefix[index] == '\n' || (".!?".Contains(prefix[index])
+                    && index + 1 < prefix.Length && char.IsWhiteSpace(prefix[index + 1])))
+                {
+                    boundary = index;
+                    break;
+                }
+            }
             var kept = boundary >= 0 ? prefix[..(boundary + 1)].Trim() : "";
             var correction = text[(match.Index + match.Length)..].Trim();
             text = string.Join(kept.Length == 0 ? "" : " ", new[] { kept, correction }.Where(x => x.Length > 0));
@@ -160,6 +174,9 @@ public static class DictationText
             text = Regex.Replace(text, pattern, match =>
             {
                 var rest = text[(match.Groups[2].Index)..];
+                if (rest.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                    || rest.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+                    || rest.StartsWith("www.", StringComparison.OrdinalIgnoreCase)) return match.Value;
                 var end = rest.IndexOfAny([' ', '\t', '\r', '\n', ',', ';', ':', '!', '?']);
                 var token = end >= 0 ? rest[..end] : rest;
                 if (token.Contains('@') || token.Skip(1).Any(char.IsUpper)) return match.Value;

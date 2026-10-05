@@ -23,80 +23,89 @@ public sealed class SpeechService(ModelStore models) : IDisposable
     private string? parakeetModel;
     private NemotronDiarizer? diarizer;
 
-    public async Task Warm(SpeechModel model, string language, bool detailed, CancellationToken cancellation)
+    public Task Warm(SpeechModel model, string language, bool detailed, CancellationToken cancellation)
+        => Task.Run(async () =>
     {
-        await gate.WaitAsync(cancellation);
+        await gate.WaitAsync(cancellation).ConfigureAwait(false);
         try
         {
             if (!models.Ready(model)) return;
+            cancellation.ThrowIfCancellationRequested();
             if (model.Id == "parakeet-v3") EnsureParakeet(model);
-            else EnsureWhisper(model, language, detailed, new Progress<(string, double)>());
+            else EnsureWhisper(model, language, detailed, new Progress<(string, double)>(), cancellation);
+            cancellation.ThrowIfCancellationRequested();
         }
         finally { gate.Release(); }
-    }
+    }, CancellationToken.None);
 
-    public async Task<SpeechResult> Transcribe(float[] samples, SpeechModel model, string language, bool speakers, bool single,
+    public Task<SpeechResult> Transcribe(float[] samples, SpeechModel model, string language, bool speakers, bool single,
         IProgress<(string Stage, double Value)> progress, CancellationToken cancellation)
     {
         var queued = Stopwatch.StartNew();
-        await gate.WaitAsync(cancellation);
-        var queueSeconds = queued.Elapsed.TotalSeconds;
-        try
+        return Task.Run(async () =>
         {
-            if (!models.Ready(model)) throw new InvalidOperationException("Download the selected model first.");
-            if (model.Id == "parakeet-v3" && language is not ("auto" or "en")) throw new InvalidOperationException("Choose Whisper for Hindi, Gujarati, or Chinese.");
-            if (model.Id == "whisper-hinglish" && language is "gu" or "zh")
-                throw new InvalidOperationException("Choose a multilingual Whisper model for Gujarati or Chinese.");
-            cancellation.ThrowIfCancellationRequested();
-            progress.Report(("Transcribing locally", 0));
-            var prepare = Stopwatch.StartNew();
-            var prepared = model.Id == "parakeet-v3" ? EnsureParakeet(model)
-                : EnsureWhisper(model, language, speakers && !single, progress);
-            var preparationSeconds = prepared ? prepare.Elapsed.TotalSeconds : 0;
-            var inference = Stopwatch.StartNew();
-            List<SpeechWord> words;
+            await gate.WaitAsync(cancellation).ConfigureAwait(false);
+            var queueSeconds = queued.Elapsed.TotalSeconds;
             try
             {
-                words = await Task.Run(async () => model.Id == "parakeet-v3"
-                    ? Parakeet(samples) : await Whisper(samples), CancellationToken.None);
-            }
-            catch (Exception error) when (model.Id != "parakeet-v3" && !whisperCpu && error is not OperationCanceledException)
-            {
-                // The GPU backend can fail at inference time; retry once on CPU and stay there for this session.
-                whisperCpu = true;
-                DisposeWhisper();
-                EnsureWhisper(model, language, speakers && !single, progress);
-                words = await Task.Run(() => Whisper(samples), CancellationToken.None);
-            }
-            var inferenceSeconds = inference.Elapsed.TotalSeconds;
-            cancellation.ThrowIfCancellationRequested();
-            var transcript = Alignment.Align(words, [], speakers, single);
-            var speakerSeconds = 0d;
-            if (speakers && !single && transcript.PlainText.Trim().Length > 0)
-            {
+                if (!models.Ready(model)) throw new InvalidOperationException("Download the selected model first.");
+                if (model.Id == "parakeet-v3" && language is not ("auto" or "en")) throw new InvalidOperationException("Choose Whisper for Hindi, Gujarati, or Chinese.");
+                if (model.Id == "whisper-hinglish" && language is "gu" or "zh")
+                    throw new InvalidOperationException("Choose a multilingual Whisper model for Gujarati or Chinese.");
+                cancellation.ThrowIfCancellationRequested();
+                progress.Report(("Transcribing locally", 0));
+                var prepare = Stopwatch.StartNew();
+                var prepared = model.Id == "parakeet-v3" ? EnsureParakeet(model)
+                    : EnsureWhisper(model, language, speakers && !single, progress, cancellation);
+                var preparationSeconds = prepared ? prepare.Elapsed.TotalSeconds : 0;
+                cancellation.ThrowIfCancellationRequested();
+                var inference = Stopwatch.StartNew();
+                List<SpeechWord> words;
                 try
                 {
-                    if (!models.SpeakersReady) throw new InvalidOperationException("Speaker models have not been downloaded.");
-                    progress.Report(("Separating speakers locally", 0));
-                    var speakerClock = Stopwatch.StartNew();
-                    var turns = await Task.Run(() => Diarize(samples, progress, cancellation), CancellationToken.None);
-                    speakerSeconds = speakerClock.Elapsed.TotalSeconds;
-                    cancellation.ThrowIfCancellationRequested();
-                    transcript = Alignment.Align(words, turns, true);
+                    words = model.Id == "parakeet-v3" ? Parakeet(samples) : await Whisper(samples);
                 }
-                catch (Exception error) when (error is not OperationCanceledException)
+                catch (Exception error) when (model.Id != "parakeet-v3" && !whisperCpu && error is not OperationCanceledException)
                 {
+                    // The GPU backend can fail at inference time; retry once on CPU and stay there for this session.
                     cancellation.ThrowIfCancellationRequested();
-                    transcript = transcript with { Warning = "Speaker detection failed. The full unlabeled transcript was kept. " + error.Message };
+                    whisperCpu = true;
+                    DisposeWhisper();
+                    EnsureWhisper(model, language, speakers && !single, progress, cancellation);
+                    cancellation.ThrowIfCancellationRequested();
+                    words = await Whisper(samples);
                 }
+                var inferenceSeconds = inference.Elapsed.TotalSeconds;
+                cancellation.ThrowIfCancellationRequested();
+                var transcript = Alignment.Align(words, [], speakers, single);
+                var speakerSeconds = 0d;
+                if (speakers && !single && transcript.PlainText.Trim().Length > 0)
+                {
+                    try
+                    {
+                        if (!models.SpeakersReady) throw new InvalidOperationException("Speaker models have not been downloaded.");
+                        progress.Report(("Separating speakers locally", 0));
+                        var speakerClock = Stopwatch.StartNew();
+                        var turns = Diarize(samples, progress, cancellation);
+                        speakerSeconds = speakerClock.Elapsed.TotalSeconds;
+                        cancellation.ThrowIfCancellationRequested();
+                        transcript = Alignment.Align(words, turns, true);
+                    }
+                    catch (Exception error) when (error is not OperationCanceledException)
+                    {
+                        cancellation.ThrowIfCancellationRequested();
+                        transcript = transcript with { Warning = "Speaker detection failed. The full unlabeled transcript was kept. " + error.Message };
+                    }
+                }
+                return new SpeechResult(transcript, queueSeconds, preparationSeconds, inferenceSeconds, speakerSeconds);
             }
-            return new(transcript, queueSeconds, preparationSeconds, inferenceSeconds, speakerSeconds);
-        }
-        finally { gate.Release(); }
+            finally { gate.Release(); }
+        }, CancellationToken.None);
     }
 
-    private bool EnsureWhisper(SpeechModel model, string language, bool detailed, IProgress<(string, double)> progress)
+    private bool EnsureWhisper(SpeechModel model, string language, bool detailed, IProgress<(string, double)> progress, CancellationToken cancellation)
     {
+        cancellation.ThrowIfCancellationRequested();
         var decodingLanguage = model.Id == "whisper-hinglish" ? "en" : language;
         if (whisperModel == model.Id && whisperLanguage == decodingLanguage && whisperDetailed == detailed
             && whisperFactory is not null && whisperProcessor is not null)
@@ -127,12 +136,13 @@ public sealed class SpeechService(ModelStore models) : IDisposable
             if (detailed) builder.WithTokenTimestamps();
             whisperProcessor = builder.Build();
         }
-        catch (Exception) when (!whisperCpu)
+        catch (Exception error) when (!whisperCpu && error is not OperationCanceledException)
         {
             // A GPU backend that loads but cannot initialize the model falls back to CPU for this session.
+            cancellation.ThrowIfCancellationRequested();
             whisperCpu = true;
             DisposeWhisper();
-            return EnsureWhisper(model, language, detailed, progress);
+            return EnsureWhisper(model, language, detailed, progress, cancellation);
         }
         whisperModel = model.Id; whisperLanguage = decodingLanguage; whisperDetailed = detailed;
         DisposeParakeet();
