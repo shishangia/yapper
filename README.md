@@ -19,7 +19,9 @@ The Mac installer is Developer ID signed and notarized by Apple. It requires mac
 
 ## Windows
 
-**[Download Yapper for Windows 11 x64](https://github.com/shishangia/yapper/releases/download/v1.1.2/Yapper-1.1.2-win-x64-setup.exe)** | [Release notes and checksums](https://github.com/shishangia/yapper/releases/tag/v1.1.2)
+**[Download Yapper for Windows 11 x64](https://github.com/shishangia/yapper/releases/download/v1.1.3/Yapper-1.1.3-win-x64-setup.exe)** | [Release notes and checksums](https://github.com/shishangia/yapper/releases/tag/v1.1.3)
+
+Version 1.1.3 keeps model loading responsive, protects unsaved transcript edits, adds Ctrl+S, and matches Mac dictation cleanup. Mac 1.1.3 is awaiting Apple notarization; the Mac download above remains 1.1.2.
 
 The Windows app is a native implementation with the same visual identity and local-first behavior as the Mac app. It includes tray dictation, a configurable shortcut, the floating recording pill, file import, editable speaker turns, history, dictionary rules, and Light, Dark, and System themes. The default shortcut is Ctrl+Alt+Space because Fn is firmware-controlled on many Windows keyboards.
 
