@@ -43,6 +43,14 @@ Conversation transcripts bypass personal dictionary replacements and dictation c
 
 Auto Edit is enabled by default on new installs. It is deterministic: it removes a small set of filler sounds, capitalizes sentences, and follows explicit commands such as "new paragraph," "bullet point," and "number one." It does not infer tone, rewrite prose, or guess list structure with a language model. Existing Auto Edit preferences remain unchanged.
 
+## Next version: local dictation controls
+
+The development branch adds a live draft in the recording overlay, an idle speech-model timeout (five minutes by default), and preferred-word hints for Whisper. Draft previews process short chunks, keep bounded work and text, and can skip updates on slower hardware. The complete recording remains the source of the saved transcript. Live previews can be disabled in Settings.
+
+On macOS 26 or later, optional Apple Intelligence cleanup uses the on-device system text model with editable instructions. It must be enabled and available in macOS; standard cleanup remains the fallback. Original recognition and any cleanup failure note remain in History. Windows continues to use local deterministic cleanup. No new audio model, cloud transcription, or automatic history deletion is added. Preferred-word hints are not supported by the current Parakeet decoder; explicit replacement rules remain available.
+
+These features are not part of the 1.1.3 download linked above.
+
 ## Models, privacy, and limits
 
 Model downloads connect to Hugging Face and may follow its download redirects. After the required files are downloaded, transcription and speaker processing run locally. Yapper does not use a cloud transcription API, upload audio, collect analytics, or create stored voice profiles. Release builds may contact GitHub for update metadata.

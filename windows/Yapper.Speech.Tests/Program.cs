@@ -4,6 +4,29 @@ var model = new SpeechModel("whisper-tiny", ["unused"]);
 var progress = new Progress<(string, double)>();
 var tests = new (string Name, Func<Task> Run)[]
 {
+    ("idle unloading preserves active recordings and reloads later", async () =>
+    {
+        var clock = new TestClock();
+        using var service = new SpeechService(new(), clock);
+        await service.Warm(model, "en", false, CancellationToken.None);
+        service.SetRecording(true); clock.Advance(TimeSpan.FromMinutes(10));
+        await service.UnloadIfIdle(5);
+        await service.Warm(model, "en", false, CancellationToken.None);
+        Check(NativeCalls.Loads.Count == 1, "Recording model was unloaded.");
+        service.SetRecording(false); clock.Advance(TimeSpan.FromMinutes(6));
+        await service.UnloadIfIdle(5);
+        await service.Warm(model, "en", false, CancellationToken.None);
+        Check(NativeCalls.Loads.Count == 2, "Idle model did not reload.");
+    }),
+    ("vocabulary changes rebuild the processor without reloading model weights", async () =>
+    {
+        using var service = new SpeechService(new());
+        await service.Warm(model, "en", false, CancellationToken.None, "Yapper\nWorkstation");
+        await service.Warm(model, "en", false, CancellationToken.None, "Yapper\nWorkstation");
+        await service.Warm(model, "en", false, CancellationToken.None, "New term");
+        Check(NativeCalls.Loads.Count == 1, "Vocabulary change reloaded model weights.");
+        Check(NativeCalls.Prompts.SequenceEqual(["Yapper, Workstation", "New term"]), "Wrong vocabulary prompt.");
+    }),
     ("warm-up leaves the caller responsive for both engines", async () =>
     {
         foreach (var id in new[] { "whisper-tiny", "parakeet-v3" })
@@ -127,4 +150,12 @@ static async Task Canceled(Func<Task> action)
     try { await action(); }
     catch (OperationCanceledException) { return; }
     throw new Exception("Expected cancellation.");
+}
+
+sealed class TestClock : TimeProvider
+{
+    private long timestamp;
+    public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+    public override long GetTimestamp() => timestamp;
+    public void Advance(TimeSpan duration) => timestamp += duration.Ticks;
 }

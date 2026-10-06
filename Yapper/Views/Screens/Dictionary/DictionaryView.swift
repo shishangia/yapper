@@ -6,6 +6,7 @@ import SwiftUI
 /// replacement text — say "my email" and get your address, or fix a term the
 /// model keeps mishearing. Rules run fully offline for every engine.
 struct DictionaryView: View {
+    @AppStorage(DictationPreferences.preferredWordsKey) private var preferredWords = ""
     @StateObject private var dictionary = DictionaryService.shared
     @State private var editorEntry: DictionaryEntry?
     @State private var isPresentingEditor = false
@@ -17,6 +18,13 @@ struct DictionaryView: View {
                 header
 
                 explainer
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Preferred words").font(Typography.headlineMedium)
+                    Text("Names and terms you use, one per line. Whisper uses these as recognition hints; they are not forced phrase replacements. Up to 50 terms, 60 characters each.")
+                        .font(Typography.caption).foregroundStyle(Color.textSecondary)
+                    TextEditor(text: $preferredWords).frame(minHeight: 90, maxHeight: 150)
+                        .accessibilityLabel("Preferred words, one per line").accessibilityIdentifier("preferredWords")
+                }.padding(16).themedCard().padding(.horizontal, 24)
 
                 if dictionary.entries.isEmpty {
                     emptyState

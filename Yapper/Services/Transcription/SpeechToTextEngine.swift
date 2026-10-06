@@ -7,6 +7,7 @@ protocol SpeechToTextEngine: AnyObject {
     var isTranscribing: Bool { get }
     var loadingStage: String { get }
     var currentModelVariant: String { get }
+    func setPreferredWords(_ words: [String])
     func loadModel(variant: String) async throws
     func unload() async
     func transcribe(audioFile: URL, language: String) async throws -> String

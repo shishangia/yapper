@@ -7,6 +7,8 @@ struct MiniRecorderView: View {
     @ObservedObject private var audioRecorder = AudioRecordingService.shared
     private var transcription: TranscriptionManager { TranscriptionManager.shared }
     let job: RecorderJob
+    @State private var preview = LiveDictationPreview()
+    @AppStorage(DictationPreferences.previewKey) private var livePreview = true
     private var isListening: Bool { job.isBusy && job.phase == .recording }
     private var isProcessing: Bool { job.isBusy && job.phase != .recording }
     @State private var statusMessage = "Transcribing..."
@@ -279,15 +281,15 @@ struct MiniRecorderView: View {
         case .warming: return 200
         case .processing: return statusMessage.count > 28 ? 490 : 210  // long notices use the feedback width
         case .feedback: return 490
-        case .recording: return expanded ? 460 : 250
+        case .recording: return livePreview ? 480 : expanded ? 460 : 250
         }
     }
 
     private var pillHeight: CGFloat {
-        displayPhase == .idle ? 24 : 44
+        displayPhase == .idle ? 24 : displayPhase == .recording && livePreview ? 128 : 44
     }
 
-    private var pillCornerRadius: CGFloat { pillHeight / 2 }
+    private var pillCornerRadius: CGFloat { min(24, pillHeight / 2) }
 
     // MARK: - Phase content
 
@@ -413,7 +415,16 @@ struct MiniRecorderView: View {
                 .foregroundStyle(Color.textPrimary)
                 .accessibilityIdentifier("pasteFeedback")
             case .recording:
-                recordingContent
+                VStack(alignment: .leading, spacing: 8) {
+                    recordingContent.frame(height: 36)
+                    if livePreview {
+                        Text(preview.text.isEmpty ? "Listening… Draft text appears as you speak." : preview.text)
+                            .font(Typography.bodyMedium).foregroundStyle(Color.textPrimary).lineLimit(3)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .accessibilityIdentifier("liveDraftText")
+                        Text("Live draft · final text may change").font(Typography.captionSmall).foregroundStyle(Color.textSecondary)
+                    }
+                }.padding(livePreview ? 12 : 0)
             case .idle:
                 idleContent
             }
@@ -450,6 +461,10 @@ struct MiniRecorderView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .preferredColorScheme(appTheme.colorScheme)
+        .onReceive(audioRecorder.chunkPublisher.receive(on: DispatchQueue.main)) { chunk in
+            guard livePreview, isListening, let snapshot = job.snapshot, preview.captureID == chunk.sessionID else { try? FileManager.default.removeItem(at: chunk.url); return }
+            preview.accept(chunk.url, snapshot: snapshot)
+        }
         .onReceive(NotificationCenter.default.publisher(for: .recordingStartRequested)) { _ in
             startRecording()
         }
@@ -478,6 +493,7 @@ struct MiniRecorderView: View {
             }
         }
         .onDisappear {
+            preview.stop()
             if let globalEscapeMonitor = globalEscapeMonitor {
                 NSEvent.removeMonitor(globalEscapeMonitor)
             }
@@ -579,6 +595,7 @@ struct MiniRecorderView: View {
 
     private func cancelRecording() {
         guard let snapshot = job.snapshot else { return }
+        preview.stop()
         let wasRecording = isListening
         job.cancel()
         onCancel?()
@@ -614,7 +631,8 @@ struct MiniRecorderView: View {
             guard job.canCommit(snapshot.id) else { finish(snapshot); return }
             guard authorized else { showError("Enable Microphone in System Settings", for: snapshot); return }
             guard job.transition(snapshot.id, from: .preparing, to: .recording) else { return }
-            audioRecorder.startRecording()
+            let captureID = preview.begin(snapshot.id)
+            audioRecorder.startRecording(previewSession: captureID)
         }
     }
 
@@ -625,13 +643,15 @@ struct MiniRecorderView: View {
             return
         }
         guard job.transition(snapshot.id, from: .recording, to: .switchingInput) else { return }
+        preview.stop()
         statusMessage = "Switching input..."
         Task {
             _ = await audioRecorder.stopRecording(discardOutput: true)
             guard job.canCommit(snapshot.id) else { finish(snapshot); return }
             audioRecorder.selectedDeviceId = deviceId
             guard job.transition(snapshot.id, from: .switchingInput, to: .recording) else { return }
-            audioRecorder.startRecording()
+            let captureID = preview.begin(snapshot.id)
+            audioRecorder.startRecording(previewSession: captureID)
         }
     }
 
@@ -643,6 +663,7 @@ struct MiniRecorderView: View {
             return
         }
         guard job.transition(snapshot.id, from: .recording, to: .stopping) else { return }
+        preview.stop()
         statusMessage = "Finishing recording..."
         Task {
             guard let url = await audioRecorder.stopRecording() else { finish(snapshot); return }
@@ -662,7 +683,9 @@ struct MiniRecorderView: View {
 
     private func finish(_ snapshot: RecorderJob.Snapshot) {
         guard job.snapshot?.id == snapshot.id else { return }
+        transcription.endRecording(snapshot.id)
         job.finish(snapshot.id)
+        preview.stop()
         onCancel?()
     }
 
@@ -691,7 +714,8 @@ struct MiniRecorderView: View {
             let duration = await getAudioDuration(url: url)
             let modelName = AIModel.availableModels.first(where: { $0.variant == snapshot.model })?.name ?? snapshot.model
             HistoryService.shared.addItem(transcript: text, duration: duration, audioFileURL: url,
-                modelUsed: modelName, transcriptionTime: output.timing.total, dictationTiming: output.timing)
+                modelUsed: modelName, transcriptionTime: output.timing.total, dictationTiming: output.timing,
+                rawTranscription: output.rawText, cleanupNote: output.cleanupNote)
             if job.canCommit(snapshot.id), let onCommit {
                 onCommit(text, snapshot)
             } else {

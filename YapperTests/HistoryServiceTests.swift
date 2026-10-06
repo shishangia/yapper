@@ -33,6 +33,16 @@ final class HistoryServiceTests: XCTestCase {
         XCTAssertEqual(service.items.first?.transcript, transcript)
         XCTAssertEqual(service.items.first?.duration, duration)
     }
+
+    func testOriginalDictationSurvivesCleanupAndReopen() {
+        service.addItem(transcript: "A formatted list", duration: 2, rawTranscription: "um a formatted list", cleanupNote: "Standard cleanup was used.")
+        let reopened = HistoryService(defaults: defaults)
+        XCTAssertEqual(reopened.items.first?.rawTranscription, "um a formatted list")
+        XCTAssertEqual(reopened.items.first?.transcript, "A formatted list")
+        XCTAssertEqual(reopened.items.first?.cleanupNote, "Standard cleanup was used.")
+        XCTAssertEqual(reopened.items.count, 1)
+        XCTAssertEqual(reopened.statsEntries.count, 1)
+    }
     
     func testPersistence() {
         let transcript = "Persistent Item"

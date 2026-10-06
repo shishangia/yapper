@@ -19,6 +19,8 @@ struct HistoryItem: Identifiable, Codable, Hashable {
     let transcriptionTime: TimeInterval?
     var dictationTiming: DictationTiming? = nil
     var conversation: ConversationTranscript? = nil
+    var rawTranscription: String? = nil
+    var cleanupNote: String? = nil
 
     var displayText: String { conversation?.formattedText ?? transcript }
 
@@ -56,7 +58,8 @@ class HistoryService: ObservableObject {
     }
     
     func addItem(transcript: String, duration: TimeInterval, audioFileURL: URL? = nil, modelUsed: String? = nil,
-                 transcriptionTime: TimeInterval? = nil, dictationTiming: DictationTiming? = nil) {
+                 transcriptionTime: TimeInterval? = nil, dictationTiming: DictationTiming? = nil,
+                 rawTranscription: String? = nil, cleanupNote: String? = nil) {
         let normalizedTranscript = WhisperService.normalizedTranscription(from: transcript)
         guard !normalizedTranscript.isEmpty else { return }
 
@@ -73,7 +76,7 @@ class HistoryService: ObservableObject {
             audioFileURL: audioFileURL,
             modelUsed: modelUsed,
             transcriptionTime: transcriptionTime,
-            dictationTiming: dictationTiming
+            dictationTiming: dictationTiming, rawTranscription: rawTranscription, cleanupNote: cleanupNote
         )
         let statsEntry = HistoryStatsEntry(
             id: newItem.id,

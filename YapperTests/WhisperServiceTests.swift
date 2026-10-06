@@ -14,6 +14,7 @@ private final class StubSpeechEngine: SpeechToTextEngine {
     var failLoad = false
     var loads: [String] = []
     var onUnload: (() async -> Void)?
+    func setPreferredWords(_ words: [String]) {}
     func loadModel(variant: String) async throws {
         loads.append(variant)
         if failLoad { throw ConversationError.modelsMissing }
@@ -30,6 +31,47 @@ private final class StubSpeechEngine: SpeechToTextEngine {
 
 @MainActor
 final class WhisperServiceTests: XCTestCase {
+    func testIdleModelsUnloadAndRecordingKeepsThemResident() async throws {
+        let whisper = StubSpeechEngine()
+        let manager = TranscriptionManager(whisper: whisper, parakeet: StubSpeechEngine(), gate: NativeInferenceGate(),
+            selectedVariant: { "openai_whisper-large-v3" }, modelReady: { _ in true }, idleDelay: { 0.03 })
+        try await manager.loadModel(variant: "openai_whisper-large-v3")
+        let recording = UUID()
+        manager.beginRecording(recording)
+        try await Task.sleep(for: .milliseconds(80))
+        XCTAssertTrue(whisper.isInitialized)
+        manager.endRecording(recording)
+        try await Task.sleep(for: .milliseconds(80))
+        XCTAssertFalse(whisper.isInitialized)
+        try await manager.loadModel(variant: "openai_whisper-large-v3")
+        XCTAssertTrue(whisper.isInitialized)
+        XCTAssertEqual(whisper.loads.count, 2)
+    }
+
+    func testVocabularyAndSmartCleanupSafety() {
+        XCTAssertEqual(DictationPreferences.normalizeWords(" Yapper \nYAPPER\n  work   station \n"), ["Yapper", "work station"])
+        XCTAssertFalse(AppleDictationCleanup.acceptable("Pay 123", original: "Pay 12"))
+        XCTAssertFalse(AppleDictationCleanup.acceptable("Pay 12", original: "Pay 12 and 12"))
+        XCTAssertFalse(AppleDictationCleanup.acceptable("", original: "important text"))
+        XCTAssertTrue(AppleDictationCleanup.acceptable("Pay 12.50 tomorrow.", original: "um pay 12.50 tomorrow"))
+    }
+
+    func testSmartCleanupKeepsOriginalAndFallsBackWithoutLosingDictation() async throws {
+        let manager = TranscriptionManager(whisper: StubSpeechEngine(), parakeet: StubSpeechEngine(), gate: NativeInferenceGate(),
+            autoEditEnabled: { true }, idleDelay: { 0 }, smartCleanup: { raw in
+                XCTAssertEqual(raw, "raw words")
+                return "Edited words"
+            })
+        let result = try await manager.transcribeDetailed(audioFile: URL(fileURLWithPath: "/unused"), variant: "openai_whisper-large-v3", language: "en")
+        XCTAssertEqual(result.text, "Edited words")
+        XCTAssertEqual(result.rawText, "raw words")
+        let unavailable = TranscriptionManager(whisper: StubSpeechEngine(), parakeet: StubSpeechEngine(), gate: NativeInferenceGate(),
+            autoEditEnabled: { true }, idleDelay: { 0 }, smartCleanup: { _ in throw AppleDictationCleanup.CleanupError.unavailable })
+        let fallback = try await unavailable.transcribeDetailed(audioFile: URL(fileURLWithPath: "/unused"), variant: "openai_whisper-large-v3", language: "en")
+        XCTAssertEqual(fallback.text, "Raw words")
+        XCTAssertEqual(fallback.rawText, "raw words")
+        XCTAssertNotNil(fallback.cleanupNote)
+    }
     
     var service: WhisperService?
     
@@ -428,6 +470,35 @@ final class WhisperServiceTests: XCTestCase {
             XCTAssertTrue(first.allSatisfy { $0.start >= 0 && $0.end > $0.start })
         }
         await NativeInferenceGate.shared.run { await manager.unloadWhileLocked(variant: ParakeetCatalog.v3Variant) }
+    }
+
+    func testNativeDictationHintPreviewAndReloadWhenEnabled() async throws {
+        guard ProcessInfo.processInfo.environment["YAPPER_NATIVE_DICTATION"] == "1" else { throw XCTSkip("Opt-in native dictation smoke") }
+        let fm = FileManager.default
+        let root = AppEnvironment.applicationSupportDirectory
+        let home = URL(fileURLWithPath: String(cString: getpwuid(getuid()).pointee.pw_dir))
+        let source = home.appendingPathComponent("Library/Application Support/Yapper-Dev")
+        let variant = AIModel.hinglishVariant
+        let model = ModelStorage.transcriptionModelDirectory(for: variant)
+        let tokenizer = root.appendingPathComponent("models/openai")
+        try fm.createDirectory(at: model.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try fm.copyItem(at: source.appendingPathComponent("models/shrimalmadhur/whisperkit-hinglish/Oriserve_Whisper-Hindi2Hinglish-Apex"), to: model)
+        try fm.copyItem(at: source.appendingPathComponent("models/openai"), to: tokenizer)
+        defer { try? fm.removeItem(at: root) }
+        let audio = root.appendingPathComponent("fixture.wav")
+        try fm.copyItem(at: source.appendingPathComponent("TestAudio/conversation.wav"), to: audio)
+        let engine = WhisperService()
+        try await engine.loadModel(variant: variant)
+        engine.setPreferredWords(["Yapper", "workstation"])
+        let first = try await engine.transcribe(audioFile: audio, language: "hinglish")
+        XCTAssertFalse(first.isEmpty)
+        await engine.unload()
+        XCTAssertNil(engine.pipe)
+        XCTAssertFalse(engine.isInitialized)
+        try await engine.loadModel(variant: variant)
+        let second = try await engine.transcribe(audioFile: audio, language: "hinglish")
+        XCTAssertFalse(second.isEmpty)
+        await engine.unload()
     }
 
     func testDefaultInitialization() {

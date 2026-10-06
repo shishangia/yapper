@@ -216,9 +216,12 @@ try {
         if (!$pill) { Start-Sleep -Milliseconds 100 }
     }
     if (!$pill) { throw 'Floating recorder did not appear' }
+    $draft = $pill.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'liveDraftText'))
+    if (!$draft -or $draft.Current.Name -ne 'A local live draft appears here as you speak.') { throw 'Live draft text missing from recorder' }
     Capture-Window $pill 'Dark-recorder'
     $restored = Get-Content (Join-Path $testRoot 'library.json') -Raw | ConvertFrom-Json
     if ($restored.Preferences.Theme -ne 'Dark') { throw "Theme did not survive relaunch: $($restored.Preferences.Theme)" }
+    if ($restored.Preferences.ModelIdleMinutes -ne 5 -or !$restored.Preferences.LivePreview) { throw 'Dictation performance defaults did not persist' }
     if (!$restored.Preferences.IncludeTimestamps) { throw 'New-transcript timestamp preference did not survive relaunch' }
     if ($restored.Recordings.Count -ne 1) { throw "Library count changed on relaunch: $($restored.Recordings.Count)" }
     if ($restored.Recordings[0].Conversation.TimestampsVisible -ne $false) { throw "Recording timestamp view did not persist: $($restored.Recordings[0].Conversation.TimestampsVisible)" }

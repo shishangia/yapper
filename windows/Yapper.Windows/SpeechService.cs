@@ -9,7 +9,7 @@ namespace Yapper.Windows;
 public sealed record SpeechResult(Transcript Transcript, double QueueSeconds, double ModelPreparationSeconds,
     double InferenceSeconds, double SpeakerDetectionSeconds);
 
-public sealed class SpeechService(ModelStore models) : IDisposable
+public sealed class SpeechService(ModelStore models, TimeProvider? timeProvider = null) : IDisposable
 {
     private readonly SemaphoreSlim gate = new(1);
     private WhisperFactory? whisperFactory;
@@ -18,28 +18,46 @@ public sealed class SpeechService(ModelStore models) : IDisposable
     private string? whisperLanguage;
     private bool whisperDetailed;
     private bool whisperCpu;
+    private string whisperPrompt = "";
+    private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
+    private long lastActivity = (timeProvider ?? TimeProvider.System).GetTimestamp();
+    private int recording;
+    public void SetRecording(bool active) { Interlocked.Exchange(ref recording, active ? 1 : 0); Touch(); }
+    private void Touch() => Interlocked.Exchange(ref lastActivity, clock.GetTimestamp());
+    public Task UnloadIfIdle(int minutes) => Task.Run(async () =>
+    {
+        if (minutes <= 0 || Volatile.Read(ref recording) != 0) return;
+        if (!await gate.WaitAsync(0).ConfigureAwait(false)) return;
+        try
+        {
+            if (Volatile.Read(ref recording) != 0 || clock.GetElapsedTime(Interlocked.Read(ref lastActivity)).TotalMinutes < minutes) return;
+            DisposeWhisper(); DisposeParakeet(); diarizer?.Dispose(); diarizer = null;
+        }
+        finally { gate.Release(); }
+    });
     private IProgress<(string Stage, double Value)>? whisperProgress;
     private OfflineRecognizer? parakeetRecognizer;
     private string? parakeetModel;
     private NemotronDiarizer? diarizer;
 
-    public Task Warm(SpeechModel model, string language, bool detailed, CancellationToken cancellation)
+    public Task Warm(SpeechModel model, string language, bool detailed, CancellationToken cancellation, string vocabulary = "")
         => Task.Run(async () =>
     {
         await gate.WaitAsync(cancellation).ConfigureAwait(false);
         try
         {
+            Touch();
             if (!models.Ready(model)) return;
             cancellation.ThrowIfCancellationRequested();
             if (model.Id == "parakeet-v3") EnsureParakeet(model);
-            else EnsureWhisper(model, language, detailed, new Progress<(string, double)>(), cancellation);
+            else EnsureWhisper(model, language, detailed, new Progress<(string, double)>(), cancellation, vocabulary);
             cancellation.ThrowIfCancellationRequested();
         }
-        finally { gate.Release(); }
+        finally { Touch(); gate.Release(); }
     }, CancellationToken.None);
 
     public Task<SpeechResult> Transcribe(float[] samples, SpeechModel model, string language, bool speakers, bool single,
-        IProgress<(string Stage, double Value)> progress, CancellationToken cancellation)
+        IProgress<(string Stage, double Value)> progress, CancellationToken cancellation, string vocabulary = "")
     {
         var queued = Stopwatch.StartNew();
         return Task.Run(async () =>
@@ -48,6 +66,7 @@ public sealed class SpeechService(ModelStore models) : IDisposable
             var queueSeconds = queued.Elapsed.TotalSeconds;
             try
             {
+                Touch();
                 if (!models.Ready(model)) throw new InvalidOperationException("Download the selected model first.");
                 if (model.Id == "parakeet-v3" && language is not ("auto" or "en")) throw new InvalidOperationException("Choose Whisper for Hindi, Gujarati, or Chinese.");
                 if (model.Id == "whisper-hinglish" && language is "gu" or "zh")
@@ -56,7 +75,7 @@ public sealed class SpeechService(ModelStore models) : IDisposable
                 progress.Report(("Transcribing locally", 0));
                 var prepare = Stopwatch.StartNew();
                 var prepared = model.Id == "parakeet-v3" ? EnsureParakeet(model)
-                    : EnsureWhisper(model, language, speakers && !single, progress, cancellation);
+                    : EnsureWhisper(model, language, speakers && !single, progress, cancellation, vocabulary);
                 var preparationSeconds = prepared ? prepare.Elapsed.TotalSeconds : 0;
                 cancellation.ThrowIfCancellationRequested();
                 var inference = Stopwatch.StartNew();
@@ -71,7 +90,7 @@ public sealed class SpeechService(ModelStore models) : IDisposable
                     cancellation.ThrowIfCancellationRequested();
                     whisperCpu = true;
                     DisposeWhisper();
-                    EnsureWhisper(model, language, speakers && !single, progress, cancellation);
+                    EnsureWhisper(model, language, speakers && !single, progress, cancellation, vocabulary);
                     cancellation.ThrowIfCancellationRequested();
                     words = await Whisper(samples);
                 }
@@ -99,15 +118,17 @@ public sealed class SpeechService(ModelStore models) : IDisposable
                 }
                 return new SpeechResult(transcript, queueSeconds, preparationSeconds, inferenceSeconds, speakerSeconds);
             }
-            finally { gate.Release(); }
+            finally { Touch(); gate.Release(); }
         }, CancellationToken.None);
     }
 
-    private bool EnsureWhisper(SpeechModel model, string language, bool detailed, IProgress<(string, double)> progress, CancellationToken cancellation)
+    private bool EnsureWhisper(SpeechModel model, string language, bool detailed, IProgress<(string, double)> progress, CancellationToken cancellation, string vocabulary = "")
     {
         cancellation.ThrowIfCancellationRequested();
         var decodingLanguage = model.Id == "whisper-hinglish" ? "en" : language;
+        var prompt = PreferredVocabulary.Prompt(vocabulary);
         if (whisperModel == model.Id && whisperLanguage == decodingLanguage && whisperDetailed == detailed
+            && whisperPrompt == prompt
             && whisperFactory is not null && whisperProcessor is not null)
         {
             whisperProgress = progress;
@@ -134,6 +155,7 @@ public sealed class SpeechService(ModelStore models) : IDisposable
             else if (language == "auto") builder.WithLanguageDetection();
             else builder.WithLanguage(language);
             if (detailed) builder.WithTokenTimestamps();
+            if (prompt.Length > 0) builder.WithPrompt(prompt);
             whisperProcessor = builder.Build();
         }
         catch (Exception error) when (!whisperCpu && error is not OperationCanceledException)
@@ -142,9 +164,9 @@ public sealed class SpeechService(ModelStore models) : IDisposable
             cancellation.ThrowIfCancellationRequested();
             whisperCpu = true;
             DisposeWhisper();
-            return EnsureWhisper(model, language, detailed, progress, cancellation);
+            return EnsureWhisper(model, language, detailed, progress, cancellation, vocabulary);
         }
-        whisperModel = model.Id; whisperLanguage = decodingLanguage; whisperDetailed = detailed;
+        whisperModel = model.Id; whisperLanguage = decodingLanguage; whisperDetailed = detailed; whisperPrompt = prompt;
         DisposeParakeet();
         return true;
     }

@@ -4,12 +4,14 @@ import CoreMedia
 import Foundation
 
 class AudioRecordingService: NSObject, ObservableObject {
-    // Finished chunks are reserved for an opt-in streaming path. Normal
-    // dictation writes only the complete recording.
-    static let shared = AudioRecordingService(generatesChunks: false)
+    // Draft previews use short disposable chunks; the full recording is authoritative.
+    static let shared = AudioRecordingService(generatesChunks: true)
 
     // Chunk publisher: emits the URL of each completed ~4-second audio chunk while recording
-    let chunkPublisher = PassthroughSubject<URL, Never>()
+    struct PreviewChunk { let url: URL; let sessionID: UUID? }
+    let chunkPublisher = PassthroughSubject<PreviewChunk, Never>()
+    private var previewSession: UUID?
+    private var emitsPreview = false
     private static let chunkDuration: TimeInterval = 4.0
 
     @Published var isRecording = false
@@ -254,10 +256,12 @@ class AudioRecordingService: NSObject, ObservableObject {
         }
     }
 
-    func startRecording() {
+    func startRecording(previewSession: UUID? = nil) {
         requestPermission()
 
         guard !isRecording else { return }
+        self.previewSession = previewSession
+        emitsPreview = generatesChunks && previewSession != nil && (UserDefaults.standard.object(forKey: DictationPreferences.previewKey) as? Bool ?? true)
         if captureSession == nil { setupSession() }
 
         // 1. Reset flags and stale writer state before any new samples arrive.
@@ -377,6 +381,7 @@ class AudioRecordingService: NSObject, ObservableObject {
                 let finishGroup = DispatchGroup()
                 var finalizedRecordingURL: URL?
                 let discardOutput = self.shouldDiscardCurrentRecordingOutput
+                let previewID = self.previewSession
 
                 if let lastChunkInput = self.chunkAssetWriterInput,
                     let lastChunkWriter = self.chunkAssetWriter,
@@ -397,7 +402,7 @@ class AudioRecordingService: NSObject, ObservableObject {
                                 label: "Final chunk"
                             ) {
                                 print("🔪 Final chunk saved: \(validChunkURL.lastPathComponent)")
-                                self.chunkPublisher.send(validChunkURL)
+                                self.chunkPublisher.send(PreviewChunk(url: validChunkURL, sessionID: previewID))
                             } else {
                                 try? FileManager.default.removeItem(at: lastChunkURL)
                             }
@@ -534,7 +539,7 @@ extension AudioRecordingService: AVCaptureAudioDataOutputSampleBufferDelegate {
         }
 
         // --- Chunk writer (background segments) ---
-        if generatesChunks { appendToChunk(sampleBuffer: sampleBuffer, pts: pts) }
+        if emitsPreview { appendToChunk(sampleBuffer: sampleBuffer, pts: pts) }
     }
 
     // MARK: - Chunk Writer Helpers (audioQueue)
@@ -621,6 +626,7 @@ extension AudioRecordingService: AVCaptureAudioDataOutputSampleBufferDelegate {
         isRotatingChunk = false
 
         // Finish the old writer asynchronously
+        let previewID = previewSession
         oldInput.markAsFinished()
         oldWriter.finishWriting { [weak self] in
             guard let self = self else { return }
@@ -628,7 +634,7 @@ extension AudioRecordingService: AVCaptureAudioDataOutputSampleBufferDelegate {
                 try? FileManager.default.removeItem(at: finishedURL)
             } else {
                 print("🔪 Chunk saved: \(finishedURL.lastPathComponent)")
-                self.chunkPublisher.send(finishedURL)
+                self.chunkPublisher.send(PreviewChunk(url: finishedURL, sessionID: previewID))
             }
         }
     }

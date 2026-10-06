@@ -35,6 +35,11 @@ public partial class MainWindow : Window
     private WindowsUpdate? availableUpdate;
     private bool updateBusy;
     private long modelStorageBytes;
+    private bool previewBusy;
+    private CancellationTokenSource? previewCancellation;
+    private string previewText = "";
+    private bool skippedPreview;
+    private readonly System.Windows.Threading.DispatcherTimer idleModelTimer = new() { Interval = TimeSpan.FromSeconds(15) };
 
     public MainWindow(string root)
     {
@@ -47,6 +52,7 @@ public partial class MainWindow : Window
         recorder.StopRequested += () => _ = StopAndProcess();
         recorder.CancelRequested += () => CancelJob(this, new RoutedEventArgs());
         audio.LevelChanged += level => Dispatcher.InvokeAsync(() => recorder.UpdateLevel(level));
+        audio.PreviewChunk += (samples, id) => Dispatcher.InvokeAsync(() => PreviewAudio(samples, id));
         ThemeChoice.SelectedItem = ThemeChoice.Items.Cast<ComboBoxItem>().First(i => (string)i.Content == AppTheme.Preference);
         Microsoft.Win32.SystemEvents.UserPreferenceChanged += SystemAppearanceChanged;
         Width = Math.Min(Width, SystemParameters.WorkArea.Width - 32);
@@ -66,6 +72,11 @@ public partial class MainWindow : Window
         AutoEdit.IsChecked = library.Data.Preferences.AutoEdit;
         IncludeTimestamps.IsChecked = library.Data.Preferences.IncludeTimestamps;
         AutoCheckUpdates.IsChecked = library.Data.Preferences.AutoCheckUpdates;
+        LivePreview.IsChecked = library.Data.Preferences.LivePreview;
+        PreferredWords.Text = library.Data.Preferences.PreferredWords;
+        ModelIdleMinutes.SelectedItem = ModelIdleMinutes.Items.Cast<ComboBoxItem>().FirstOrDefault(i => (string)i.Tag == library.Data.Preferences.ModelIdleMinutes.ToString()) ?? ModelIdleMinutes.Items[2];
+        idleModelTimer.Tick += async (_, _) => { if (!jobs.IsBusy && !updateBusy) await speech.UnloadIfIdle(library.Data.Preferences.ModelIdleMinutes); };
+        idleModelTimer.Start();
         Loaded += async (_, _) =>
         {
             if (Environment.GetEnvironmentVariable("YAPPER_TEST_ROOT") is null && library.Data.Preferences.AutoCheckUpdates
@@ -186,7 +197,8 @@ public partial class MainWindow : Window
             Language = SpokenLanguage, ToggleRecording = ToggleMode.IsChecked == true,
             RestoreClipboard = RestoreClipboard.IsChecked == true, TrimPeriod = TrimPeriod.IsChecked == true,
             AutoEdit = AutoEdit.IsChecked == true, AutoCheckUpdates = AutoCheckUpdates.IsChecked == true,
-            IncludeTimestamps = IncludeTimestamps.IsChecked == true } });
+            IncludeTimestamps = IncludeTimestamps.IsChecked == true, LivePreview = LivePreview.IsChecked == true,
+            PreferredWords = PreferredWords.Text, ModelIdleMinutes = int.Parse((string)((ComboBoxItem)ModelIdleMinutes.SelectedItem).Tag) } });
         SyncDisplayedModel();
         UpdateReady();
     }
@@ -203,6 +215,8 @@ public partial class MainWindow : Window
     }
     private void Finish()
     {
+        previewCancellation?.Cancel(); previewCancellation?.Dispose(); previewCancellation = null;
+        speech.SetRecording(false);
         jobs.Finish(activeId);
         cancellation?.Dispose(); cancellation = null;
         options = null; recordingPath = null; finishing = false;
@@ -233,7 +247,11 @@ public partial class MainWindow : Window
         recordingPath = Path.Combine(library.Root, "Recordings", Guid.NewGuid().ToString("N") + ".wav");
         try
         {
-            audio.Start(recordingPath, MicrophoneChoice.SelectedIndex);
+            speech.SetRecording(true);
+            previewCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellation!.Token);
+            previewText = ""; skippedPreview = false;
+            audio.Start(recordingPath, MicrophoneChoice.SelectedIndex, dictation && options.Preferences.LivePreview, activeId);
+            recorder.SetPreview(dictation && options.Preferences.LivePreview ? "Listening… Draft text appears as you speak." : null);
             recorder.Present(true);
             Status.Text = "Recording microphone… Press the shortcut again or Stop when finished.";
             tray.Text = "Yapper · Recording";
@@ -255,7 +273,7 @@ public partial class MainWindow : Window
     }
     private async Task WarmDuringRecording(JobOptions job, CancellationToken cancellation)
     {
-        try { await speech.Warm(job.Model, job.Language, job.Speakers && !job.Single, cancellation); }
+        try { await speech.Warm(job.Model, job.Language, job.Speakers && !job.Single, cancellation, job.Dictation ? job.Preferences.PreferredWords : ""); }
         catch (OperationCanceledException) { }
         catch (Exception error) { Debug.WriteLine("Model warm-up failed; transcription will retry: " + error.Message); }
     }
@@ -263,7 +281,37 @@ public partial class MainWindow : Window
     {
         if (finishing || recordingPath is null || options is null) return;
         finishing = true;
-        var path = recordingPath;
+        previewCancellation?.Cancel();
+        await StopAndProcessCore();
+    }
+    private async void PreviewAudio(float[] samples, Guid id)
+    {
+        if (id != activeId || finishing || !audio.IsRecording || options is not { Dictation: true } job || previewCancellation is null) return;
+        if (previewBusy) { skippedPreview = true; return; }
+        var token = previewCancellation.Token;
+        if (token.IsCancellationRequested) return;
+        previewBusy = true;
+        var gap = skippedPreview; skippedPreview = false;
+        try
+        {
+            var result = await speech.Transcribe(samples, job.Model, job.Language, false, false, new Progress<(string, double)>(), token, job.Preferences.PreferredWords);
+            if (id == activeId && !finishing && audio.IsRecording && !token.IsCancellationRequested)
+            {
+                var draft = result.Transcript.PlainText.Trim();
+                if (draft.Length > 0)
+                {
+                    previewText += (previewText.Length == 0 ? "" : gap ? " … " : " ") + draft;
+                    if (previewText.Length > 500) previewText = previewText[^500..];
+                    recorder.SetPreview(previewText);
+                }
+            }
+        }
+        catch (Exception error) { Debug.WriteLine("Live preview unavailable: " + error.GetType().Name); }
+        finally { previewBusy = false; }
+    }
+    private async Task StopAndProcessCore()
+    {
+        var path = recordingPath!;
         var completed = false;
         recordingPath = null;
         Status.Text = "Finishing recording…";
@@ -317,7 +365,7 @@ public partial class MainWindow : Window
             var decodeSeconds = decodeClock.Elapsed.TotalSeconds;
             decoded = true;
             token.ThrowIfCancellationRequested();
-            var speechResult = await speech.Transcribe(samples, job.Model, job.Language, job.Speakers, job.Single, Reporter, token);
+            var speechResult = await speech.Transcribe(samples, job.Model, job.Language, job.Speakers, job.Single, Reporter, token, job.Dictation ? job.Preferences.PreferredWords : "");
             var transcript = speechResult.Transcript with { TimestampsVisible = job.IncludeTimestamps };
             token.ThrowIfCancellationRequested();
             if (transcript.PlainText.Trim().Length == 0) throw new InvalidDataException("No speech was transcribed.");
@@ -508,6 +556,6 @@ public partial class MainWindow : Window
     {
         if (jobs.IsBusy || updateBusy) { ShowWindow(); Status.Text = "Finish the current recording or update before quitting."; return; }
         Microsoft.Win32.SystemEvents.UserPreferenceChanged -= SystemAppearanceChanged;
-        quitting = true; var icon = tray.Icon; tray.Dispose(); icon?.Dispose(); input?.Dispose(); audio.Dispose(); speech.Dispose(); recorder.Close(); Close(); System.Windows.Application.Current.Shutdown();
+        quitting = true; idleModelTimer.Stop(); var icon = tray.Icon; tray.Dispose(); icon?.Dispose(); input?.Dispose(); audio.Dispose(); speech.Dispose(); recorder.Close(); Close(); System.Windows.Application.Current.Shutdown();
     }
 }

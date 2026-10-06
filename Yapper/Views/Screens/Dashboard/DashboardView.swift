@@ -246,7 +246,7 @@ struct DashboardView: View {
                         audioFileURL: url,
                         modelUsed: modelName,
                         transcriptionTime: output.timing.total,
-                        dictationTiming: output.timing
+                        dictationTiming: output.timing, rawTranscription: output.rawText, cleanupNote: output.cleanupNote
                     )
                     transcriptionStatus = "Done!"
                     isTranscribing = false

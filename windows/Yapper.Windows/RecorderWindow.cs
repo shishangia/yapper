@@ -14,6 +14,8 @@ public sealed class RecorderWindow : Window
     private readonly ProgressBar meter = new() { Minimum = 0, Maximum = 1, Width = 55, Height = 5, Margin = new Thickness(10, 0, 0, 0) };
     private readonly Button stop = new() { Content = "Stop", Padding = new Thickness(10, 4, 10, 4), MinHeight = 28 };
     private readonly Button cancel = new() { Content = "Cancel", Padding = new Thickness(10, 4, 10, 4), MinHeight = 28 };
+    private readonly TextBlock preview = new() { TextWrapping = TextWrapping.Wrap, MaxHeight = 64, Margin = new Thickness(4, 6, 4, 0), Visibility = Visibility.Collapsed };
+    private readonly TextBlock draftLabel = new() { Text = "Live draft · final text may change", FontSize = 11, Margin = new Thickness(4, 4, 4, 0), Visibility = Visibility.Collapsed };
     private readonly DispatcherTimer timer;
     private DateTime started;
     private bool recording;
@@ -31,7 +33,11 @@ public sealed class RecorderWindow : Window
         elapsed.SetResourceReference(TextBlock.ForegroundProperty, "SecondaryInk");
         meter.SetResourceReference(ProgressBar.ForegroundProperty, "Accent");
         foreach (var child in new UIElement[] { label, meter, elapsed, stop, cancel }) row.Children.Add(child);
-        var pill = new Border { CornerRadius = new CornerRadius(24), BorderThickness = new Thickness(1), Margin = new Thickness(5), Padding = new Thickness(16, 6, 16, 6), Child = row };
+        var stack = new StackPanel(); stack.Children.Add(row); stack.Children.Add(preview); stack.Children.Add(draftLabel);
+        preview.SetResourceReference(TextBlock.ForegroundProperty, "Ink");
+        draftLabel.SetResourceReference(TextBlock.ForegroundProperty, "SecondaryInk");
+        System.Windows.Automation.AutomationProperties.SetAutomationId(preview, "liveDraftText");
+        var pill = new Border { CornerRadius = new CornerRadius(24), BorderThickness = new Thickness(1), Margin = new Thickness(5), Padding = new Thickness(16, 6, 16, 6), Child = stack };
         pill.SetResourceReference(Border.BackgroundProperty, "Surface"); pill.SetResourceReference(Border.BorderBrushProperty, "Border");
         Content = pill;
         stop.Click += (_, _) => StopRequested?.Invoke();
@@ -50,6 +56,7 @@ public sealed class RecorderWindow : Window
     public void Present(bool isRecording, string status = "Transcribing…")
     {
         recording = isRecording;
+        if (!isRecording) SetPreview(null);
         if (isRecording) { started = DateTime.UtcNow; elapsed.Text = "00:00"; timer.Start(); }
         else { elapsed.Text = ""; timer.Stop(); }
         label.Text = isRecording ? "Recording" : status;
@@ -60,6 +67,16 @@ public sealed class RecorderWindow : Window
         Show();
     }
     public void UpdateLevel(float value) { if (recording) meter.Value = Math.Clamp(value, 0, 1); }
+    public void SetPreview(string? text)
+    {
+        var visible = text is not null;
+        Height = visible ? 158 : 66;
+        preview.Visibility = draftLabel.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        var draft = text?.Trim() ?? "";
+        if (draft.Length > 500) draft = draft[^500..];
+        if (preview.Text != draft && draft.Length > 0) preview.Text = draft;
+        if (IsVisible) Top = SystemParameters.WorkArea.Bottom - Height - 12;
+    }
     public void SetStatus(string text) { if (!recording) label.Text = text.Length > 30 ? text[..27] + "…" : text; }
     public void Dismiss() { recording = false; timer.Stop(); Hide(); }
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] private static extern IntPtr GetWindowLongPtr(IntPtr hwnd, int index);
