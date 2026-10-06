@@ -291,6 +291,14 @@ struct MiniRecorderView: View {
 
     private var pillCornerRadius: CGFloat { min(24, pillHeight / 2) }
 
+    private var draftText: String {
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["YAPPER_RECORDER_PREVIEW"] == "recording",
+           let sample = ProcessInfo.processInfo.environment["YAPPER_PREVIEW_TEXT"] { return sample }
+        #endif
+        return preview.text.isEmpty ? "Listening… Draft text appears as you speak." : preview.text
+    }
+
     // MARK: - Phase content
 
     /// Resting state — a small white waveform silhouette that sits perfectly
@@ -415,13 +423,22 @@ struct MiniRecorderView: View {
                 .foregroundStyle(Color.textPrimary)
                 .accessibilityIdentifier("pasteFeedback")
             case .recording:
-                VStack(alignment: .leading, spacing: 8) {
-                    recordingContent.frame(height: 36)
+                VStack(alignment: .leading, spacing: 6) {
+                    recordingContent.frame(height: livePreview ? 28 : 36)
                     if livePreview {
-                        Text(preview.text.isEmpty ? "Listening… Draft text appears as you speak." : preview.text)
-                            .font(Typography.bodyMedium).foregroundStyle(Color.textPrimary).lineLimit(3)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .accessibilityIdentifier("liveDraftText")
+                        ScrollViewReader { proxy in
+                            ScrollView(.vertical) {
+                                Text(draftText)
+                                    .font(Typography.bodyMedium).foregroundStyle(Color.textPrimary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .accessibilityIdentifier("liveDraftText")
+                                    .id("draftText")
+                            }
+                            .scrollIndicators(.hidden)
+                            .onAppear { proxy.scrollTo("draftText", anchor: .bottom) }
+                            .onChange(of: draftText) { proxy.scrollTo("draftText", anchor: .bottom) }
+                        }.frame(height: 48).allowsHitTesting(false)
                         Text("Live draft · final text may change").font(Typography.captionSmall).foregroundStyle(Color.textSecondary)
                     }
                 }.padding(livePreview ? 12 : 0)

@@ -24,6 +24,12 @@ internal static class Program
                 recorder.Present(true);
                 await Task.Delay(150);
                 if (WindowsInput.CaptureTarget() != target) throw new Exception("Floating recorder stole input focus.");
+                recorder.SetPreview(string.Concat(Enumerable.Repeat("An earlier sentence in the draft. ", 12)) + "The newest words must remain visible.");
+                await Task.Delay(150);
+                var draftScroll = Descendants(recorder).OfType<ScrollViewer>().Single(s => s.Content is TextBlock);
+                if (draftScroll.ScrollableHeight <= 0 || draftScroll.VerticalOffset < draftScroll.ScrollableHeight - 1)
+                    throw new Exception("Live preview did not keep the newest words visible.");
+                if (WindowsInput.CaptureTarget() != target) throw new Exception("Live preview stole input focus.");
                 recorder.Present(false);
                 recorder.Dismiss();
                 recorder.Close();
@@ -47,5 +53,14 @@ internal static class Program
         };
         app.Run(window);
         return result;
+    }
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)
+    {
+        for (var index = 0; index < System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, index);
+            yield return child;
+            foreach (var descendant in Descendants(child)) yield return descendant;
+        }
     }
 }
