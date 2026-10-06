@@ -22,15 +22,16 @@ public sealed class SpeechService(ModelStore models, TimeProvider? timeProvider 
     private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
     private long lastActivity = (timeProvider ?? TimeProvider.System).GetTimestamp();
     private int recording;
+    private int disposeRequested;
     public void SetRecording(bool active) { Interlocked.Exchange(ref recording, active ? 1 : 0); Touch(); }
     private void Touch() => Interlocked.Exchange(ref lastActivity, clock.GetTimestamp());
     public Task UnloadIfIdle(int minutes) => Task.Run(async () =>
     {
-        if (minutes <= 0 || Volatile.Read(ref recording) != 0) return;
+        if (minutes <= 0 || Volatile.Read(ref recording) != 0 || Volatile.Read(ref disposeRequested) != 0) return;
         if (!await gate.WaitAsync(0).ConfigureAwait(false)) return;
         try
         {
-            if (Volatile.Read(ref recording) != 0 || clock.GetElapsedTime(Interlocked.Read(ref lastActivity)).TotalMinutes < minutes) return;
+            if (Volatile.Read(ref disposeRequested) != 0 || Volatile.Read(ref recording) != 0 || clock.GetElapsedTime(Interlocked.Read(ref lastActivity)).TotalMinutes < minutes) return;
             DisposeWhisper(); DisposeParakeet(); diarizer?.Dispose(); diarizer = null;
         }
         finally { gate.Release(); }
@@ -46,6 +47,7 @@ public sealed class SpeechService(ModelStore models, TimeProvider? timeProvider 
         await gate.WaitAsync(cancellation).ConfigureAwait(false);
         try
         {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref disposeRequested) != 0, this);
             Touch();
             if (!models.Ready(model)) return;
             cancellation.ThrowIfCancellationRequested();
@@ -66,6 +68,7 @@ public sealed class SpeechService(ModelStore models, TimeProvider? timeProvider 
             var queueSeconds = queued.Elapsed.TotalSeconds;
             try
             {
+                ObjectDisposedException.ThrowIf(Volatile.Read(ref disposeRequested) != 0, this);
                 Touch();
                 if (!models.Ready(model)) throw new InvalidOperationException("Download the selected model first.");
                 if (model.Id == "parakeet-v3" && language is not ("auto" or "en")) throw new InvalidOperationException("Choose Whisper for Hindi, Gujarati, or Chinese.");
@@ -263,6 +266,7 @@ public sealed class SpeechService(ModelStore models, TimeProvider? timeProvider 
         await gate.WaitAsync();
         try
         {
+            if (Volatile.Read(ref disposeRequested) != 0) return;
             if (whisperModel == modelId) DisposeWhisper();
             if (parakeetModel == modelId) DisposeParakeet();
             if (modelId is "speakers" or "speakers-nemotron") { diarizer?.Dispose(); diarizer = null; }
@@ -284,8 +288,10 @@ public sealed class SpeechService(ModelStore models, TimeProvider? timeProvider 
 
     public void Dispose()
     {
+        if (Interlocked.Exchange(ref disposeRequested, 1) != 0) return;
         // Never free native models under a running job; if it will not finish soon, process exit reclaims them.
         if (!gate.Wait(TimeSpan.FromSeconds(3))) return;
-        DisposeWhisper(); DisposeParakeet(); diarizer?.Dispose(); diarizer = null; gate.Dispose();
+        try { DisposeWhisper(); DisposeParakeet(); diarizer?.Dispose(); diarizer = null; }
+        finally { gate.Release(); }
     }
 }

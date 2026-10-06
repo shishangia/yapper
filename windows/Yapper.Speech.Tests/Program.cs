@@ -4,6 +4,20 @@ var model = new SpeechModel("whisper-tiny", ["unused"]);
 var progress = new Progress<(string, double)>();
 var tests = new (string Name, Func<Task> Run)[]
 {
+    ("idle timer cannot revive models after shutdown", async () =>
+    {
+        var clock = new TestClock();
+        var service = new SpeechService(new(), clock);
+        await service.Warm(model, "en", false, CancellationToken.None);
+        clock.Advance(TimeSpan.FromMinutes(6));
+        var pending = service.UnloadIfIdle(5);
+        service.Dispose();
+        await pending;
+        await service.UnloadIfIdle(5);
+        try { await service.Warm(model, "en", false, CancellationToken.None); throw new Exception("Disposed service loaded a model"); }
+        catch (ObjectDisposedException) { }
+        Check(NativeCalls.Loads.Count == 1, "Disposed service reloaded a model");
+    }),
     ("idle unloading preserves active recordings and reloads later", async () =>
     {
         var clock = new TestClock();
