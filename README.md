@@ -8,20 +8,20 @@ Yapper records from the microphone or imports an audio file, transcribes it on y
 
 ## Install
 
-**[Download Yapper for Mac](https://github.com/shishangia/yapper/releases/download/v1.1.3/Yapper-1.1.3-12-arm64.dmg)** | [Release notes and checksums](https://github.com/shishangia/yapper/releases/tag/v1.1.3)
+**[Download Yapper for Mac](https://github.com/shishangia/yapper/releases/download/v1.2.0/Yapper-1.2.0-13-arm64.dmg)** | [Release notes and checksums](https://github.com/shishangia/yapper/releases/tag/v1.2.0)
 
 1. Open the DMG and drag Yapper into Applications.
 2. Open Yapper from Applications.
 3. Allow microphone access for recording and Accessibility for global dictation and auto-paste. You can skip both permissions when you only want to import files.
 4. Download a model in AI Models and click Use. Transcribe Audio may ask for an additional speech or speaker model.
 
-The Mac installer is Developer ID signed and notarized by Apple. It requires macOS 14 or later on an Apple Silicon Mac. Version 1.1.3 preserves implicit Hinglish settings during upgrades and respects Reduce Motion in History. Since 1.1.1, Yapper handles WhatsApp `.opus` files, adds natural Latin-script Hinglish and the full Whisper Large v3 model, uses Nemotron 3 for faster speaker detection, records processing times, and lets conversation transcripts switch between paragraphs and timestamps.
+The Mac installer is Developer ID signed and notarized by Apple. It requires macOS 14 or later on an Apple Silicon Mac. Version 1.2.0 adds the dictation and memory controls described below, plus optional Apple Intelligence cleanup on macOS 26 or later.
 
 ## Windows
 
 **[Download Yapper for Windows 11 x64](https://github.com/shishangia/yapper/releases/download/v1.2.0/Yapper-1.2.0-win-x64-setup.exe)** | [Release notes and checksums](https://github.com/shishangia/yapper/releases/tag/v1.2.0)
 
-Version 1.2.0 adds live dictation drafts, idle speech-model unloading, and preferred-word hints for Whisper. Earlier Windows previews can find it through Check for updates.
+Version 1.2.0 adds live dictation drafts, idle speech-model unloading, and preferred-word hints for Whisper. Windows preview-2 and later can find it through Check for updates. Preview-1 needs one manual installation because it did not include an updater.
 
 The Windows app is a native implementation with the same visual identity and local-first behavior as the Mac app. It includes tray dictation, a configurable shortcut, the floating recording pill, file import, editable speaker turns, history, dictionary rules, and Light, Dark, and System themes. The default shortcut is Ctrl+Alt+Space because Fn is firmware-controlled on many Windows keyboards.
 
@@ -45,7 +45,7 @@ Auto Edit is enabled by default on new installs. It is deterministic: it removes
 
 ## Local dictation controls in 1.2.0
 
-Version 1.2.0 is available for Windows. The Mac build is awaiting notarization; the Mac download and update feed remain on 1.1.3 until its installer is ready.
+Version 1.2.0 is available for both Mac and Windows through the downloads above and Check for updates.
 
 The recording overlay shows a live draft and follows the newest words. Speech models unload after five idle minutes by default; choose another timeout or Never in Settings. Draft previews process short chunks and can skip updates on slower hardware. The complete recording remains the source of the saved transcript. Live previews can be disabled in Settings.
 
