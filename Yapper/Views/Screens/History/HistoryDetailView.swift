@@ -20,6 +20,7 @@ struct HistoryDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 // Header with date and duration
+                RawDictationView(item: item)
                 HStack(alignment: .top) {
                     Text(item.date.formatted(date: .abbreviated, time: .shortened))
                         .font(Typography.caption)

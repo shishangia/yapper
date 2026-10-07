@@ -6,7 +6,8 @@ internal static class NativeCalls
     public static Action<bool>? OnInference;
     public static List<bool> Loads = [];
     public static List<bool> Inferences = [];
-    public static void Reset() { OnLoad = null; OnInference = null; Loads.Clear(); Inferences.Clear(); }
+    public static List<string> Prompts = [];
+    public static void Reset() { OnLoad = null; OnInference = null; Loads.Clear(); Inferences.Clear(); Prompts.Clear(); }
 }
 
 namespace Yapper.Windows
@@ -53,6 +54,7 @@ namespace Whisper.net
         public WhisperProcessorBuilder WithLanguage(string language) => this;
         public WhisperProcessorBuilder WithLanguageDetection() => this;
         public WhisperProcessorBuilder WithTokenTimestamps() => this;
+        public WhisperProcessorBuilder WithPrompt(string prompt) { NativeCalls.Prompts.Add(prompt); return this; }
         public WhisperProcessor Build() => new(gpu);
     }
     public sealed record Token(string Text, long Start, long End);

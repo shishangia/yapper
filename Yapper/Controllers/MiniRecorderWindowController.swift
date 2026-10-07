@@ -124,8 +124,9 @@ class MiniRecorderWindowController: NSObject {
         let language = defaults.string(forKey: "transcriptionLanguage") ?? ModelSelection.defaultLanguage
         let model = ModelSelection.resolvedVariant(
             defaults.string(forKey: ModelSelection.defaultsKey) ?? "", language: language)
-        guard job.begin(model: model, language: language,
-                        targetPID: NSWorkspace.shared.frontmostApplication?.processIdentifier) != nil else { return }
+        guard let snapshot = job.begin(model: model, language: language,
+                        targetPID: NSWorkspace.shared.frontmostApplication?.processIdentifier) else { return }
+        TranscriptionManager.shared.beginRecording(snapshot.id)
 
         if panel == nil {
             setupPanel()
@@ -209,7 +210,7 @@ class MiniRecorderWindowController: NSObject {
         // Fixed window, big enough for the largest phase. The pill morphs purely in
         // SwiftUI, centered inside. A window that never resizes means the animation
         // is smooth with no boundary clipping.
-        let fixedSize = NSSize(width: 520, height: 84)
+        let fixedSize = NSSize(width: 520, height: 164)
         let p = NSPanel(
             contentRect: NSRect(origin: .zero, size: fixedSize),
             styleMask: [.nonactivatingPanel, .fullSizeContentView, .borderless],
@@ -275,6 +276,7 @@ class MiniRecorderWindowController: NSObject {
                 restore: { clipboard.restore($0, ifCurrentStringMatches: $1) },
                 wait: { try? await Task.sleep(for: $0) })
             job.finish(snapshot.id)
+            TranscriptionManager.shared.endRecording(snapshot.id)
             let feedback = job.showPasteFeedback(outcome)
             if outcome.message != nil {
                 panel?.ignoresMouseEvents = false

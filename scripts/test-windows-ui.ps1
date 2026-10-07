@@ -65,6 +65,20 @@ try {
             Capture-Window $window "$appearance-$route"
         }
     }
+    Select-Page 'sidebar.settings'
+    $preferredWords = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'preferredWords'))
+    if (!$preferredWords) { throw 'Preferred words setting missing' }
+    $preferredWords.SetFocus()
+    $preferredWords.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue("Yapper`nWorkstation")
+    $idleSetting = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'modelIdleMinutes'))
+    if (!$idleSetting) { throw 'Idle model setting missing' }
+    $idleSetting.SetFocus()
+    $previewSetting = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'liveDictationPreview'))
+    if (!$previewSetting) { throw 'Live preview setting missing' }
+    $previewToggle = $previewSetting.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern)
+    $previewToggle.Toggle()
+    $previewToggle.Toggle()
+    Capture-Window $window 'Dark-dictation-settings'
     Select-Page 'sidebar.transcribeAudio'
     $timestamps = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'includeTimestamps'))
     if (!$timestamps) { throw 'Timestamp preference missing' }
@@ -216,9 +230,13 @@ try {
         if (!$pill) { Start-Sleep -Milliseconds 100 }
     }
     if (!$pill) { throw 'Floating recorder did not appear' }
+    $draft = $pill.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'liveDraftText'))
+    if (!$draft -or $draft.Current.Name -ne 'A local live draft appears here as you speak.') { throw 'Live draft text missing from recorder' }
     Capture-Window $pill 'Dark-recorder'
     $restored = Get-Content (Join-Path $testRoot 'library.json') -Raw | ConvertFrom-Json
     if ($restored.Preferences.Theme -ne 'Dark') { throw "Theme did not survive relaunch: $($restored.Preferences.Theme)" }
+    if ($restored.Preferences.ModelIdleMinutes -ne 5 -or !$restored.Preferences.LivePreview) { throw 'Dictation performance defaults did not persist' }
+    if (($restored.Preferences.PreferredWords -replace "`r`n", "`n") -ne "Yapper`nWorkstation") { throw 'Preferred words did not survive relaunch' }
     if (!$restored.Preferences.IncludeTimestamps) { throw 'New-transcript timestamp preference did not survive relaunch' }
     if ($restored.Recordings.Count -ne 1) { throw "Library count changed on relaunch: $($restored.Recordings.Count)" }
     if ($restored.Recordings[0].Conversation.TimestampsVisible -ne $false) { throw "Recording timestamp view did not persist: $($restored.Recordings[0].Conversation.TimestampsVisible)" }

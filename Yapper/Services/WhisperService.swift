@@ -245,6 +245,9 @@ class WhisperService {
         AIModel.availableModels.first(where: { $0.variant == variant })?.name ?? variant
     }
 
+    private var preferredWords: [String] = []
+    func setPreferredWords(_ words: [String]) { preferredWords = words }
+
     func transcribe(audioFile: URL, language: String = "auto") async throws -> String {
         guard let pipe = pipe, isInitialized else {
             throw TranscriptionError.notInitialized
@@ -260,7 +263,10 @@ class WhisperService {
         print("Starting transcription for: \(audioFile.lastPathComponent)")
 
         do {
-            let options = decodingOptions(for: language)
+            var options = decodingOptions(for: language)
+            if !preferredWords.isEmpty, let tokenizer = pipe.tokenizer {
+                options.promptTokens = Array(tokenizer.encode(text: preferredWords.joined(separator: ", ")).prefix(192))
+            }
             let results = try await pipe.transcribe(audioPath: audioFile.path, decodeOptions: options)
             let text = Self.normalizedTranscription(
                 from: results.map { $0.text }.joined(separator: " "))

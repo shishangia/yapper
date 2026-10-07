@@ -28,6 +28,8 @@ class ParakeetEngine: SpeechToTextEngine {
     var currentModelVariant = ""
     private var manager: AsrManager?
     private init() {}
+    // This TDT decoder has no hint-only vocabulary API; replacement rules remain explicit.
+    func setPreferredWords(_ words: [String]) {}
 
     func loadModel(variant: String) async throws {
         if isInitialized, currentModelVariant == variant, manager != nil { return }

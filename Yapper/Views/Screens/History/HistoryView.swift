@@ -314,6 +314,7 @@ struct HistoryCard: View {
                         }
                         
                         // Actions row
+                        RawDictationView(item: item)
                         HStack(spacing: 12) {
                             Button(action: onCopy) {
                                 HStack(spacing: 6) {

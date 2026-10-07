@@ -19,7 +19,8 @@ public sealed record UsageEntry(Guid Id, DateTimeOffset Date, int Words, double 
 public sealed record DictionaryRule(string Trigger, string Replacement, bool Enabled = true);
 public sealed record Preferences(string SelectedModel = "whisper-small", string Language = "hinglish", bool ToggleRecording = true,
     bool RestoreClipboard = true, bool TrimPeriod = true, string Hotkey = "Control+Alt+Space", bool AutoEdit = true, string Theme = "System",
-    bool AutoCheckUpdates = true, DateTimeOffset? LastUpdateCheck = null, bool IncludeTimestamps = false);
+    bool AutoCheckUpdates = true, DateTimeOffset? LastUpdateCheck = null, bool IncludeTimestamps = false,
+    int ModelIdleMinutes = 5, bool LivePreview = true, string PreferredWords = "");
 public sealed record LibraryData
 {
     public int Version { get; init; } = 1;

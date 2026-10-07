@@ -16,18 +16,57 @@ class TranscriptionManager {
     private let selectedVariant: @MainActor () -> String
     private let modelReady: @MainActor (String) -> Bool
     private let autoEditEnabled: @MainActor () -> Bool
+    private let idleDelay: @MainActor () -> TimeInterval
+    private let isRecording: @MainActor () -> Bool
+    private let smartCleanup: @MainActor (String) async throws -> String?
+    private var activityID = UUID()
+    private var idleTask: Task<Void, Never>?
+    private var recordingLeases = Set<UUID>()
+
+    func beginRecording(_ id: UUID) {
+        recordingLeases.insert(id)
+        idleTask?.cancel(); activityID = UUID()
+        warmSelectedModel()
+    }
+    func endRecording(_ id: UUID) { recordingLeases.remove(id); scheduleIdleUnload() }
+    func scheduleIdleUnload() {
+        idleTask?.cancel()
+        let id = UUID(); activityID = id
+        let delay = idleDelay()
+        guard delay > 0, recordingLeases.isEmpty, isInitialized else { return }
+        idleTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+            guard let self else { return }
+            await self.gate.run {
+                guard self.activityID == id, self.recordingLeases.isEmpty else { return }
+                if self.isRecording() { self.scheduleIdleUnload(); return }
+                await self.activeEngine.unload()
+            }
+        }
+    }
 
     init(whisper: (any SpeechToTextEngine)? = nil, parakeet: (any SpeechToTextEngine)? = nil,
          gate: NativeInferenceGate? = nil,
          selectedVariant: @escaping @MainActor () -> String = { ModelSelection.selectedVariant() },
          modelReady: @escaping @MainActor (String) -> Bool = { ModelStorage.transcriptionModelReady($0) },
-         autoEditEnabled: @escaping @MainActor () -> Bool = { UserDefaults.standard.bool(forKey: "enableAutoEdit") }) {
+         autoEditEnabled: @escaping @MainActor () -> Bool = { UserDefaults.standard.bool(forKey: "enableAutoEdit") },
+         idleDelay: @escaping @MainActor () -> TimeInterval = { DictationPreferences.idleSeconds() },
+         isRecording: @escaping @MainActor () -> Bool = { !AppEnvironment.isRunningTests && AudioRecordingService.shared.isRecording },
+         smartCleanup: @escaping @MainActor (String) async throws -> String? = { raw in
+             guard UserDefaults.standard.bool(forKey: DictationPreferences.smartCleanupKey) else { return nil }
+             return try await AppleDictationCleanup.clean(raw,
+                 prompt: UserDefaults.standard.string(forKey: DictationPreferences.promptKey) ?? DictationPreferences.defaultPrompt,
+                 words: DictationPreferences.words())
+         }) {
         self.whisper = whisper ?? WhisperService.shared
         self.parakeet = parakeet ?? ParakeetEngine.shared
         self.gate = gate ?? .shared
         self.selectedVariant = selectedVariant
         self.modelReady = modelReady
         self.autoEditEnabled = autoEditEnabled
+        self.idleDelay = idleDelay
+        self.isRecording = isRecording
+        self.smartCleanup = smartCleanup
     }
 
     @discardableResult
@@ -47,6 +86,7 @@ class TranscriptionManager {
         let task = Task {
             defer {
                 if warmupID == id { warmingVariant = nil; warmupTask = nil; warmupStartedAt = nil }
+                scheduleIdleUnload()
             }
             do {
                 try await gate.run {
@@ -75,7 +115,19 @@ class TranscriptionManager {
     }
 
     func loadModel(variant: String) async throws {
+        defer { scheduleIdleUnload() }
         try await gate.run { try await prepare(variant: variant) }
+    }
+
+    func preview(audioFile: URL, variant: String, language: String, isCurrent: () -> Bool) async throws -> String {
+        defer { scheduleIdleUnload() }
+        return try await gate.run {
+            guard isCurrent() else { throw CancellationError() }
+            try await prepare(variant: variant, shouldContinue: isCurrent)
+            guard isCurrent() else { throw CancellationError() }
+            activeEngine.setPreferredWords(DictationPreferences.words())
+            return try await activeEngine.transcribe(audioFile: audioFile, language: language)
+        }
     }
 
     func unloadWhileLocked(variant: String) async {
@@ -83,6 +135,7 @@ class TranscriptionManager {
     }
 
     private func prepare(variant: String, shouldContinue: () -> Bool = { true }) async throws {
+        idleTask?.cancel(); activityID = UUID()
         guard shouldContinue() else { throw CancellationError() }
         guard let model = AIModel.availableModels.first(where: { $0.variant == variant }) else {
             throw ModelError.noSelection
@@ -107,6 +160,7 @@ class TranscriptionManager {
     }
 
     func transcribeDetailed(audioFile: URL, variant: String, language: String = "auto") async throws -> DictationOutput {
+        defer { scheduleIdleUnload() }
         try Self.validate(variant: variant, language: language)
         let queuedAt = Date()
         return try await gate.run {
@@ -115,16 +169,24 @@ class TranscriptionManager {
             try await prepare(variant: variant)
             let modelSeconds = Date().timeIntervalSince(modelStart)
             let inferenceStart = Date()
+            activeEngine.setPreferredWords(DictationPreferences.words())
             let raw = try await activeEngine.transcribe(audioFile: audioFile, language: language)
             let inferenceSeconds = Date().timeIntervalSince(inferenceStart)
             let cleanupStart = Date()
             let normalized = WhisperService.normalizedTranscription(from: raw)
-            let edited = DictationCleanup.apply(to: normalized, enabled: autoEditEnabled())
+            var edited = DictationCleanup.apply(to: normalized, enabled: autoEditEnabled())
+            var cleanupNote: String?
+            if !normalized.isEmpty {
+                do {
+                    if let cleaned = try await smartCleanup(normalized) { edited = cleaned }
+                } catch let error as AppleDictationCleanup.CleanupError { cleanupNote = error.localizedDescription }
+                catch { cleanupNote = "Smart cleanup unavailable or unsuccessful. Standard cleanup was used." }
+            }
             let text = DictionaryService.apply(to: edited)
             let cleanupSeconds = Date().timeIntervalSince(cleanupStart)
             return DictationOutput(text: text, timing: DictationTiming(
                 queue: enteredGateAt.timeIntervalSince(queuedAt), modelPreparation: modelSeconds,
-                inference: inferenceSeconds, cleanup: cleanupSeconds))
+                inference: inferenceSeconds, cleanup: cleanupSeconds), rawText: normalized, cleanupNote: cleanupNote)
         }
     }
 
@@ -133,6 +195,8 @@ class TranscriptionManager {
         wordTimestamps: Bool = true, progress: @escaping @Sendable (Double) -> Void) async throws -> [ConversationWord] {
         try Self.validate(variant: variant, language: language)
         try await prepare(variant: variant)
+        defer { scheduleIdleUnload() }
+        activeEngine.setPreferredWords([])
         return try await activeEngine.transcribeConversation(audioFile: audioFile, language: language,
             wordTimestamps: wordTimestamps, progress: progress)
     }
@@ -161,6 +225,8 @@ struct DictationTiming: Codable, Equatable, Sendable {
 struct DictationOutput: Equatable, Sendable {
     let text: String
     let timing: DictationTiming
+    var rawText: String? = nil
+    var cleanupNote: String? = nil
 }
 
 enum DictationCleanup {
