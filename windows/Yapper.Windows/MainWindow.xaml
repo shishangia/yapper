@@ -100,7 +100,7 @@
             <StackPanel>
               <TextBlock Text="Preferred words" Style="{StaticResource SectionTitle}"/>
               <TextBlock Text="Names and terms you use, one per line. Whisper uses these as recognition hints." Style="{StaticResource Caption}" Margin="0,0,0,8"/>
-              <TextBox x:Name="PreferredWords" AcceptsReturn="True" TextWrapping="Wrap" Height="110" Background="{DynamicResource Hover}" VerticalScrollBarVisibility="Auto" LostKeyboardFocus="ChangePreferences" AutomationProperties.AutomationId="preferredWords" AutomationProperties.Name="Preferred words, one per line"/>
+              <TextBox x:Name="PreferredWords" AcceptsReturn="True" TextWrapping="Wrap" FontWeight="Normal" Height="110" Background="{DynamicResource Hover}" VerticalScrollBarVisibility="Auto" LostKeyboardFocus="ChangePreferences" AutomationProperties.AutomationId="preferredWords" AutomationProperties.Name="Preferred words, one per line"/>
               <TextBlock Text="Up to 50 terms, 60 characters each. Parakeet uses the replacement rules in Dictionary." Style="{StaticResource Caption}"/>
             </StackPanel>
           </Border>

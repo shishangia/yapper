@@ -56,6 +56,7 @@ try {
         Select-Page 'sidebar.settings'
         $theme = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'themeChoice'))
         if (!$theme) { throw 'Theme picker missing' }
+        $theme.SetFocus()
         $theme.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
         $choice = $theme.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, $appearance))
         if (!$choice) { throw "Theme choice missing: $appearance" }
