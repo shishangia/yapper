@@ -56,6 +56,7 @@ try {
         Select-Page 'sidebar.settings'
         $theme = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'themeChoice'))
         if (!$theme) { throw 'Theme picker missing' }
+        $theme.SetFocus()
         $theme.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
         $choice = $theme.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, $appearance))
         if (!$choice) { throw "Theme choice missing: $appearance" }
@@ -64,6 +65,15 @@ try {
             Select-Page "sidebar.$route"
             Capture-Window $window "$appearance-$route"
         }
+        $wordsField = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'preferredWords'))
+        if (!$wordsField) { throw 'Preferred words setting missing' }
+        $wordsField.SetFocus()
+        $wordsField.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue("Yapper`nWorkstation")
+        Capture-Window $window "$appearance-preferred-words"
+        $idleField = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'modelIdleMinutes'))
+        if (!$idleField) { throw 'Idle model setting missing' }
+        $idleField.SetFocus()
+        Capture-Window $window "$appearance-dictation-performance"
     }
     Select-Page 'sidebar.settings'
     $preferredWords = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'preferredWords'))

@@ -85,10 +85,6 @@ struct SettingsTabButton: View {
 // MARK: - General Settings Tab
 
 struct GeneralSettingsTab: View {
-    @AppStorage(DictationPreferences.idleMinutesKey) private var idleMinutes = 5
-    @AppStorage(DictationPreferences.previewKey) private var livePreview = true
-    @AppStorage(DictationPreferences.smartCleanupKey) private var smartCleanup = false
-    @AppStorage(DictationPreferences.promptKey) private var cleanupPrompt = DictationPreferences.defaultPrompt
     @AppStorage("appTheme") private var appTheme: AppTheme = .system
     @AppStorage("autoUpdate") private var autoUpdate = true
     @AppStorage("selectedHotkey") private var selectedHotkey: HotkeyOption = .fn
@@ -257,28 +253,10 @@ struct GeneralSettingsTab: View {
                     }
                 }
 
+                DictationPerformanceSettings()
+                SmartCleanupSettings()
+
                 // Transcript Cleanup
-                SettingsSection {
-                    SettingsSectionHeader(icon: "memorychip", title: "Dictation performance", subtitle: "Keep the recorder responsive and release idle memory")
-                    Picker("Unload speech model after", selection: $idleMinutes) {
-                        Text("Never").tag(0)
-                        ForEach([2, 5, 10, 15], id: \.self) { Text("\($0) minutes idle").tag($0) }
-                    }.accessibilityIdentifier("modelIdleMinutes")
-                        .onChange(of: idleMinutes) { TranscriptionManager.shared.scheduleIdleUnload() }
-                    Text("Unloading frees model memory. Your next recording reloads it in the background; model files stay on disk.").font(Typography.caption).foregroundStyle(Color.textSecondary)
-                    Toggle("Show live draft text while recording", isOn: $livePreview).accessibilityIdentifier("liveDictationPreview")
-                    Text("Drafts update every few seconds and can change. The complete recording produces the saved transcript.").font(Typography.caption).foregroundStyle(Color.textSecondary)
-                }
-                SettingsSection {
-                    SettingsSectionHeader(icon: "sparkles", title: "Smart cleanup", subtitle: "Optional Apple Intelligence text editing on this Mac")
-                    Toggle("Use Apple Intelligence after dictation", isOn: $smartCleanup).accessibilityIdentifier("appleDictationCleanup")
-                    if let message = AppleDictationCleanup.availabilityMessage { Text(message).font(Typography.caption).foregroundStyle(Color.textSecondary) }
-                    Text("Uses the on-device system text model. Original recognition stays in History. If unavailable or unsuccessful, standard cleanup is used. Conversation transcripts are unaffected.").font(Typography.caption).foregroundStyle(Color.textSecondary)
-                    if smartCleanup {
-                        TextEditor(text: $cleanupPrompt).frame(minHeight: 110, maxHeight: 180).accessibilityLabel("Smart cleanup instructions")
-                        Button("Reset instructions") { cleanupPrompt = DictationPreferences.defaultPrompt }
-                    }
-                }
                 SettingsSection {
                     SettingsSectionHeader(
                         icon: "wand.and.stars",
