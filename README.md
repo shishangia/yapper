@@ -19,9 +19,9 @@ The Mac installer is Developer ID signed and notarized by Apple. It requires mac
 
 ## Windows
 
-**[Download Yapper for Windows 11 x64](https://github.com/shishangia/yapper/releases/download/v1.1.3/Yapper-1.1.3-win-x64-setup.exe)** | [Release notes and checksums](https://github.com/shishangia/yapper/releases/tag/v1.1.3)
+**[Download Yapper for Windows 11 x64](https://github.com/shishangia/yapper/releases/download/v1.2.0/Yapper-1.2.0-win-x64-setup.exe)** | [Release notes and checksums](https://github.com/shishangia/yapper/releases/tag/v1.2.0)
 
-Version 1.1.3 keeps model loading responsive, protects unsaved transcript edits, adds Ctrl+S, and matches Mac dictation cleanup.
+Version 1.2.0 adds live dictation drafts, idle speech-model unloading, and preferred-word hints for Whisper. Earlier Windows previews can find it through Check for updates.
 
 The Windows app is a native implementation with the same visual identity and local-first behavior as the Mac app. It includes tray dictation, a configurable shortcut, the floating recording pill, file import, editable speaker turns, history, dictionary rules, and Light, Dark, and System themes. The default shortcut is Ctrl+Alt+Space because Fn is firmware-controlled on many Windows keyboards.
 
@@ -43,13 +43,13 @@ Conversation transcripts bypass personal dictionary replacements and dictation c
 
 Auto Edit is enabled by default on new installs. It is deterministic: it removes a small set of filler sounds, capitalizes sentences, and follows explicit commands such as "new paragraph," "bullet point," and "number one." It does not infer tone, rewrite prose, or guess list structure with a language model. Existing Auto Edit preferences remain unchanged.
 
-## Next version: local dictation controls
+## Local dictation controls in 1.2.0
 
-The development branch adds a live draft in the recording overlay, an idle speech-model timeout (five minutes by default), and preferred-word hints for Whisper. Draft previews process short chunks, keep bounded work and text, and can skip updates on slower hardware. The complete recording remains the source of the saved transcript. Live previews can be disabled in Settings.
+Version 1.2.0 is available for Windows. The Mac build is awaiting notarization; the Mac download and update feed remain on 1.1.3 until its installer is ready.
+
+The recording overlay shows a live draft and follows the newest words. Speech models unload after five idle minutes by default; choose another timeout or Never in Settings. Draft previews process short chunks and can skip updates on slower hardware. The complete recording remains the source of the saved transcript. Live previews can be disabled in Settings.
 
 On macOS 26 or later, optional Apple Intelligence cleanup uses the on-device system text model with editable instructions. It must be enabled and available in macOS; standard cleanup remains the fallback. Original recognition and any cleanup failure note remain in History. Windows continues to use local deterministic cleanup. No new audio model, cloud transcription, or automatic history deletion is added. Preferred-word hints are not supported by the current Parakeet decoder; explicit replacement rules remain available.
-
-These features are not part of the 1.1.3 download linked above.
 
 ## Models, privacy, and limits
 
