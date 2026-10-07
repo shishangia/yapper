@@ -18,13 +18,23 @@ struct DictionaryView: View {
                 header
 
                 explainer
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Preferred words").font(Typography.headlineMedium)
-                    Text("Names and terms you use, one per line. Whisper uses these as recognition hints; they are not forced phrase replacements. Up to 50 terms, 60 characters each.")
-                        .font(Typography.caption).foregroundStyle(Color.textSecondary)
-                    TextEditor(text: $preferredWords).frame(minHeight: 90, maxHeight: 150)
-                        .accessibilityLabel("Preferred words, one per line").accessibilityIdentifier("preferredWords")
-                }.padding(16).themedCard().padding(.horizontal, 24)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Preferred words")
+                        .font(Typography.labelLarge)
+                        .foregroundStyle(Color.textPrimary)
+                    Text("Names and terms you use, one per line. Whisper uses these as recognition hints.")
+                        .font(Typography.captionSmall)
+                        .foregroundStyle(Color.textMuted)
+                    ThemedTextEditor(text: $preferredWords)
+                        .frame(minHeight: 110, maxHeight: 160)
+                        .accessibilityLabel("Preferred words, one per line")
+                        .accessibilityIdentifier("preferredWords")
+                    Text("Up to 50 terms, 60 characters each. Parakeet uses the replacement rules below.")
+                        .font(Typography.captionSmall)
+                        .foregroundStyle(Color.textMuted)
+                }
+                .themedCard()
+                .padding(.horizontal, 24)
 
                 if dictionary.entries.isEmpty {
                     emptyState
