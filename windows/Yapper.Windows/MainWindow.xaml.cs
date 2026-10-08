@@ -76,7 +76,12 @@ public partial class MainWindow : Window
         LivePreview.IsChecked = library.Data.Preferences.LivePreview;
         PreferredWords.Text = library.Data.Preferences.PreferredWords;
         ModelIdleMinutes.SelectedItem = ModelIdleMinutes.Items.Cast<ComboBoxItem>().FirstOrDefault(i => (string)i.Tag == library.Data.Preferences.ModelIdleMinutes.ToString()) ?? ModelIdleMinutes.Items[2];
-        idleModelTimer.Tick += async (_, _) => { if (!jobs.IsBusy && !updateBusy) await speech.UnloadIfIdle(library.Data.Preferences.ModelIdleMinutes); };
+        idleModelTimer.Tick += async (_, _) =>
+        {
+            if (jobs.IsBusy || updateBusy) return;
+            try { await speech.UnloadIfIdle(library.Data.Preferences.ModelIdleMinutes); }
+            catch (Exception error) { Debug.WriteLine("Idle model unload failed: " + error.Message); }
+        };
         idleModelTimer.Start();
         Loaded += async (_, _) =>
         {
