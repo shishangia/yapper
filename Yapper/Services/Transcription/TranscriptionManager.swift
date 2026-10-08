@@ -185,7 +185,7 @@ class TranscriptionManager {
             do {
                 if let cleaned = try await smartCleanup(edited) { edited = cleaned }
             } catch let error as AppleDictationCleanup.CleanupError { cleanupNote = error.localizedDescription }
-            catch { cleanupNote = "Smart cleanup unavailable or unsuccessful. Standard cleanup was used." }
+            catch { cleanupNote = "Apple Intelligence was unavailable, so your Auto edit setting applied." }
         }
         let text = DictionaryService.apply(to: edited)
         let cleanupSeconds = Date().timeIntervalSince(cleanupStart)

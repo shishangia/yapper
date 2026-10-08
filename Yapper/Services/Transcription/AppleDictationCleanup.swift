@@ -8,12 +8,12 @@ private struct CleanedDictation { let text: String }
 @MainActor
 enum AppleDictationCleanup {
     static var availabilityMessage: String? {
-        guard #available(macOS 26.0, *) else { return "Requires macOS 26 or later. Standard cleanup remains available." }
+        guard #available(macOS 26.0, *) else { return "Requires macOS 26 or later. Your Auto edit setting still applies." }
         switch SystemLanguageModel.default.availability {
         case .available: return nil
         case .unavailable(.appleIntelligenceNotEnabled): return "Enable Apple Intelligence in System Settings to use smart cleanup."
         case .unavailable(.deviceNotEligible): return "Apple Intelligence is not supported on this Mac."
-        default: return "Apple Intelligence is not ready. Standard cleanup will be used."
+        default: return "Apple Intelligence is not ready. Your Auto edit setting applies."
         }
     }
 
@@ -85,10 +85,10 @@ enum AppleDictationCleanup {
         case unavailable, tooLong, invalidOutput, timedOut
         var errorDescription: String? {
             switch self {
-            case .unavailable: return "Apple Intelligence is unavailable. Standard cleanup was used."
-            case .tooLong: return "This dictation is too long for smart cleanup. Standard cleanup was used."
-            case .invalidOutput: return "Smart cleanup could not preserve the transcript. Standard cleanup was used."
-            case .timedOut: return "Smart cleanup took too long. Standard cleanup was used."
+            case .unavailable: return "Apple Intelligence was unavailable, so your Auto edit setting applied."
+            case .tooLong: return "This dictation is too long for Apple Intelligence, so your Auto edit setting applied."
+            case .invalidOutput: return "Apple Intelligence changed the meaning, so your Auto edit setting applied."
+            case .timedOut: return "Apple Intelligence took too long, so your Auto edit setting applied."
             }
         }
     }
