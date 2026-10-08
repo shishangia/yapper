@@ -180,7 +180,8 @@ public partial class MainWindow : Window
         DashboardWeek.Text = library.Data.Usage.Count(x => x.Date.LocalDateTime >= today.AddDays(-6)).ToString("N0");
         DashboardToday.Text = $"{library.Data.Usage.Count(x => x.Date.LocalDateTime >= today)} today · {library.Data.Usage.Count} all time";
         StatisticsText.Text = $"{library.Data.Usage.Count} transcriptions · {library.Data.Usage.Sum(x => x.Words)} words · {library.Data.Usage.Sum(x => x.Seconds) / 60:F1} recorded minutes\nModel files: {modelStorageBytes / 1_000_000_000d:F2} GB";
-        if (selected is not null) { selected = library.Data.Recordings.FirstOrDefault(r => r.Id == selected.Id); ShowTranscript(); }
+        if (selected is not null) selected = library.Data.Recordings.FirstOrDefault(r => r.Id == selected.Id);
+        ShowTranscript();
     }
     private async Task RefreshModelStorage()
     {
@@ -191,6 +192,9 @@ public partial class MainWindow : Window
     private void ShowTranscript()
     {
         TranscriptText.Text = selected?.DisplayText ?? ""; HistoryText.Text = selected?.DisplayText ?? "";
+        HistoryDetail.Visibility = selected is null ? Visibility.Collapsed : Visibility.Visible;
+        HistoryEmpty.Visibility = selected is null ? Visibility.Visible : Visibility.Collapsed;
+        HistoryEmpty.Text = library.Data.Recordings.Count == 0 ? "No transcriptions yet" : "Select a transcription to see it here.";
         var timing = selected?.Timing;
         ProcessingDetails.Text = HistoryProcessingDetails.Text = timing is null ? "" : $"Processed in {timing.Total:F1}s";
         ProcessingDetails.ToolTip = HistoryProcessingDetails.ToolTip = timing is null ? null
