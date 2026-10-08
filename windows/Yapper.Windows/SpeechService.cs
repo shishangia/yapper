@@ -59,7 +59,7 @@ public sealed class SpeechService(ModelStore models, TimeProvider? timeProvider 
     }, CancellationToken.None);
 
     public Task<SpeechResult> Transcribe(float[] samples, SpeechModel model, string language, bool speakers, bool single,
-        IProgress<(string Stage, double Value)> progress, CancellationToken cancellation, string vocabulary = "")
+        IProgress<(string Stage, double Value)> progress, CancellationToken cancellation, string vocabulary = "", bool preview = false)
     {
         var queued = Stopwatch.StartNew();
         return Task.Run(async () =>
@@ -87,9 +87,10 @@ public sealed class SpeechService(ModelStore models, TimeProvider? timeProvider 
                 {
                     words = model.Id == "parakeet-v3" ? Parakeet(samples) : await Whisper(samples, cancellation);
                 }
-                catch (Exception error) when (model.Id != "parakeet-v3" && !whisperCpu && error is not OperationCanceledException)
+                catch (Exception error) when (!preview && model.Id != "parakeet-v3" && !whisperCpu && error is not OperationCanceledException)
                 {
                     // The GPU backend can fail at inference time; retry once on CPU and stay there for this session.
+                    // A failed live preview only drops its draft; the full transcription decides the fallback.
                     cancellation.ThrowIfCancellationRequested();
                     whisperCpu = true;
                     DisposeWhisper();

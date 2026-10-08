@@ -118,6 +118,19 @@ var tests = new (string Name, Func<Task> Run)[]
         Check(NativeCalls.Loads.SequenceEqual([true, false]), "CPU model was not reused.");
         Check(NativeCalls.Inferences.SequenceEqual([true, false, false]), "Unexpected inference order.");
     }),
+    ("preview GPU failure drops the draft without switching to CPU", async () =>
+    {
+        using var service = new SpeechService(new());
+        var failGpu = true;
+        NativeCalls.OnInference = gpu => { if (gpu && failGpu) throw new InvalidOperationException("GPU failed"); };
+        try { await service.Transcribe([0f], model, "en", false, false, progress, CancellationToken.None, preview: true); throw new Exception("Preview error was hidden"); }
+        catch (InvalidOperationException) { }
+        failGpu = false;
+        var result = await service.Transcribe([0f], model, "en", false, false, progress, CancellationToken.None);
+        Check(result.Transcript.PlainText == "Hello", "Full transcription failed after a preview error.");
+        Check(NativeCalls.Loads.SequenceEqual([true]), "Preview error loaded a CPU model.");
+        Check(NativeCalls.Inferences.SequenceEqual([true, true]), "Preview error moved the session to CPU.");
+    }),
     ("cancel waits for active load before the next job enters", async () =>
     {
         using var service = new SpeechService(new());

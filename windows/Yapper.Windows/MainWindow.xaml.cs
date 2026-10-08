@@ -294,7 +294,7 @@ public partial class MainWindow : Window
         var gap = skippedPreview; skippedPreview = false;
         try
         {
-            var result = await speech.Transcribe(samples, job.Model, job.Language, false, false, new Progress<(string, double)>(), token, job.Preferences.PreferredWords);
+            var result = await speech.Transcribe(samples, job.Model, job.Language, false, false, new Progress<(string, double)>(), token, job.Preferences.PreferredWords, preview: true);
             if (id == activeId && !finishing && audio.IsRecording && !token.IsCancellationRequested)
             {
                 var draft = result.Transcript.PlainText.Trim();
