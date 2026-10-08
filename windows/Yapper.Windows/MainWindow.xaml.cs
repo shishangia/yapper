@@ -431,7 +431,7 @@ public partial class MainWindow : Window
     private void CancelJob(object sender, RoutedEventArgs e)
     {
         jobs.Cancel(); cancellation?.Cancel();
-        Status.Text = "Canceling. Waiting for active native work to finish…";
+        Status.Text = "Finishing up. Nothing will be saved.";
         recorder.Dismiss();
         if (audio.IsRecording) _ = StopAndProcess();
     }

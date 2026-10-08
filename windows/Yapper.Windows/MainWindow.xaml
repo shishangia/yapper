@@ -99,9 +99,9 @@
           <Border Style="{StaticResource Card}">
             <StackPanel>
               <TextBlock Text="Preferred words" Style="{StaticResource SectionTitle}"/>
-              <TextBlock Text="Names and terms you use, one per line. Whisper uses these as recognition hints." Style="{StaticResource Caption}" Margin="0,0,0,8"/>
+              <TextBlock Text="Names and terms you use, one per line. Whisper models use them to spell these words correctly; other models ignore them." Style="{StaticResource Caption}" Margin="0,0,0,8"/>
               <TextBox x:Name="PreferredWords" AcceptsReturn="True" TextWrapping="Wrap" FontWeight="Normal" Height="110" Background="{DynamicResource Hover}" VerticalScrollBarVisibility="Auto" LostKeyboardFocus="ChangePreferences" AutomationProperties.AutomationId="preferredWords" AutomationProperties.Name="Preferred words, one per line"/>
-              <TextBlock Text="Up to 50 terms, 60 characters each. Parakeet uses the replacement rules in Dictionary." Style="{StaticResource Caption}"/>
+              <TextBlock Text="Up to 50 terms, 60 characters each. For other models, add a replacement rule in Dictionary." Style="{StaticResource Caption}"/>
             </StackPanel>
           </Border>
           <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="Transcript cleanup" Style="{StaticResource SectionTitle}"/><CheckBox x:Name="TrimPeriod" Content="Trim a lone final period on short dictation" Checked="ChangePreferences" Unchecked="ChangePreferences"/><CheckBox x:Name="AutoEdit" Content="Remove safe fillers, capitalize sentences, and format explicit paragraph, bullet, numbered-list, and scratch-that commands" Checked="ChangePreferences" Unchecked="ChangePreferences"/><TextBlock Text="Cleanup runs locally. Conversation transcripts are never changed by dictation cleanup or dictionary rules." Style="{StaticResource Caption}"/></StackPanel></Border>
