@@ -99,6 +99,7 @@ struct HistoryView: View {
                                     guard let currentItem = historyService.items.first(where: { $0.id == item.id }) else { return }
                                     copyToClipboard(text: currentItem.displayText)
                                 },
+                                onCopyOriginal: { copyToClipboard(text: $0) },
                                 onDelete: { itemPendingDeletion = item },
                                 audioPlayer: audioPlayer
                             )
@@ -208,6 +209,7 @@ struct HistoryCard: View {
     let isExpanded: Bool
     let onToggle: () -> Void
     let onCopy: () -> Void
+    let onCopyOriginal: (String) -> Void
     let onDelete: () -> Void
     @ObservedObject var audioPlayer: AudioPlayerService
     @State private var isHovered = false
@@ -333,7 +335,7 @@ struct HistoryCard: View {
 
                             if let original = RawDictationView.original(for: item) {
                                 Button {
-                                    ClipboardService.shared.copy(text: original)
+                                    onCopyOriginal(original)
                                 } label: {
                                     HStack(spacing: 6) {
                                         Image(systemName: "doc.on.doc")
