@@ -111,7 +111,7 @@
       </TabItem>
     </TabControl>
     <Border Grid.Row="1" Grid.Column="1" Margin="28,0,28,16" Padding="14,10" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}" BorderThickness="1" CornerRadius="12">
-      <StackPanel><TextBlock x:Name="Status" Text="Ready" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryInk}" AutomationProperties.AutomationId="status"/><ProgressBar x:Name="Progress" Height="4" Margin="0,8,0,0" Minimum="0" Maximum="1"/><WrapPanel><Button x:Name="CancelButton" Content="Cancel current job" Click="CancelJob" IsEnabled="False"/><Button x:Name="RetryButton" Content="Retry retained audio" Click="RetryTranscription" IsEnabled="False"/></WrapPanel></StackPanel>
+      <StackPanel><TextBlock x:Name="Status" Text="Ready" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryInk}" AutomationProperties.AutomationId="status"/><ProgressBar x:Name="Progress" Height="4" Margin="0,8,0,0" Minimum="0" Maximum="1"/><WrapPanel><Button x:Name="CancelButton" Content="Cancel current job" Click="CancelJob" Visibility="Collapsed"/><Button x:Name="RetryButton" Content="Retry retained audio" Click="RetryTranscription" Visibility="Collapsed"/></WrapPanel></StackPanel>
     </Border>
   </Grid>
 </Window>

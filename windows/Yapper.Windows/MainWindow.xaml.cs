@@ -214,9 +214,9 @@ public partial class MainWindow : Window
         activeId = jobs.Begin();
         audio.StopPlayback();
         cancellation = new();
-        CancelButton.IsEnabled = true;
+        CancelButton.Visibility = Visibility.Visible;
         Progress.Value = 0;
-        RetryButton.IsEnabled = false;
+        RetryButton.Visibility = Visibility.Collapsed;
         return true;
     }
     private void Finish()
@@ -226,8 +226,8 @@ public partial class MainWindow : Window
         jobs.Finish(activeId);
         cancellation?.Dispose(); cancellation = null;
         options = null; recordingPath = null; finishing = false;
-        RetryButton.IsEnabled = retry is not null;
-        CancelButton.IsEnabled = false;
+        RetryButton.Visibility = retry is null ? Visibility.Collapsed : Visibility.Visible;
+        CancelButton.Visibility = Visibility.Collapsed;
         RecordButton.Content = "Record microphone";
         recorder.Dismiss();
         tray.Text = "Yapper";
