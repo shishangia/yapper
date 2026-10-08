@@ -191,10 +191,10 @@ public partial class MainWindow : Window
     private void ShowTranscript()
     {
         TranscriptText.Text = selected?.DisplayText ?? ""; HistoryText.Text = selected?.DisplayText ?? "";
-        var detail = selected?.Timing is { } t
-            ? $"Processing {t.Total:F2}s · decode {t.Decode:F2}s · wait {t.Queue:F2}s · model {t.ModelPreparation:F2}s · speech {t.Inference:F2}s · speakers {t.SpeakerDetection:F2}s · cleanup {t.Cleanup:F2}s"
-            : "";
-        ProcessingDetails.Text = HistoryProcessingDetails.Text = detail;
+        var timing = selected?.Timing;
+        ProcessingDetails.Text = HistoryProcessingDetails.Text = timing is null ? "" : $"Processed in {timing.Total:F1}s";
+        ProcessingDetails.ToolTip = HistoryProcessingDetails.ToolTip = timing is null ? null
+            : $"Audio preparation {timing.Decode:F2}s\nWaiting {timing.Queue:F2}s\nModel preparation {timing.ModelPreparation:F2}s\nSpeech recognition {timing.Inference:F2}s\nSpeaker separation {timing.SpeakerDetection:F2}s\nText cleanup {timing.Cleanup:F2}s";
     }
     private void ChangePreferences(object sender, RoutedEventArgs e)
     {
