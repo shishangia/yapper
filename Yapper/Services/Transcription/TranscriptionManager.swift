@@ -183,7 +183,7 @@ class TranscriptionManager {
         var cleanupNote: String?
         if !normalized.isEmpty {
             do {
-                if let cleaned = try await smartCleanup(normalized) { edited = cleaned }
+                if let cleaned = try await smartCleanup(edited) { edited = cleaned }
             } catch let error as AppleDictationCleanup.CleanupError { cleanupNote = error.localizedDescription }
             catch { cleanupNote = "Smart cleanup unavailable or unsuccessful. Standard cleanup was used." }
         }

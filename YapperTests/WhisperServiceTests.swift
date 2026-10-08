@@ -70,7 +70,7 @@ final class WhisperServiceTests: XCTestCase {
     func testSmartCleanupKeepsOriginalAndFallsBackWithoutLosingDictation() async throws {
         let manager = TranscriptionManager(whisper: StubSpeechEngine(), parakeet: StubSpeechEngine(), gate: NativeInferenceGate(),
             autoEditEnabled: { true }, idleDelay: { 0 }, smartCleanup: { raw in
-                XCTAssertEqual(raw, "raw words")
+                XCTAssertEqual(raw, "Raw words", "Smart cleanup refines the Auto Edit result")
                 return "Edited words"
             })
         let result = try await manager.transcribeDetailed(audioFile: URL(fileURLWithPath: "/unused"), variant: "openai_whisper-large-v3", language: "en")
