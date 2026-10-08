@@ -29,4 +29,22 @@ final class LiveDictationPreviewTests: XCTestCase {
         while FileManager.default.fileExists(atPath: old.path) { await Task.yield() }
         XCTAssertTrue(preview.text.isEmpty)
     }
+
+    func testStopCancelsInFlightPreviewChunk() async throws {
+        let started = expectation(description: "chunk started")
+        let cancelled = expectation(description: "chunk cancelled")
+        let preview = LiveDictationPreview { _, _, _ in
+            started.fulfill()
+            do { try await Task.sleep(for: .seconds(30)) } catch { cancelled.fulfill(); throw error }
+            return "late"
+        }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".wav")
+        try Data().write(to: url)
+        let snapshot = RecorderJob.Snapshot(model: "unused", language: "en", targetPID: nil)
+        preview.begin(snapshot.id); preview.accept(url, snapshot: snapshot)
+        await fulfillment(of: [started], timeout: 2)
+        preview.stop()
+        await fulfillment(of: [cancelled], timeout: 2)
+        XCTAssertTrue(preview.text.isEmpty)
+    }
 }
