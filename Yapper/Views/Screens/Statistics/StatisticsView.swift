@@ -85,19 +85,19 @@ struct StatisticsView: View {
         HStack(spacing: 16) {
             StatCard(
                 icon: "doc.text.fill",
-                label: "Total Words",
+                label: "Total words",
                 value: "\(totalWords(for: selectedPeriod))"
             )
 
             StatCard(
                 icon: "calendar",
-                label: "Daily Average",
+                label: "Daily average",
                 value: "\(dailyAverage(for: selectedPeriod))"
             )
 
             StatCard(
                 icon: "chart.line.uptrend.xyaxis",
-                label: "Best Day",
+                label: "Best day",
                 value: "\(bestDay(for: selectedPeriod))"
             )
 

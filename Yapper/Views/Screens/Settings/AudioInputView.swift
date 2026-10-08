@@ -13,7 +13,7 @@ struct AudioInputView: View {
                         .font(.system(size: 36))
                         .foregroundStyle(Color.accentPrimary)
                     
-                    Text("Audio Input")
+                    Text("Audio input")
                         .font(Typography.displayLarge)
                         .foregroundStyle(Color.textPrimary)
                     
@@ -33,7 +33,7 @@ struct AudioInputView: View {
                 // Available Devices Section
                 VStack(alignment: .leading, spacing: 15) {
                     HStack {
-                        Text("Available Devices")
+                        Text("Available devices")
                             .font(Typography.headlineMedium)
                             .foregroundStyle(Color.textPrimary)
                         Spacer()

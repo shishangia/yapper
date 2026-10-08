@@ -63,7 +63,7 @@ struct MenuBarDashboardView: View {
             HStack {
                 Text("Shivam").font(Typography.labelSmall).foregroundStyle(Color.textSecondary)
                 Spacer()
-                Button("Open Dashboard", action: openDashboard).buttonStyle(.stGhost)
+                Button("Open dashboard", action: openDashboard).buttonStyle(.stGhost)
                 Button("Quit", action: quit).buttonStyle(.stGhost).accessibilityIdentifier("menu.quit")
             }
         }

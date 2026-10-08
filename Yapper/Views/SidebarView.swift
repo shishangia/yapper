@@ -113,7 +113,7 @@ struct SidebarButton: View {
 
 enum SidebarItem: String, CaseIterable, Identifiable {
     case dashboard = "Dashboard"
-    case transcribeAudio = "Transcribe Audio"
+    case transcribeAudio = "Transcribe audio"
     case history = "History"
     case dictionary = "Dictionary"
     case statistics = "Statistics"

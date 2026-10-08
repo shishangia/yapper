@@ -646,7 +646,7 @@ struct MiniRecorderView: View {
             default: authorized = false
             }
             guard job.canCommit(snapshot.id) else { finish(snapshot); return }
-            guard authorized else { showError("Enable Microphone in System Settings", for: snapshot); return }
+            guard authorized else { showError("Allow microphone access in System Settings", for: snapshot); return }
             guard job.transition(snapshot.id, from: .preparing, to: .recording) else { return }
             let captureID = preview.begin(snapshot.id)
             audioRecorder.startRecording(previewSession: captureID)

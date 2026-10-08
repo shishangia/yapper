@@ -62,7 +62,7 @@ struct ConversationTranscriptView: View {
                         Button(reviewing ? "Reading view" : "Edit turns") { reviewing.toggle() }
                             .buttonStyle(.stSecondary).accessibilityIdentifier("reviewSpeakers")
                     }
-                    Button("Add Speaker") {
+                    Button("Add speaker") {
                         speakerName = ""
                         error = nil
                         addingSpeaker = true
@@ -70,7 +70,7 @@ struct ConversationTranscriptView: View {
                     .buttonStyle(.stSecondary)
                     .accessibilityIdentifier("addSpeaker")
                     if conversation.speakerIDs.count > 1 {
-                        Button("Merge Speakers") {
+                        Button("Merge speakers") {
                             mergeSource = conversation.speakerIDs[0]
                             mergeTarget = conversation.speakerIDs[1]
                             error = nil
@@ -170,7 +170,7 @@ struct ConversationTranscriptView: View {
             if !$0 { speakerToRename = nil; addingSpeaker = false }
         })) {
             VStack(alignment: .leading, spacing: 16) {
-                Text(addingSpeaker ? "Add Speaker" : "Rename Speaker").font(Typography.headlineMedium)
+                Text(addingSpeaker ? "Add speaker" : "Rename Speaker").font(Typography.headlineMedium)
                 Text("Names apply only to this recording. Leave a renamed speaker blank to restore the default.")
                     .font(Typography.bodySmall).foregroundStyle(Color.textSecondary)
                 TextField("Speaker name", text: $speakerName)
@@ -188,7 +188,7 @@ struct ConversationTranscriptView: View {
         }
         .sheet(isPresented: Binding(get: { editingSegment != nil }, set: { if !$0 { editingSegment = nil } })) {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Edit Transcript Turn").font(Typography.headlineMedium)
+                Text("Edit transcript turn").font(Typography.headlineMedium)
                 TextEditor(text: $editedText).frame(minHeight: 160).accessibilityIdentifier("editedTranscript")
                 if let conversation, conversation.speakerDetectionRequested {
                     Picker("Speaker", selection: $editedSpeaker) {
@@ -254,7 +254,7 @@ struct ConversationTranscriptView: View {
         }
         .sheet(isPresented: $merging) {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Merge Speakers").font(Typography.headlineMedium)
+                Text("Merge speakers").font(Typography.headlineMedium)
                 Text("All turns for the first speaker will use the second speaker's name in this recording.")
                     .font(Typography.bodySmall).foregroundStyle(Color.textSecondary)
                 if let conversation {

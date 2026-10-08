@@ -68,7 +68,7 @@ struct DictionaryView: View {
             }
         }
         .alert(
-            "Delete Rule?",
+            "Delete rule?",
             isPresented: Binding(
                 get: { entryPendingDeletion != nil },
                 set: { if !$0 { entryPendingDeletion = nil } }
@@ -107,7 +107,7 @@ struct DictionaryView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "plus")
                         .font(.system(size: 12, weight: .semibold))
-                    Text("Add Rule")
+                    Text("Add rule")
                 }
                 .font(Typography.labelMedium)
                 .foregroundStyle(Color.btnPrimaryFg)
@@ -174,7 +174,7 @@ struct DictionaryView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "plus")
                         .font(.system(size: 12, weight: .semibold))
-                    Text("Add Rule")
+                    Text("Add rule")
                 }
                 .font(Typography.labelMedium)
                 .foregroundStyle(Color.btnPrimaryFg)
@@ -331,7 +331,7 @@ private struct DictionaryEntryEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(entry == nil ? "New Rule" : "Edit Rule")
+            Text(entry == nil ? "New rule" : "Edit rule")
                 .font(Typography.displaySmall)
                 .foregroundStyle(Color.textPrimary)
                 .padding(.bottom, 20)

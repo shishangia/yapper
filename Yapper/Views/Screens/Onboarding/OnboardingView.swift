@@ -114,7 +114,7 @@ struct GetStartedButton: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 10) {
-                Text("Get Started")
+                Text("Get started")
                     .font(.system(size: 15, weight: .medium))
                 Image(systemName: "arrow.right")
                     .font(.system(size: 12, weight: .medium))
@@ -507,12 +507,12 @@ struct GlobeKeyOptimizationPage: View {
                     .textCase(.uppercase)
                     .tracking(2)
 
-                Text("The Globe Key")
+                Text("The Globe key")
                     .font(.system(size: 40, weight: .regular, design: .rounded))
                     .foregroundStyle(Color.textPrimary)
 
                 Text(
-                    "By default, macOS uses the \u{1F310} key to show the Emoji Picker, which interrupts Yapper.\n\nPlease open Keyboard Settings and change **\"Press \u{1F310} key to\"** to **\"Do Nothing\"**."
+                    "By default, macOS uses the \u{1F310} key to show the Emoji Picker, which interrupts Yapper.\n\nPlease open Keyboard settings and change **\"Press \u{1F310} key to\"** to **\"Do Nothing\"**."
                 )
                 .font(.system(size: 15, weight: .regular))
                 .foregroundStyle(Color.textSecondary)
@@ -525,7 +525,7 @@ struct GlobeKeyOptimizationPage: View {
                 Button(action: openKeyboardSettings) {
                     HStack {
                         Image(systemName: "switch.2")
-                        Text("Open Keyboard Settings")
+                        Text("Open Keyboard settings")
                     }
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(Color.bgApp)

@@ -16,7 +16,7 @@ struct PermissionsView: View {
                         .font(.system(size: 36))
                         .foregroundStyle(Color.accentPrimary)
                     
-                    Text("App Permissions")
+                    Text("App permissions")
                         .font(Typography.displayLarge)
                         .foregroundStyle(Color.textPrimary)
                     
@@ -32,7 +32,7 @@ struct PermissionsView: View {
                     PermissionRow(
                         icon: "mic.fill",
                         color: .green,
-                        title: "Microphone Access",
+                        title: "Microphone access",
                         desc: "Allow Yapper to record your voice for transcription",
                         isGranted: micStatus == .authorized,
                         action: { openSettings(for: "Privacy_Microphone") }
@@ -42,7 +42,7 @@ struct PermissionsView: View {
                     PermissionRow(
                         icon: "hand.raised.fill",
                         color: .green,
-                        title: "Accessibility Access",
+                        title: "Accessibility access",
                         desc: "Allow Yapper to paste transcribed text directly",
                         isGranted: accessibilityStatus,
                         action: { 

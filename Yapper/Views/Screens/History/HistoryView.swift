@@ -37,7 +37,7 @@ struct HistoryView: View {
                             HStack(spacing: 6) {
                                 Image(systemName: "trash")
                                     .font(.system(size: 12))
-                                Text("Clear All")
+                                Text("Clear all")
                             }
                             .font(Typography.labelSmall)
                             .foregroundStyle(Color.textMuted)
@@ -115,7 +115,7 @@ struct HistoryView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(Color.accentBlue)
-                    Text("Text Copied")
+                    Text("Text copied")
                         .font(Typography.labelMedium)
                         .foregroundStyle(.white)
                 }
@@ -129,16 +129,16 @@ struct HistoryView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .alert("Clear All History?", isPresented: $showDeleteAlert) {
+        .alert("Clear all history?", isPresented: $showDeleteAlert) {
             Button("Cancel", role: .cancel) { }
-            Button("Clear All", role: .destructive) {
+            Button("Clear all", role: .destructive) {
                 historyService.clearAll()
             }
         } message: {
             Text("This removes your saved transcripts, but keeps your statistics history.")
         }
         .alert(
-            "Delete Transcript?",
+            "Delete transcript?",
             isPresented: Binding(
                 get: { itemPendingDeletion != nil },
                 set: { isPresented in
@@ -378,7 +378,7 @@ struct HistoryCard: View {
                                     HStack(spacing: 6) {
                                         Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
                                             .font(.system(size: 12))
-                                        Text(audioPlayer.isPlaying ? "Pause" : "Play Audio")
+                                        Text(audioPlayer.isPlaying ? "Pause" : "Play audio")
                                             .font(Typography.labelMedium)
                                     }
                                     .foregroundStyle(Color.textSecondary)

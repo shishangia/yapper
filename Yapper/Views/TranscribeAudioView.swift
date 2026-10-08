@@ -16,7 +16,7 @@ struct TranscribeAudioView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Transcribe Audio").font(Typography.displayLarge)
+                    Text("Transcribe audio").font(Typography.displayLarge)
                     Text("Conversations, in your own words.")
                         .font(Typography.bodyLarge).foregroundStyle(Color.textSecondary)
                 }

@@ -137,7 +137,7 @@ struct GeneralSettingsTab: View {
 
                     VStack(spacing: 16) {
                         HStack {
-                            Text("Primary Hotkey")
+                            Text("Primary hotkey")
                                 .font(Typography.bodyMedium)
                                 .foregroundStyle(Color.textPrimary)
                             Spacer()
@@ -166,7 +166,7 @@ struct GeneralSettingsTab: View {
 
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
-                                Text("Recording Mode")
+                                Text("Recording mode")
                                     .font(Typography.bodyMedium)
                                     .foregroundStyle(Color.textPrimary)
                                 Spacer()
@@ -260,7 +260,7 @@ struct GeneralSettingsTab: View {
                 // Spoken Language
                 SettingsSection {
                     SettingsSectionHeader(
-                        icon: "globe", title: "Spoken Language",
+                        icon: "globe", title: "Spoken language",
                         subtitle: "Hint for the language you are speaking")
 
                     HStack {
@@ -442,7 +442,7 @@ struct AudioSettingsTab: View {
             VStack(spacing: 16) {
                 SettingsSection {
                     SettingsSectionHeader(
-                        icon: "mic", title: "Input Device", subtitle: "Select your microphone")
+                        icon: "mic", title: "Input device", subtitle: "Select your microphone")
 
                     VStack(spacing: 12) {
                         if audioRecorder.availableDevices.isEmpty {
@@ -468,7 +468,7 @@ struct AudioSettingsTab: View {
                         HStack(spacing: 6) {
                             Image(systemName: "arrow.clockwise")
                                 .font(.system(size: 12))
-                            Text("Refresh Devices")
+                            Text("Refresh devices")
                                 .font(Typography.labelMedium)
                         }
                         .foregroundStyle(Color.textPrimary)
@@ -501,14 +501,14 @@ struct PermissionsSettingsTab: View {
             VStack(spacing: 16) {
                 SettingsSection {
                     SettingsSectionHeader(
-                        icon: "shield", title: "App Permissions",
+                        icon: "shield", title: "App permissions",
                         subtitle: "Required for full functionality")
 
                     VStack(spacing: 10) {
                         SettingsPermissionItem(
                             icon: "mic.fill",
                             color: Color.textSecondary,
-                            title: "Microphone Access",
+                            title: "Microphone access",
                             desc: "Record your voice for transcription",
                             isGranted: micStatus == .authorized,
                             action: { openSettings(for: "Privacy_Microphone") }
@@ -517,7 +517,7 @@ struct PermissionsSettingsTab: View {
                         SettingsPermissionItem(
                             icon: "hand.raised.fill",
                             color: Color.textSecondary,
-                            title: "Accessibility Access",
+                            title: "Accessibility access",
                             desc: "Paste transcribed text directly",
                             isGranted: accessibilityStatus,
                             action: {
