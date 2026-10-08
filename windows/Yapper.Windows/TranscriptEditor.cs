@@ -14,7 +14,7 @@ public sealed class TranscriptEditor : Window
     private readonly LibraryStore library;
     private readonly Guid recordingId;
     private readonly ListBox passages = new() { DisplayMemberPath = "Text", MinWidth = 230 };
-    private readonly TextBox text = new() { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MinHeight = 160 };
+    private readonly TextBox text = new() { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MinHeight = 120 };
     private readonly ComboBox speakers = new();
     private readonly TextBox name = new();
     private readonly TextBlock status = new() { TextWrapping = TextWrapping.Wrap };
