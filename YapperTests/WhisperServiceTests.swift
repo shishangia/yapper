@@ -78,6 +78,22 @@ final class WhisperServiceTests: XCTestCase {
             original: "todo bullet point call sam bullet point email priya"))
     }
 
+    func testSmartCleanupTimeoutDoesNotWaitForAStalledCall() async throws {
+        var stalled: CheckedContinuation<Void, Never>?
+        let start = Date()
+        do {
+            _ = try await AppleDictationCleanup.withTimeout(.milliseconds(100)) { () async throws -> String in
+                await withCheckedContinuation { stalled = $0 } // Ignores cancellation, like a hung model call.
+                return "late"
+            }
+            XCTFail("Expected a timeout")
+        } catch AppleDictationCleanup.CleanupError.timedOut {}
+        XCTAssertLessThan(Date().timeIntervalSince(start), 2)
+        stalled?.resume()
+        let fast = try await AppleDictationCleanup.withTimeout(.seconds(5)) { "done" }
+        XCTAssertEqual(fast, "done")
+    }
+
     func testSmartCleanupKeepsOriginalAndFallsBackWithoutLosingDictation() async throws {
         let manager = TranscriptionManager(whisper: StubSpeechEngine(), parakeet: StubSpeechEngine(), gate: NativeInferenceGate(),
             autoEditEnabled: { true }, idleDelay: { 0 }, smartCleanup: { raw in
