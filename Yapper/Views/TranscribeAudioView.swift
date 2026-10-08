@@ -178,7 +178,7 @@ struct ConversationStatusView: View {
                     .accessibilityLabel("Current processing stage")
             }
             if session.phase == .canceling {
-                Text("Finishing the current native operation before releasing the models. No result will be saved.")
+                Text("Finishing up. Nothing will be saved.")
                     .font(Typography.caption).foregroundStyle(Color.textSecondary)
             } else if let message = session.message {
                 Text(message).font(Typography.bodySmall).foregroundStyle(Color.textSecondary)
