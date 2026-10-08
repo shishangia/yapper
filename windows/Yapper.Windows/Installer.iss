@@ -1,4 +1,4 @@
-#define AppVersion "1.2.1"
+#define AppVersion "1.2.2"
 [Setup]
 AppId={{19F43172-BD41-4AB7-9C15-0522D0AC6050}
 AppName=Yapper
