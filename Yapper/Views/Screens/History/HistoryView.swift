@@ -330,7 +330,26 @@ struct HistoryCard: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 8))
                             }
                             .buttonStyle(.plain)
-                            
+
+                            if let original = RawDictationView.original(for: item) {
+                                Button {
+                                    ClipboardService.shared.copy(text: original)
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "doc.on.doc")
+                                            .font(.system(size: 12))
+                                        Text("Copy original")
+                                            .font(Typography.labelMedium)
+                                    }
+                                    .foregroundStyle(Color.textSecondary)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 8)
+                                    .background(Color.bgHover)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                }
+                                .buttonStyle(.plain)
+                            }
+
                             Button(role: .destructive, action: onDelete) {
                                 HStack(spacing: 6) {
                                     Image(systemName: "trash")
