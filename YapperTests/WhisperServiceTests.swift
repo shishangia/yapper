@@ -65,6 +65,17 @@ final class WhisperServiceTests: XCTestCase {
         XCTAssertFalse(AppleDictationCleanup.acceptable("Pay 12", original: "Pay 12 and 12"))
         XCTAssertFalse(AppleDictationCleanup.acceptable("", original: "important text"))
         XCTAssertTrue(AppleDictationCleanup.acceptable("Pay 12.50 tomorrow.", original: "um pay 12.50 tomorrow"))
+        // Answers and rewrites are not cleanup, however short the input.
+        XCTAssertFalse(AppleDictationCleanup.acceptable("Paris.", original: "what's the capital of France"))
+        XCTAssertFalse(AppleDictationCleanup.acceptable("The capital of France is Paris, a city known for art.",
+            original: "what's the capital of France"))
+        XCTAssertFalse(AppleDictationCleanup.acceptable("Sounds good.", original: "um yeah so I think we should ship it on Friday"))
+        XCTAssertTrue(AppleDictationCleanup.acceptable("I think we should ship it on Friday.",
+            original: "um so like I think we should uh ship it on Friday"))
+        XCTAssertTrue(AppleDictationCleanup.acceptable("Groceries:\n1. Milk\n2. Eggs\n3. Bread",
+            original: "groceries number one milk number two eggs number three bread"))
+        XCTAssertTrue(AppleDictationCleanup.acceptable("Todo:\n• Call Sam\n• Email Priya",
+            original: "todo bullet point call sam bullet point email priya"))
     }
 
     func testSmartCleanupKeepsOriginalAndFallsBackWithoutLosingDictation() async throws {

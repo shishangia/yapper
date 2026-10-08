@@ -38,7 +38,7 @@ enum AppleDictationCleanup {
     }
 
     static func acceptable(_ result: String, original: String) -> Bool {
-        guard !result.isEmpty, result.count <= max(200, original.count * 3),
+        guard !result.isEmpty, result.count <= original.count * 13 / 10 + 10,
               !result.contains("<transcript>"), !result.hasPrefix("```") else { return false }
         // Protect literal numbers and obvious truncation; raw text is always retained too.
         let numbers = original.matches(of: /[0-9]+(?:[.,][0-9]+)*/).map { String($0.output) }
@@ -47,7 +47,27 @@ enum AppleDictationCleanup {
             guard let index = remaining.firstIndex(of: number) else { return false }
             remaining.remove(at: index)
         }
-        return original.count < 80 || result.count >= original.count / 3
+        // The output must be the user's words: mostly drawn from the input, and keeping most of it.
+        // This rejects answers ("what's the capital of France" -> "Paris.") and heavy rewrites.
+        let input = words(original), output = words(result)
+        let inputSet = Set(input), outputSet = Set(output)
+        let spoken = input.filter { !dictationOnlyWords.contains($0) }
+        guard !output.isEmpty, !spoken.isEmpty else { return false }
+        let drawn = Double(output.filter(inputSet.contains).count) / Double(output.count)
+        let kept = Double(spoken.filter(outputSet.contains).count) / Double(spoken.count)
+        return drawn >= 0.7 && kept >= 0.6
+    }
+
+    /// Fillers and spoken formatting commands that cleanup is expected to drop.
+    private static let dictationOnlyWords: Set<String> = ["um", "umm", "uh", "uhm", "erm", "hmm", "like",
+        "bullet", "point", "item", "number", "new", "line", "paragraph"]
+    private static let spelledNumbers = ["zero": "0", "one": "1", "two": "2", "three": "3", "four": "4",
+        "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10"]
+
+    /// Case- and punctuation-insensitive words; spelled numbers match the digits a list uses.
+    private static func words(_ text: String) -> [String] {
+        text.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }.map { spelledNumbers[$0] ?? $0 }
     }
 
     enum CleanupError: LocalizedError {
