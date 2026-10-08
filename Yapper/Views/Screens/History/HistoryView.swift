@@ -22,7 +22,7 @@ struct HistoryView: View {
                             .foregroundStyle(Color.textPrimary)
                         
                         if !historyService.items.isEmpty {
-                            Text("\(historyService.items.count) transcriptions")
+                            Text(historyService.items.count == 1 ? "1 transcription" : "\(historyService.items.count) transcriptions")
                                 .font(Typography.bodySmall)
                                 .foregroundStyle(Color.textSecondary)
                         }
