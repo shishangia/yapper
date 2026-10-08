@@ -28,7 +28,7 @@ struct DictationPerformanceSettings: View {
                         .onChange(of: idleMinutes) { TranscriptionManager.shared.scheduleIdleUnload() }
                     }
                     Text("Frees idle model memory. Your next recording reloads it; model files stay on disk.")
-                        .font(Typography.captionSmall)
+                        .font(Typography.caption)
                         .foregroundStyle(Color.textMuted)
                 }
 
@@ -46,7 +46,7 @@ struct DictationPerformanceSettings: View {
                             .accessibilityIdentifier("liveDictationPreview")
                     }
                     Text("Drafts update every few seconds and can change. The complete recording produces the saved transcript.")
-                        .font(Typography.captionSmall)
+                        .font(Typography.caption)
                         .foregroundStyle(Color.textMuted)
                 }
             }
@@ -79,7 +79,7 @@ struct CleanupSettings: View {
                             .toggleStyle(.switch)
                     }
                     Text("Removes safe filler words, capitalizes sentences, and formats spoken commands such as “new paragraph,” “bullet point,” and “number one.” Runs on this Mac. Conversation transcripts stay unchanged.")
-                        .font(Typography.captionSmall)
+                        .font(Typography.caption)
                         .foregroundStyle(Color.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -98,13 +98,13 @@ struct CleanupSettings: View {
                             .accessibilityIdentifier("appleDictationCleanup")
                     }
                     Text("Edits text on this Mac after dictation and keeps the original in History. If it is unavailable, your Auto edit setting applies. Conversation transcripts stay unchanged.")
-                        .font(Typography.captionSmall)
+                        .font(Typography.caption)
                         .foregroundStyle(Color.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
 
                     if let message = AppleDictationCleanup.availabilityMessage {
                         Label(message, systemImage: "info.circle")
-                            .font(Typography.captionSmall)
+                            .font(Typography.caption)
                             .foregroundStyle(Color.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                             .padding(.top, 2)
@@ -144,7 +144,7 @@ struct CleanupSettings: View {
                             .accessibilityIdentifier("trimDictationPeriod")
                     }
                     Text("Removes a lone final period from an email, web address, number, or single word. Sentences and conversation transcripts stay unchanged.")
-                        .font(Typography.captionSmall)
+                        .font(Typography.caption)
                         .foregroundStyle(Color.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -162,7 +162,7 @@ struct CleanupSettings: View {
                             .font(Typography.bodyMedium)
                             .foregroundStyle(Color.textPrimary)
                         Text("Word replacements and spoken snippets (say “my email” → your address) now live in the Dictionary tab in the sidebar. They apply on every model, always on.")
-                            .font(Typography.captionSmall)
+                            .font(Typography.caption)
                             .foregroundStyle(Color.textMuted)
                             .fixedSize(horizontal: false, vertical: true)
                     }

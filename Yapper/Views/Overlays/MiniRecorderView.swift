@@ -439,7 +439,7 @@ struct MiniRecorderView: View {
                             .onAppear { proxy.scrollTo("draftText", anchor: .bottom) }
                             .onChange(of: draftText) { proxy.scrollTo("draftText", anchor: .bottom) }
                         }.frame(height: 48).allowsHitTesting(false)
-                        Text("Live draft · final text may change").font(Typography.captionSmall).foregroundStyle(Color.textSecondary)
+                        Text("Live draft · final text may change").font(Typography.caption).foregroundStyle(Color.textSecondary)
                     }
                 }.padding(livePreview ? 12 : 0)
             case .idle:

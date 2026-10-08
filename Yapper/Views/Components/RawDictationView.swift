@@ -17,7 +17,7 @@ struct RawDictationView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     if let note = item.cleanupNote {
                         Text(note)
-                            .font(Typography.captionSmall)
+                            .font(Typography.caption)
                             .foregroundStyle(Color.textMuted)
                     }
                     Text(raw)
