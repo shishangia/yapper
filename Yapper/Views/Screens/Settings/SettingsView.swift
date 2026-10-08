@@ -95,8 +95,6 @@ struct GeneralSettingsTab: View {
     @AppStorage("alwaysShowRecorderPill") private var alwaysShowRecorderPill: Bool = false
     @AppStorage("transcriptionLanguage") private var transcriptionLanguage: String = ModelSelection.defaultLanguage
     @AppStorage("recentTranscriptionLanguages") private var recentLanguagesString: String = ""
-    @AppStorage("enableAutoEdit") private var enableAutoEdit: Bool = true
-    @AppStorage("trimDictationPeriod") private var trimDictationPeriod = true
 
     private var recentLanguageCodes: [String] {
         recentLanguagesString.split(separator: ",").map(String.init).filter { !$0.isEmpty }
@@ -254,69 +252,7 @@ struct GeneralSettingsTab: View {
                 }
 
                 DictationPerformanceSettings()
-                SmartCleanupSettings()
-
-                // Transcript Cleanup
-                SettingsSection {
-                    SettingsSectionHeader(
-                        icon: "wand.and.stars",
-                        title: "Transcript Cleanup",
-                        subtitle: "Lightweight post-processing for dictation"
-                    )
-
-                    VStack(alignment: .leading, spacing: 14) {
-                        HStack {
-                            Text("Trim final period on short dictation")
-                                .font(Typography.bodyMedium)
-                                .foregroundStyle(Color.textPrimary)
-                            Spacer()
-                            Toggle("Trim final period on short dictation", isOn: $trimDictationPeriod)
-                                .labelsHidden()
-                                .accessibilityIdentifier("trimDictationPeriod")
-                        }
-                        Text("Removes a lone final period from an email, web address, number, or single word. Sentences and conversation transcripts stay unchanged.")
-                            .font(Typography.captionSmall)
-                            .foregroundStyle(Color.textMuted)
-                        Divider()
-                        HStack {
-                            Text("Enable Auto Edit")
-                                .font(Typography.bodyMedium)
-                                .foregroundStyle(Color.textPrimary)
-                            Spacer()
-                            Toggle("", isOn: $enableAutoEdit)
-                                .labelsHidden()
-                        }
-
-                        Text(
-                            "Auto Edit removes safe filler words, capitalizes sentences, and formats explicit commands such as “new paragraph,” “bullet point,” and “number one.” It runs locally. Conversation transcripts stay unchanged."
-                        )
-                        .font(Typography.captionSmall)
-                        .foregroundStyle(Color.textMuted)
-
-                        Divider()
-
-                        HStack(alignment: .top, spacing: 10) {
-                            Image(systemName: "character.book.closed")
-                                .font(.system(size: 13))
-                                .foregroundStyle(Color.textMuted)
-                                .padding(.top, 2)
-
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text("Custom replacements & snippets")
-                                    .font(Typography.bodyMedium)
-                                    .foregroundStyle(Color.textPrimary)
-                                Text(
-                                    "Word replacements and spoken snippets (say “my email” → your address) now live in the Dictionary tab in the sidebar. They apply on every model, always on."
-                                )
-                                .font(Typography.captionSmall)
-                                .foregroundStyle(Color.textMuted)
-                                .fixedSize(horizontal: false, vertical: true)
-                            }
-
-                            Spacer(minLength: 0)
-                        }
-                    }
-                }
+                CleanupSettings()
 
                 // Spoken Language
                 SettingsSection {

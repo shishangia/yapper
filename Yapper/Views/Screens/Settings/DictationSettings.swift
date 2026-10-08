@@ -53,52 +53,117 @@ struct DictationPerformanceSettings: View {
     }
 }
 
-struct SmartCleanupSettings: View {
+struct CleanupSettings: View {
+    @AppStorage("enableAutoEdit") private var enableAutoEdit: Bool = true
     @AppStorage(DictationPreferences.smartCleanupKey) private var smartCleanup = false
     @AppStorage(DictationPreferences.promptKey) private var cleanupPrompt = DictationPreferences.defaultPrompt
+    @AppStorage("trimDictationPeriod") private var trimDictationPeriod = true
+    @State private var showsInstructions = false
 
     var body: some View {
         SettingsSection {
             SettingsSectionHeader(
-                icon: "sparkles", title: "Smart cleanup",
-                subtitle: "Optional text editing with Apple Intelligence")
+                icon: "text.badge.checkmark", title: "Cleanup",
+                subtitle: "Tidy dictated text before it is pasted")
 
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Text("Use Apple Intelligence after dictation")
+                        Text("Auto edit")
                             .font(Typography.bodyMedium)
                             .foregroundStyle(Color.textPrimary)
                         Spacer()
-                        Toggle("Use Apple Intelligence after dictation", isOn: $smartCleanup)
+                        Toggle("Auto edit", isOn: $enableAutoEdit)
                             .labelsHidden()
-                            .accessibilityIdentifier("appleDictationCleanup")
                     }
-                    Text("Edits text on this Mac and keeps the original in History. Standard cleanup is used if unavailable. Conversation transcripts stay unchanged.")
+                    Text("Removes safe filler words, capitalizes sentences, and formats spoken commands such as “new paragraph,” “bullet point,” and “number one.” Runs on this Mac. Conversation transcripts stay unchanged.")
                         .font(Typography.captionSmall)
                         .foregroundStyle(Color.textMuted)
-                }
-
-                if let message = AppleDictationCleanup.availabilityMessage {
-                    Label(message, systemImage: "info.circle")
-                        .font(Typography.captionSmall)
-                        .foregroundStyle(Color.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                if smartCleanup {
-                    Divider()
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Cleanup instructions")
-                            .font(Typography.labelLarge)
+                Divider()
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Use Apple Intelligence")
+                            .font(Typography.bodyMedium)
                             .foregroundStyle(Color.textPrimary)
-                        ThemedTextEditor(text: $cleanupPrompt)
-                            .frame(minHeight: 130, maxHeight: 180)
-                            .accessibilityLabel("Smart cleanup instructions")
-                            .accessibilityIdentifier("cleanupInstructions")
-                        Button("Reset instructions") { cleanupPrompt = DictationPreferences.defaultPrompt }
-                            .buttonStyle(.stSecondary)
+                        Spacer()
+                        Toggle("Use Apple Intelligence", isOn: $smartCleanup)
+                            .labelsHidden()
+                            .accessibilityIdentifier("appleDictationCleanup")
                     }
+                    Text("Edits text on this Mac after dictation and keeps the original in History. If it is unavailable, your Auto edit setting applies. Conversation transcripts stay unchanged.")
+                        .font(Typography.captionSmall)
+                        .foregroundStyle(Color.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let message = AppleDictationCleanup.availabilityMessage {
+                        Label(message, systemImage: "info.circle")
+                            .font(Typography.captionSmall)
+                            .foregroundStyle(Color.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, 2)
+                    }
+
+                    if smartCleanup {
+                        DisclosureGroup(isExpanded: $showsInstructions) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                ThemedTextEditor(text: $cleanupPrompt)
+                                    .frame(minHeight: 130, maxHeight: 180)
+                                    .accessibilityLabel("Cleanup instructions")
+                                    .accessibilityIdentifier("cleanupInstructions")
+                                Button("Reset instructions") { cleanupPrompt = DictationPreferences.defaultPrompt }
+                                    .buttonStyle(.stSecondary)
+                            }
+                            .padding(.top, 8)
+                        } label: {
+                            Text("Customize instructions")
+                                .font(Typography.labelLarge)
+                                .foregroundStyle(Color.textSecondary)
+                        }
+                        .padding(.top, 6)
+                    }
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Trim final period on short dictation")
+                            .font(Typography.bodyMedium)
+                            .foregroundStyle(Color.textPrimary)
+                        Spacer()
+                        Toggle("Trim final period on short dictation", isOn: $trimDictationPeriod)
+                            .labelsHidden()
+                            .accessibilityIdentifier("trimDictationPeriod")
+                    }
+                    Text("Removes a lone final period from an email, web address, number, or single word. Sentences and conversation transcripts stay unchanged.")
+                        .font(Typography.captionSmall)
+                        .foregroundStyle(Color.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Divider()
+
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "character.book.closed")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color.textMuted)
+                        .padding(.top, 2)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Custom replacements & snippets")
+                            .font(Typography.bodyMedium)
+                            .foregroundStyle(Color.textPrimary)
+                        Text("Word replacements and spoken snippets (say “my email” → your address) now live in the Dictionary tab in the sidebar. They apply on every model, always on.")
+                            .font(Typography.captionSmall)
+                            .foregroundStyle(Color.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: 0)
                 }
             }
         }
