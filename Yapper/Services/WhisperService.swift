@@ -271,7 +271,7 @@ class WhisperService {
             let text = Self.normalizedTranscription(
                 from: results.map { $0.text }.joined(separator: " "))
 
-            print("Transcription complete: \(text.prefix(50))...")
+            print("Transcription complete: \(text.count) characters")
             return text
         } catch {
             print("Transcription failed: \(error.localizedDescription)")
@@ -299,7 +299,7 @@ class WhisperService {
         )
         let text = Self.normalizedTranscription(from: results.map { $0.text }.joined(separator: " "))
 
-        print("🔪 Chunk done: \(text.prefix(40))...")
+        print("🔪 Chunk done: \(text.count) characters")
         // Clean up temp chunk file after transcription
         try? FileManager.default.removeItem(at: audioFile)
         return text
