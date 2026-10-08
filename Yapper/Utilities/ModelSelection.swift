@@ -29,9 +29,13 @@ enum ModelSelection {
 
     /// Existing explicit language choices remain untouched by registered defaults.
     static func registerDefaults(
-        _ defaults: UserDefaults = .standard, domain: String? = Bundle.main.bundleIdentifier
+        _ defaults: UserDefaults = .standard, domain: String? = Bundle.main.bundleIdentifier,
+        hinglishReady: () -> Bool = { ModelStorage.transcriptionModelReady(AIModel.hinglishVariant) }
     ) {
-        if let domain { keepLegacyDefaults(defaults, domain: domain) }
+        if let domain {
+            keepLegacyDefaults(defaults, domain: domain)
+            repairStrandedAuto(defaults, domain: domain, hinglishReady: hinglishReady)
+        }
         defaults.register(defaults: [
             "transcriptionLanguage": defaultLanguage,
             "enableAutoEdit": true,
@@ -55,6 +59,19 @@ enum ModelSelection {
               !selected.isEmpty, selected != AIModel.hinglishVariant else { return }
         if stored["transcriptionLanguage"] == nil { defaults.set("auto", forKey: "transcriptionLanguage") }
         if stored["enableAutoEdit"] == nil { defaults.set(false, forKey: "enableAutoEdit") }
+    }
+
+    /// 1.1.2's first migration persisted "auto" for fresh 1.1.1 Hinglish installs, which never
+    /// saved a general model, leaving dictation with "No model selected". Restore Hinglish once,
+    /// only when its model is already downloaded and no general model was ever chosen.
+    private static func repairStrandedAuto(_ defaults: UserDefaults, domain: String, hinglishReady: () -> Bool) {
+        let repairedKey = "didRepairStrandedAutoLanguage"
+        let stored = defaults.persistentDomain(forName: domain) ?? [:]
+        guard stored[repairedKey] == nil else { return }
+        defaults.set(true, forKey: repairedKey)
+        guard stored["transcriptionLanguage"] as? String == "auto",
+              (stored[defaultsKey] as? String ?? none).isEmpty, hinglishReady() else { return }
+        defaults.set(defaultLanguage, forKey: "transcriptionLanguage")
     }
 
     static func selectedVariant(

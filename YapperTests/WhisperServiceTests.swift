@@ -324,17 +324,36 @@ final class WhisperServiceTests: XCTestCase {
         }
     }
 
-    func testMigrationPreservesExplicitChoicesWithoutAGeneralModel() throws {
-        let suite = "Yapper-Explicit-Upgrade-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        defaults.set(true, forKey: "hasCompletedOnboarding")
-        defaults.set("auto", forKey: "transcriptionLanguage")
-        defaults.set(false, forKey: "enableAutoEdit")
-        ModelSelection.registerDefaults(defaults, domain: suite)
-        XCTAssertEqual(defaults.string(forKey: "transcriptionLanguage"), "auto")
-        XCTAssertFalse(defaults.bool(forKey: "enableAutoEdit"))
-        XCTAssertNil(defaults.persistentDomain(forName: suite)?[ModelSelection.defaultsKey])
+    func testStrandedAutoRepairsToHinglishOnlyWithoutAGeneralModel() throws {
+        func profile(selected: String?, hinglishReady: Bool) throws -> (UserDefaults, String) {
+            let suite = "Yapper-Stranded-Auto-\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+            // The saved state after 1.1.2's first migration ran on a fresh 1.1.1 install.
+            defaults.set(true, forKey: "hasCompletedOnboarding")
+            defaults.set(true, forKey: "didKeepLegacyLanguageDefaults")
+            defaults.set("auto", forKey: "transcriptionLanguage")
+            defaults.set(false, forKey: "enableAutoEdit")
+            if let selected { defaults.set(selected, forKey: ModelSelection.defaultsKey) }
+            ModelSelection.registerDefaults(defaults, domain: suite, hinglishReady: { hinglishReady })
+            return (defaults, suite)
+        }
+
+        let (stranded, strandedSuite) = try profile(selected: nil, hinglishReady: true)
+        XCTAssertEqual(stranded.string(forKey: "transcriptionLanguage"), "hinglish")
+        XCTAssertEqual(ModelSelection.selectedVariant(stranded), AIModel.hinglishVariant)
+        XCTAssertFalse(stranded.bool(forKey: "enableAutoEdit"))
+        // One time only: a later explicit Auto choice is kept.
+        stranded.set("auto", forKey: "transcriptionLanguage")
+        ModelSelection.registerDefaults(stranded, domain: strandedSuite, hinglishReady: { true })
+        XCTAssertEqual(stranded.string(forKey: "transcriptionLanguage"), "auto")
+
+        XCTAssertEqual(try profile(selected: "", hinglishReady: true).0.string(forKey: "transcriptionLanguage"), "hinglish")
+        XCTAssertEqual(try profile(selected: nil, hinglishReady: false).0.string(forKey: "transcriptionLanguage"), "auto")
+        XCTAssertEqual(try profile(selected: AIModel.hinglishVariant, hinglishReady: true).0.string(forKey: "transcriptionLanguage"), "auto")
+        let (general, _) = try profile(selected: "openai_whisper-large-v3", hinglishReady: true)
+        XCTAssertEqual(general.string(forKey: "transcriptionLanguage"), "auto")
+        XCTAssertEqual(ModelSelection.selectedVariant(general), "openai_whisper-large-v3")
     }
 
     func testSharedMacAndWindowsCleanupContract() throws {
