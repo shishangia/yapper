@@ -458,6 +458,7 @@ struct MiniRecorderView: View {
             y: displayPhase == .idle ? 3 : 5)
         .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.92), value: displayPhase)
         .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.92), value: expanded)
+        .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.92), value: livePreview)
         .onHover { hovering in
             guard displayPhase == .recording else { return }
             expanded = hovering
