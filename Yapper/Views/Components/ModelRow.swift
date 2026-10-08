@@ -60,7 +60,7 @@ struct ModelRow: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("model.\(model.variant)")
         .confirmationDialog("Delete \(model.name)?", isPresented: $showingDeleteConfirmation) {
-            Button("Delete Model", role: .destructive, action: deleteModel)
+            Button("Delete model", role: .destructive, action: deleteModel)
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This removes the downloaded model, not your recordings or transcripts. You can download it again.\(isActive ? " Your model selection will be cleared." : "")")

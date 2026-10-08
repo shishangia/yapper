@@ -22,7 +22,7 @@ struct HistoryView: View {
                             .foregroundStyle(Color.textPrimary)
                         
                         if !historyService.items.isEmpty {
-                            Text("\(historyService.items.count) transcriptions")
+                            Text(historyService.items.count == 1 ? "1 transcription" : "\(historyService.items.count) transcriptions")
                                 .font(Typography.bodySmall)
                                 .foregroundStyle(Color.textSecondary)
                         }
@@ -37,7 +37,7 @@ struct HistoryView: View {
                             HStack(spacing: 6) {
                                 Image(systemName: "trash")
                                     .font(.system(size: 12))
-                                Text("Clear All")
+                                Text("Clear all")
                             }
                             .font(Typography.labelSmall)
                             .foregroundStyle(Color.textMuted)
@@ -99,6 +99,7 @@ struct HistoryView: View {
                                     guard let currentItem = historyService.items.first(where: { $0.id == item.id }) else { return }
                                     copyToClipboard(text: currentItem.displayText)
                                 },
+                                onCopyOriginal: { copyToClipboard(text: $0) },
                                 onDelete: { itemPendingDeletion = item },
                                 audioPlayer: audioPlayer
                             )
@@ -114,7 +115,7 @@ struct HistoryView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(Color.accentBlue)
-                    Text("Text Copied")
+                    Text("Text copied")
                         .font(Typography.labelMedium)
                         .foregroundStyle(.white)
                 }
@@ -128,16 +129,16 @@ struct HistoryView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .alert("Clear All History?", isPresented: $showDeleteAlert) {
+        .alert("Clear all history?", isPresented: $showDeleteAlert) {
             Button("Cancel", role: .cancel) { }
-            Button("Clear All", role: .destructive) {
+            Button("Clear all", role: .destructive) {
                 historyService.clearAll()
             }
         } message: {
             Text("This removes your saved transcripts, but keeps your statistics history.")
         }
         .alert(
-            "Delete Transcript?",
+            "Delete transcript?",
             isPresented: Binding(
                 get: { itemPendingDeletion != nil },
                 set: { isPresented in
@@ -208,6 +209,7 @@ struct HistoryCard: View {
     let isExpanded: Bool
     let onToggle: () -> Void
     let onCopy: () -> Void
+    let onCopyOriginal: (String) -> Void
     let onDelete: () -> Void
     @ObservedObject var audioPlayer: AudioPlayerService
     @State private var isHovered = false
@@ -330,7 +332,26 @@ struct HistoryCard: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 8))
                             }
                             .buttonStyle(.plain)
-                            
+
+                            if let original = RawDictationView.original(for: item) {
+                                Button {
+                                    onCopyOriginal(original)
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "doc.on.doc")
+                                            .font(.system(size: 12))
+                                        Text("Copy original")
+                                            .font(Typography.labelMedium)
+                                    }
+                                    .foregroundStyle(Color.textSecondary)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 8)
+                                    .background(Color.bgHover)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                }
+                                .buttonStyle(.plain)
+                            }
+
                             Button(role: .destructive, action: onDelete) {
                                 HStack(spacing: 6) {
                                     Image(systemName: "trash")
@@ -357,7 +378,7 @@ struct HistoryCard: View {
                                     HStack(spacing: 6) {
                                         Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
                                             .font(.system(size: 12))
-                                        Text(audioPlayer.isPlaying ? "Pause" : "Play Audio")
+                                        Text(audioPlayer.isPlaying ? "Pause" : "Play audio")
                                             .font(Typography.labelMedium)
                                     }
                                     .foregroundStyle(Color.textSecondary)

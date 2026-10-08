@@ -260,8 +260,9 @@ class AudioRecordingService: NSObject, ObservableObject {
         requestPermission()
 
         guard !isRecording else { return }
-        self.previewSession = previewSession
-        emitsPreview = generatesChunks && previewSession != nil && (UserDefaults.standard.object(forKey: DictationPreferences.previewKey) as? Bool ?? true)
+        let emits = generatesChunks && previewSession != nil && (UserDefaults.standard.object(forKey: DictationPreferences.previewKey) as? Bool ?? true)
+        // Read on audioQueue by the capture delegate and chunk writers; queued ahead of writer setup.
+        audioQueue.async { self.previewSession = previewSession; self.emitsPreview = emits }
         if captureSession == nil { setupSession() }
 
         // 1. Reset flags and stale writer state before any new samples arrive.

@@ -95,8 +95,6 @@ struct GeneralSettingsTab: View {
     @AppStorage("alwaysShowRecorderPill") private var alwaysShowRecorderPill: Bool = false
     @AppStorage("transcriptionLanguage") private var transcriptionLanguage: String = ModelSelection.defaultLanguage
     @AppStorage("recentTranscriptionLanguages") private var recentLanguagesString: String = ""
-    @AppStorage("enableAutoEdit") private var enableAutoEdit: Bool = true
-    @AppStorage("trimDictationPeriod") private var trimDictationPeriod = true
 
     private var recentLanguageCodes: [String] {
         recentLanguagesString.split(separator: ",").map(String.init).filter { !$0.isEmpty }
@@ -139,7 +137,7 @@ struct GeneralSettingsTab: View {
 
                     VStack(spacing: 16) {
                         HStack {
-                            Text("Primary Hotkey")
+                            Text("Primary hotkey")
                                 .font(Typography.bodyMedium)
                                 .foregroundStyle(Color.textPrimary)
                             Spacer()
@@ -168,7 +166,7 @@ struct GeneralSettingsTab: View {
 
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
-                                Text("Recording Mode")
+                                Text("Recording mode")
                                     .font(Typography.bodyMedium)
                                     .foregroundStyle(Color.textPrimary)
                                 Spacer()
@@ -207,6 +205,7 @@ struct GeneralSettingsTab: View {
                             Spacer()
                             Toggle("", isOn: $showMenuBarIcon)
                                 .labelsHidden()
+                                .toggleStyle(.switch)
                         }
 
                         VStack(alignment: .leading, spacing: 6) {
@@ -217,6 +216,7 @@ struct GeneralSettingsTab: View {
                                 Spacer()
                                 Toggle("", isOn: $restoreClipboardAfterAutoPaste)
                                     .labelsHidden()
+                                    .toggleStyle(.switch)
                             }
 
                             Text(
@@ -236,6 +236,7 @@ struct GeneralSettingsTab: View {
                                 Spacer()
                                 Toggle("", isOn: $alwaysShowRecorderPill)
                                     .labelsHidden()
+                                    .toggleStyle(.switch)
                                     .onChange(of: alwaysShowRecorderPill) {
                                         NotificationCenter.default.post(
                                             name: .recorderIdleVisibilityChanged, object: nil)
@@ -254,74 +255,12 @@ struct GeneralSettingsTab: View {
                 }
 
                 DictationPerformanceSettings()
-                SmartCleanupSettings()
-
-                // Transcript Cleanup
-                SettingsSection {
-                    SettingsSectionHeader(
-                        icon: "wand.and.stars",
-                        title: "Transcript Cleanup",
-                        subtitle: "Lightweight post-processing for dictation"
-                    )
-
-                    VStack(alignment: .leading, spacing: 14) {
-                        HStack {
-                            Text("Trim final period on short dictation")
-                                .font(Typography.bodyMedium)
-                                .foregroundStyle(Color.textPrimary)
-                            Spacer()
-                            Toggle("Trim final period on short dictation", isOn: $trimDictationPeriod)
-                                .labelsHidden()
-                                .accessibilityIdentifier("trimDictationPeriod")
-                        }
-                        Text("Removes a lone final period from an email, web address, number, or single word. Sentences and conversation transcripts stay unchanged.")
-                            .font(Typography.captionSmall)
-                            .foregroundStyle(Color.textMuted)
-                        Divider()
-                        HStack {
-                            Text("Enable Auto Edit")
-                                .font(Typography.bodyMedium)
-                                .foregroundStyle(Color.textPrimary)
-                            Spacer()
-                            Toggle("", isOn: $enableAutoEdit)
-                                .labelsHidden()
-                        }
-
-                        Text(
-                            "Auto Edit removes safe filler words, capitalizes sentences, and formats explicit commands such as “new paragraph,” “bullet point,” and “number one.” It runs locally. Conversation transcripts stay unchanged."
-                        )
-                        .font(Typography.captionSmall)
-                        .foregroundStyle(Color.textMuted)
-
-                        Divider()
-
-                        HStack(alignment: .top, spacing: 10) {
-                            Image(systemName: "character.book.closed")
-                                .font(.system(size: 13))
-                                .foregroundStyle(Color.textMuted)
-                                .padding(.top, 2)
-
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text("Custom replacements & snippets")
-                                    .font(Typography.bodyMedium)
-                                    .foregroundStyle(Color.textPrimary)
-                                Text(
-                                    "Word replacements and spoken snippets (say “my email” → your address) now live in the Dictionary tab in the sidebar. They apply on every model, always on."
-                                )
-                                .font(Typography.captionSmall)
-                                .foregroundStyle(Color.textMuted)
-                                .fixedSize(horizontal: false, vertical: true)
-                            }
-
-                            Spacer(minLength: 0)
-                        }
-                    }
-                }
+                CleanupSettings()
 
                 // Spoken Language
                 SettingsSection {
                     SettingsSectionHeader(
-                        icon: "globe", title: "Spoken Language",
+                        icon: "globe", title: "Spoken language",
                         subtitle: "Hint for the language you are speaking")
 
                     HStack {
@@ -402,6 +341,7 @@ struct GeneralSettingsTab: View {
                             Spacer()
                             Toggle("", isOn: $autoUpdate)
                                 .labelsHidden()
+                                .toggleStyle(.switch)
                                 .disabled(!AppEnvironment.updatesEnabled)
                         }
 
@@ -502,7 +442,7 @@ struct AudioSettingsTab: View {
             VStack(spacing: 16) {
                 SettingsSection {
                     SettingsSectionHeader(
-                        icon: "mic", title: "Input Device", subtitle: "Select your microphone")
+                        icon: "mic", title: "Input device", subtitle: "Select your microphone")
 
                     VStack(spacing: 12) {
                         if audioRecorder.availableDevices.isEmpty {
@@ -528,7 +468,7 @@ struct AudioSettingsTab: View {
                         HStack(spacing: 6) {
                             Image(systemName: "arrow.clockwise")
                                 .font(.system(size: 12))
-                            Text("Refresh Devices")
+                            Text("Refresh devices")
                                 .font(Typography.labelMedium)
                         }
                         .foregroundStyle(Color.textPrimary)
@@ -561,14 +501,14 @@ struct PermissionsSettingsTab: View {
             VStack(spacing: 16) {
                 SettingsSection {
                     SettingsSectionHeader(
-                        icon: "shield", title: "App Permissions",
+                        icon: "shield", title: "App permissions",
                         subtitle: "Required for full functionality")
 
                     VStack(spacing: 10) {
                         SettingsPermissionItem(
                             icon: "mic.fill",
                             color: Color.textSecondary,
-                            title: "Microphone Access",
+                            title: "Microphone access",
                             desc: "Record your voice for transcription",
                             isGranted: micStatus == .authorized,
                             action: { openSettings(for: "Privacy_Microphone") }
@@ -577,7 +517,7 @@ struct PermissionsSettingsTab: View {
                         SettingsPermissionItem(
                             icon: "hand.raised.fill",
                             color: Color.textSecondary,
-                            title: "Accessibility Access",
+                            title: "Accessibility access",
                             desc: "Paste transcribed text directly",
                             isGranted: accessibilityStatus,
                             action: {
@@ -678,6 +618,7 @@ struct ToggleRow: View {
             Spacer()
             Toggle("", isOn: $isOn)
                 .labelsHidden()
+                .toggleStyle(.switch)
         }
     }
 }

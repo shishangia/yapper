@@ -17,7 +17,7 @@
           <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="232"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
             <DockPanel Margin="0,30,0,0">
               <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="22,12,18,28"><Image Source="Yapper.ico" Width="40" Height="40" Margin="0,0,10,0"/><TextBlock Text="Yapper" Foreground="{DynamicResource Ink}" FontWeight="SemiBold" FontSize="22" VerticalAlignment="Center"/></StackPanel>
-              <StackPanel DockPanel.Dock="Bottom" Margin="22,16,22,20"><Border Height="1" Background="{DynamicResource SubtleBorder}" Margin="0,0,0,14"/><TextBlock Text="Shivam" FontWeight="SemiBold" Foreground="{DynamicResource SecondaryInk}"/><TextBlock Text="Windows 1.2.1" Style="{StaticResource Caption}" Margin="0,6,0,0"/></StackPanel>
+              <StackPanel DockPanel.Dock="Bottom" Margin="22,16,22,20"><Border Height="1" Background="{DynamicResource SubtleBorder}" Margin="0,0,0,14"/><TextBlock Text="Shivam" FontWeight="SemiBold" Foreground="{DynamicResource SecondaryInk}"/><TextBlock Text="Windows 1.2.2" Style="{StaticResource Caption}" Margin="0,6,0,0"/></StackPanel>
               <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained"/></ScrollViewer>
             </DockPanel>
             <ContentPresenter Grid.Column="1" x:Name="PART_SelectedContentHost" ContentSource="SelectedContent" Margin="0"/>
@@ -31,7 +31,7 @@
             <Border Style="{StaticResource Card}" Margin="0,0,10,18"><StackPanel><TextBlock x:Name="Greeting" Text="Welcome back," Style="{StaticResource SectionTitle}"/><TextBlock x:Name="DashboardWords" Text="0" Style="{StaticResource MetricValue}"/><TextBlock Text="words transcribed" Foreground="{DynamicResource SecondaryInk}"/><TextBlock x:Name="DashboardSaved" Style="{StaticResource Caption}" Margin="0,20,0,0"/></StackPanel></Border>
             <Border Grid.Column="1" Style="{StaticResource Card}" Margin="10,0,0,18"><StackPanel><TextBlock Text="This week" Style="{StaticResource SectionTitle}"/><TextBlock x:Name="DashboardWeek" Text="0" Style="{StaticResource MetricValue}"/><TextBlock Text="transcriptions" Foreground="{DynamicResource SecondaryInk}"/><TextBlock x:Name="DashboardToday" Style="{StaticResource Caption}" Margin="0,20,0,0"/></StackPanel></Border>
           </Grid>
-          <Border Style="{StaticResource Card}"><StackPanel><DockPanel><Button DockPanel.Dock="Right" Content="View all" Click="ViewHistory" HorizontalAlignment="Right"/><TextBlock Text="Recent transcriptions" Style="{StaticResource SectionTitle}" VerticalAlignment="Center"/></DockPanel><TextBlock x:Name="RecentEmpty" Text="Your words will appear here after your first recording." Style="{StaticResource Subtitle}"/><ListBox x:Name="RecentList" ItemTemplate="{StaticResource RecordingCard}" SelectionChanged="SelectRecent" AutomationProperties.AutomationId="recentRecordings"/><WrapPanel><Button Content="Copy" Click="CopyTranscript"/><Button Content="Play / pause" Click="PlayAudio"/><Button Content="Review / edit turns" Click="ReviewTurns"/></WrapPanel></StackPanel></Border>
+          <Border Style="{StaticResource Card}"><StackPanel><DockPanel><Button DockPanel.Dock="Right" Content="View all" Click="ViewHistory" HorizontalAlignment="Right"/><TextBlock Text="Recent transcriptions" Style="{StaticResource SectionTitle}" VerticalAlignment="Center"/></DockPanel><TextBlock x:Name="RecentEmpty" Text="Your words will appear here after your first recording." Style="{StaticResource Subtitle}"/><ListBox x:Name="RecentList" ItemTemplate="{StaticResource RecordingCard}" SelectionChanged="SelectRecent" AutomationProperties.AutomationId="recentRecordings"/><WrapPanel><Button Content="Copy" Click="CopyTranscript"/><Button Content="Play audio" Click="PlayAudio"/><Button Content="Edit turns" Click="ReviewTurns"/></WrapPanel></StackPanel></Border>
         </StackPanel></ScrollViewer>
       </TabItem>
       <TabItem Header="Transcribe Audio" Tag="&#xE720;" AutomationProperties.AutomationId="sidebar.transcribeAudio">
@@ -48,7 +48,7 @@
             <WrapPanel><Button Content="Import audio" Click="ImportAudio" Style="{StaticResource PrimaryAction}"/><Button x:Name="RecordButton" Content="Record microphone" Click="RecordConversation"/></WrapPanel>
             <TextBlock Text="Record only with everyone's consent. Microphone audio only, not system sound." Style="{StaticResource Caption}" Margin="0,14,0,0"/>
           </StackPanel></Border>
-          <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="Transcript" Style="{StaticResource SectionTitle}"/><WrapPanel Margin="0,0,0,10"><Button Content="Copy transcript" Click="CopyTranscript"/><Button Content="Play / pause" Click="PlayAudio"/><Button Content="Review / edit turns" Click="ReviewTurns"/></WrapPanel><TextBlock x:Name="ProcessingDetails" Style="{StaticResource Caption}" Margin="0,0,0,8"/><TextBox x:Name="TranscriptText" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" MinHeight="180" MaxHeight="500" FontSize="15" AutomationProperties.AutomationId="transcript"/></StackPanel></Border>
+          <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="Transcript" Style="{StaticResource SectionTitle}"/><WrapPanel Margin="0,0,0,10"><Button Content="Copy transcript" Click="CopyTranscript"/><Button Content="Play audio" Click="PlayAudio"/><Button Content="Edit turns" Click="ReviewTurns"/></WrapPanel><TextBlock x:Name="ProcessingDetails" Style="{StaticResource Caption}" Margin="0,0,0,8"/><TextBox x:Name="TranscriptText" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" MinHeight="180" MaxHeight="500" FontSize="15" AutomationProperties.AutomationId="transcript"/></StackPanel></Border>
         </StackPanel></ScrollViewer>
       </TabItem>
       <TabItem Header="History" Tag="&#xE81C;" AutomationProperties.AutomationId="sidebar.history">
@@ -56,7 +56,8 @@
           <StackPanel><TextBlock Text="History" Style="{StaticResource PageTitle}"/><TextBlock Text="Your recordings and the words worth keeping." Style="{StaticResource Subtitle}"/></StackPanel>
           <Grid Grid.Row="1"><Grid.ColumnDefinitions><ColumnDefinition Width="0.85*"/><ColumnDefinition Width="1.15*"/></Grid.ColumnDefinitions>
             <DockPanel Margin="0,0,18,0"><Button DockPanel.Dock="Bottom" Content="Delete selected entry" Click="DeleteRecording"/><ListBox x:Name="HistoryList" ItemTemplate="{StaticResource RecordingCard}" SelectionChanged="SelectRecording" AutomationProperties.AutomationId="historyRecordings"/></DockPanel>
-            <Border Grid.Column="1" Style="{StaticResource Card}" Padding="16" Margin="0"><DockPanel><WrapPanel DockPanel.Dock="Top" Margin="0,0,0,8"><Button Content="Copy" Click="CopyTranscript"/><Button Content="Play / pause" Click="PlayAudio"/><Button Content="Review / edit turns" Click="ReviewTurns"/></WrapPanel><TextBlock x:Name="HistoryProcessingDetails" DockPanel.Dock="Top" Style="{StaticResource Caption}" Margin="0,0,0,8"/><TextBox x:Name="HistoryText" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"/></DockPanel></Border>
+            <TextBlock x:Name="HistoryEmpty" Grid.Column="1" Style="{StaticResource Subtitle}" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" AutomationProperties.AutomationId="historyEmpty"/>
+            <Border x:Name="HistoryDetail" Grid.Column="1" Style="{StaticResource Card}" Padding="16" Margin="0" Visibility="Collapsed"><DockPanel><WrapPanel DockPanel.Dock="Top" Margin="0,0,0,8"><Button Content="Copy" Click="CopyTranscript"/><Button Content="Play audio" Click="PlayAudio"/><Button Content="Edit turns" Click="ReviewTurns"/></WrapPanel><TextBlock x:Name="HistoryProcessingDetails" DockPanel.Dock="Top" Style="{StaticResource Caption}" Margin="0,0,0,8"/><TextBox x:Name="HistoryText" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"/></DockPanel></Border>
           </Grid>
         </Grid>
       </TabItem>
@@ -99,9 +100,9 @@
           <Border Style="{StaticResource Card}">
             <StackPanel>
               <TextBlock Text="Preferred words" Style="{StaticResource SectionTitle}"/>
-              <TextBlock Text="Names and terms you use, one per line. Whisper uses these as recognition hints." Style="{StaticResource Caption}" Margin="0,0,0,8"/>
+              <TextBlock Text="Names and terms you use, one per line. Whisper models use them to spell these words correctly; other models ignore them." Style="{StaticResource Caption}" Margin="0,0,0,8"/>
               <TextBox x:Name="PreferredWords" AcceptsReturn="True" TextWrapping="Wrap" FontWeight="Normal" Height="110" Background="{DynamicResource Hover}" VerticalScrollBarVisibility="Auto" LostKeyboardFocus="ChangePreferences" AutomationProperties.AutomationId="preferredWords" AutomationProperties.Name="Preferred words, one per line"/>
-              <TextBlock Text="Up to 50 terms, 60 characters each. Parakeet uses the replacement rules in Dictionary." Style="{StaticResource Caption}"/>
+              <TextBlock Text="Up to 50 terms, 60 characters each. For other models, add a replacement rule in Dictionary." Style="{StaticResource Caption}"/>
             </StackPanel>
           </Border>
           <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="Transcript cleanup" Style="{StaticResource SectionTitle}"/><CheckBox x:Name="TrimPeriod" Content="Trim a lone final period on short dictation" Checked="ChangePreferences" Unchecked="ChangePreferences"/><CheckBox x:Name="AutoEdit" Content="Remove safe fillers, capitalize sentences, and format explicit paragraph, bullet, numbered-list, and scratch-that commands" Checked="ChangePreferences" Unchecked="ChangePreferences"/><TextBlock Text="Cleanup runs locally. Conversation transcripts are never changed by dictation cleanup or dictionary rules." Style="{StaticResource Caption}"/></StackPanel></Border>
@@ -111,7 +112,7 @@
       </TabItem>
     </TabControl>
     <Border Grid.Row="1" Grid.Column="1" Margin="28,0,28,16" Padding="14,10" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}" BorderThickness="1" CornerRadius="12">
-      <StackPanel><TextBlock x:Name="Status" Text="Ready" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryInk}" AutomationProperties.AutomationId="status"/><ProgressBar x:Name="Progress" Height="4" Margin="0,8,0,0" Minimum="0" Maximum="1"/><WrapPanel><Button x:Name="CancelButton" Content="Cancel current job" Click="CancelJob" IsEnabled="False"/><Button x:Name="RetryButton" Content="Retry retained audio" Click="RetryTranscription" IsEnabled="False"/></WrapPanel></StackPanel>
+      <StackPanel><TextBlock x:Name="Status" Text="Ready" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryInk}" AutomationProperties.AutomationId="status"/><ProgressBar x:Name="Progress" Height="4" Margin="0,8,0,0" Minimum="0" Maximum="1"/><WrapPanel><Button x:Name="CancelButton" Content="Cancel current job" Click="CancelJob" Visibility="Collapsed"/><Button x:Name="RetryButton" Content="Retry retained audio" Click="RetryTranscription" Visibility="Collapsed"/></WrapPanel></StackPanel>
     </Border>
   </Grid>
 </Window>

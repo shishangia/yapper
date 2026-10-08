@@ -27,7 +27,7 @@ enum Typography {
     static let labelMedium = Font.system(.body, design: .default, weight: .medium)
     static let labelSmall = Font.system(.callout, design: .default, weight: .medium)
     static let caption = Font.callout
-    static let captionSmall = Font.caption
+    static let captionSmall = Font.system(size: 11)
     static let captionBold = Font.system(.caption, design: .default, weight: .semibold)
 
     // MARK: - Values and Recorder

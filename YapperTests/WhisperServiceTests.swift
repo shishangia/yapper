@@ -14,7 +14,8 @@ private final class StubSpeechEngine: SpeechToTextEngine {
     var failLoad = false
     var loads: [String] = []
     var onUnload: (() async -> Void)?
-    func setPreferredWords(_ words: [String]) {}
+    var preferredWords: [String]?
+    func setPreferredWords(_ words: [String]) { preferredWords = words }
     func loadModel(variant: String) async throws {
         loads.append(variant)
         if failLoad { throw ConversationError.modelsMissing }
@@ -48,18 +49,55 @@ final class WhisperServiceTests: XCTestCase {
         XCTAssertEqual(whisper.loads.count, 2)
     }
 
+    func testPreviewDoesNotPromptWithPreferredWords() async throws {
+        let whisper = StubSpeechEngine()
+        whisper.preferredWords = ["stale"]
+        let manager = TranscriptionManager(whisper: whisper, parakeet: StubSpeechEngine(), gate: NativeInferenceGate(),
+            modelReady: { _ in true }, idleDelay: { 0 })
+        _ = try await manager.preview(audioFile: URL(fileURLWithPath: "/unused"),
+            variant: "openai_whisper-large-v3", language: "en", isCurrent: { true })
+        XCTAssertEqual(whisper.preferredWords, [])
+    }
+
     func testVocabularyAndSmartCleanupSafety() {
         XCTAssertEqual(DictationPreferences.normalizeWords(" Yapper \nYAPPER\n  work   station \n"), ["Yapper", "work station"])
         XCTAssertFalse(AppleDictationCleanup.acceptable("Pay 123", original: "Pay 12"))
         XCTAssertFalse(AppleDictationCleanup.acceptable("Pay 12", original: "Pay 12 and 12"))
         XCTAssertFalse(AppleDictationCleanup.acceptable("", original: "important text"))
         XCTAssertTrue(AppleDictationCleanup.acceptable("Pay 12.50 tomorrow.", original: "um pay 12.50 tomorrow"))
+        // Answers and rewrites are not cleanup, however short the input.
+        XCTAssertFalse(AppleDictationCleanup.acceptable("Paris.", original: "what's the capital of France"))
+        XCTAssertFalse(AppleDictationCleanup.acceptable("The capital of France is Paris, a city known for art.",
+            original: "what's the capital of France"))
+        XCTAssertFalse(AppleDictationCleanup.acceptable("Sounds good.", original: "um yeah so I think we should ship it on Friday"))
+        XCTAssertTrue(AppleDictationCleanup.acceptable("I think we should ship it on Friday.",
+            original: "um so like I think we should uh ship it on Friday"))
+        XCTAssertTrue(AppleDictationCleanup.acceptable("Groceries:\n1. Milk\n2. Eggs\n3. Bread",
+            original: "groceries number one milk number two eggs number three bread"))
+        XCTAssertTrue(AppleDictationCleanup.acceptable("Todo:\n• Call Sam\n• Email Priya",
+            original: "todo bullet point call sam bullet point email priya"))
+    }
+
+    func testSmartCleanupTimeoutDoesNotWaitForAStalledCall() async throws {
+        var stalled: CheckedContinuation<Void, Never>?
+        let start = Date()
+        do {
+            _ = try await AppleDictationCleanup.withTimeout(.milliseconds(100)) { () async throws -> String in
+                await withCheckedContinuation { stalled = $0 } // Ignores cancellation, like a hung model call.
+                return "late"
+            }
+            XCTFail("Expected a timeout")
+        } catch AppleDictationCleanup.CleanupError.timedOut {}
+        XCTAssertLessThan(Date().timeIntervalSince(start), 2)
+        stalled?.resume()
+        let fast = try await AppleDictationCleanup.withTimeout(.seconds(5)) { "done" }
+        XCTAssertEqual(fast, "done")
     }
 
     func testSmartCleanupKeepsOriginalAndFallsBackWithoutLosingDictation() async throws {
         let manager = TranscriptionManager(whisper: StubSpeechEngine(), parakeet: StubSpeechEngine(), gate: NativeInferenceGate(),
             autoEditEnabled: { true }, idleDelay: { 0 }, smartCleanup: { raw in
-                XCTAssertEqual(raw, "raw words")
+                XCTAssertEqual(raw, "Raw words", "Smart cleanup refines the Auto Edit result")
                 return "Edited words"
             })
         let result = try await manager.transcribeDetailed(audioFile: URL(fileURLWithPath: "/unused"), variant: "openai_whisper-large-v3", language: "en")
@@ -73,6 +111,19 @@ final class WhisperServiceTests: XCTestCase {
         XCTAssertNotNil(fallback.cleanupNote)
     }
     
+    func testSmartCleanupRunsAfterReleasingTheInferenceGate() async throws {
+        let gate = NativeInferenceGate()
+        let manager = TranscriptionManager(whisper: StubSpeechEngine(), parakeet: StubSpeechEngine(), gate: gate,
+            autoEditEnabled: { true }, idleDelay: { 0 }, smartCleanup: { _ in
+                let released = self.expectation(description: "Gate free during smart cleanup")
+                Task { await gate.run { released.fulfill() } }
+                await self.fulfillment(of: [released], timeout: 2)
+                return "Edited words"
+            })
+        let result = try await manager.transcribeDetailed(audioFile: URL(fileURLWithPath: "/unused"), variant: "openai_whisper-large-v3", language: "en")
+        XCTAssertEqual(result.text, "Edited words")
+    }
+
     var service: WhisperService?
     
     override func setUpWithError() throws {
@@ -313,17 +364,36 @@ final class WhisperServiceTests: XCTestCase {
         }
     }
 
-    func testMigrationPreservesExplicitChoicesWithoutAGeneralModel() throws {
-        let suite = "Yapper-Explicit-Upgrade-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        defaults.set(true, forKey: "hasCompletedOnboarding")
-        defaults.set("auto", forKey: "transcriptionLanguage")
-        defaults.set(false, forKey: "enableAutoEdit")
-        ModelSelection.registerDefaults(defaults, domain: suite)
-        XCTAssertEqual(defaults.string(forKey: "transcriptionLanguage"), "auto")
-        XCTAssertFalse(defaults.bool(forKey: "enableAutoEdit"))
-        XCTAssertNil(defaults.persistentDomain(forName: suite)?[ModelSelection.defaultsKey])
+    func testStrandedAutoRepairsToHinglishOnlyWithoutAGeneralModel() throws {
+        func profile(selected: String?, hinglishReady: Bool) throws -> (UserDefaults, String) {
+            let suite = "Yapper-Stranded-Auto-\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+            // The saved state after 1.1.2's first migration ran on a fresh 1.1.1 install.
+            defaults.set(true, forKey: "hasCompletedOnboarding")
+            defaults.set(true, forKey: "didKeepLegacyLanguageDefaults")
+            defaults.set("auto", forKey: "transcriptionLanguage")
+            defaults.set(false, forKey: "enableAutoEdit")
+            if let selected { defaults.set(selected, forKey: ModelSelection.defaultsKey) }
+            ModelSelection.registerDefaults(defaults, domain: suite, hinglishReady: { hinglishReady })
+            return (defaults, suite)
+        }
+
+        let (stranded, strandedSuite) = try profile(selected: nil, hinglishReady: true)
+        XCTAssertEqual(stranded.string(forKey: "transcriptionLanguage"), "hinglish")
+        XCTAssertEqual(ModelSelection.selectedVariant(stranded), AIModel.hinglishVariant)
+        XCTAssertFalse(stranded.bool(forKey: "enableAutoEdit"))
+        // One time only: a later explicit Auto choice is kept.
+        stranded.set("auto", forKey: "transcriptionLanguage")
+        ModelSelection.registerDefaults(stranded, domain: strandedSuite, hinglishReady: { true })
+        XCTAssertEqual(stranded.string(forKey: "transcriptionLanguage"), "auto")
+
+        XCTAssertEqual(try profile(selected: "", hinglishReady: true).0.string(forKey: "transcriptionLanguage"), "hinglish")
+        XCTAssertEqual(try profile(selected: nil, hinglishReady: false).0.string(forKey: "transcriptionLanguage"), "auto")
+        XCTAssertEqual(try profile(selected: AIModel.hinglishVariant, hinglishReady: true).0.string(forKey: "transcriptionLanguage"), "auto")
+        let (general, _) = try profile(selected: "openai_whisper-large-v3", hinglishReady: true)
+        XCTAssertEqual(general.string(forKey: "transcriptionLanguage"), "auto")
+        XCTAssertEqual(ModelSelection.selectedVariant(general), "openai_whisper-large-v3")
     }
 
     func testSharedMacAndWindowsCleanupContract() throws {

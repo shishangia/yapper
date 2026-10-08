@@ -104,9 +104,9 @@ try {
     $entry = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem))
     if (!$entry) { throw 'Synthetic history entry did not load' }
     $entry.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
-    $timing = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, 'Processing 1.51s · decode 0.10s · wait 0.20s · model 0.30s · speech 0.40s · speakers 0.50s · cleanup 0.01s'))
+    $timing = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, 'Processed in 1.5s'))
     if (!$timing) { throw 'Processing timing details missing' }
-    $review = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, 'Review / edit turns'))
+    $review = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, 'Edit turns'))
     $review.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
     $editor = $null
     $deadline = [DateTime]::UtcNow.AddSeconds(5)

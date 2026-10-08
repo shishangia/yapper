@@ -439,7 +439,7 @@ struct MiniRecorderView: View {
                             .onAppear { proxy.scrollTo("draftText", anchor: .bottom) }
                             .onChange(of: draftText) { proxy.scrollTo("draftText", anchor: .bottom) }
                         }.frame(height: 48).allowsHitTesting(false)
-                        Text("Live draft · final text may change").font(Typography.captionSmall).foregroundStyle(Color.textSecondary)
+                        Text("Live draft · final text may change").font(Typography.caption).foregroundStyle(Color.textSecondary)
                     }
                 }.padding(livePreview ? 12 : 0)
             case .idle:
@@ -458,6 +458,7 @@ struct MiniRecorderView: View {
             y: displayPhase == .idle ? 3 : 5)
         .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.92), value: displayPhase)
         .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.92), value: expanded)
+        .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.92), value: livePreview)
         .onHover { hovering in
             guard displayPhase == .recording else { return }
             expanded = hovering
@@ -646,7 +647,7 @@ struct MiniRecorderView: View {
             default: authorized = false
             }
             guard job.canCommit(snapshot.id) else { finish(snapshot); return }
-            guard authorized else { showError("Enable Microphone in System Settings", for: snapshot); return }
+            guard authorized else { showError("Allow microphone access in System Settings", for: snapshot); return }
             guard job.transition(snapshot.id, from: .preparing, to: .recording) else { return }
             let captureID = preview.begin(snapshot.id)
             audioRecorder.startRecording(previewSession: captureID)

@@ -38,6 +38,10 @@ struct SidebarView: View {
                     Text(buildVersionString)
                         .font(Typography.monoSmall)
                         .foregroundStyle(Color.textMuted)
+                #else
+                    Text("Version \(AppVersion.currentVersion)")
+                        .font(Typography.caption)
+                        .foregroundStyle(Color.textMuted)
                 #endif
             }
             .padding(.horizontal, 18)
@@ -54,10 +58,12 @@ struct SidebarView: View {
         }
     }
 
+    #if DEBUG
     private var buildVersionString: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         return "v\(version) (\(buildTimestamp))"
     }
+    #endif
 }
 
 private struct SidebarHeader: View {
@@ -113,7 +119,7 @@ struct SidebarButton: View {
 
 enum SidebarItem: String, CaseIterable, Identifiable {
     case dashboard = "Dashboard"
-    case transcribeAudio = "Transcribe Audio"
+    case transcribeAudio = "Transcribe audio"
     case history = "History"
     case dictionary = "Dictionary"
     case statistics = "Statistics"

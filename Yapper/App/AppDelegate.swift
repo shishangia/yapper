@@ -113,8 +113,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let alert = NSAlert()
         alert.messageText = "A recording is still active"
         alert.informativeText = "Keep Yapper open to finish. You can switch pages or close the window without stopping transcription."
-        alert.addButton(withTitle: "Keep Running")
-        alert.addButton(withTitle: "Quit Without Saving")
+        alert.addButton(withTitle: "Keep running")
+        alert.addButton(withTitle: "Quit without saving")
         return alert.runModal() == .alertFirstButtonReturn ? .terminateCancel : .terminateNow
     }
 

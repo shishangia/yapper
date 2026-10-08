@@ -14,7 +14,7 @@ public sealed class TranscriptEditor : Window
     private readonly LibraryStore library;
     private readonly Guid recordingId;
     private readonly ListBox passages = new() { DisplayMemberPath = "Text", MinWidth = 230 };
-    private readonly TextBox text = new() { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MinHeight = 160 };
+    private readonly TextBox text = new() { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MinHeight = 120 };
     private readonly ComboBox speakers = new();
     private readonly TextBox name = new();
     private readonly TextBlock status = new() { TextWrapping = TextWrapping.Wrap };
@@ -77,7 +77,7 @@ public sealed class TranscriptEditor : Window
         var grid = new Grid(); grid.ColumnDefinitions.Add(new() { Width = new GridLength(260) }); grid.ColumnDefinitions.Add(new());
         grid.Children.Add(passages);
         var editor = new StackPanel { Margin = new Thickness(18, 0, 0, 0) };
-        var editorScroll = new ScrollViewer { Content = editor, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        var editorScroll = new ScrollViewer { Content = editor, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         Grid.SetColumn(editorScroll, 1); grid.Children.Add(editorScroll);
         editor.Children.Add(new TextBlock { Text = "Passage text", FontWeight = FontWeights.Bold }); editor.Children.Add(text);
         editor.Children.Add(new TextBlock { Text = "Speaker assignment" }); editor.Children.Add(speakers);
@@ -92,13 +92,13 @@ public sealed class TranscriptEditor : Window
             if (SelectedSpeaker.Length > 0) Change(t => t.Rename(SelectedSpeaker, name.Text), preserveName: false);
         });
         AddButton(naming, "Add speaker", () => Change(t => t.AddSpeaker(name.Text), preserveName: false));
-        AddButton(naming, "Merge passage speaker into selected", () =>
+        AddButton(naming, "Merge into selected speaker", () =>
         {
             if (passages.SelectedItem is TranscriptSegment old && old.SpeakerId is not null && speakers.SelectedValue is string target && target.Length > 0)
             {
                 if (ResolveEdits()) Change(t => t.Merge(old.SpeakerId, target));
             }
-        });
+        }, "Move this passage's speaker into the selected speaker");
         editor.Children.Add(naming);
         editor.Children.Add(new TextBlock { Text = "Small uncertain passages stay in reading flow. Review assignments here; naming does not identify the same person in other recordings.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 14, 0, 0) });
         root.Children.Add(grid); Content = root;
@@ -118,9 +118,11 @@ public sealed class TranscriptEditor : Window
         name.TextChanged += (_, _) => ShowDraftStatus();
         Reload();
     }
-    private static void AddButton(Panel panel, string label, Action action)
+    private static void AddButton(Panel panel, string label, Action action, string? hint = null)
     {
-        var button = new Button { Content = label };
+        // Wrapping text keeps long labels readable in a narrow editor instead of clipping them.
+        var button = new Button { Content = new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center }, ToolTip = hint };
+        AutomationProperties.SetName(button, label);
         button.Click += (_, _) => action(); panel.Children.Add(button);
     }
     private void Reload(int? selectedId = null, bool preservePassage = false, bool preserveName = false)

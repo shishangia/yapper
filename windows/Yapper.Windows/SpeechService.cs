@@ -59,7 +59,7 @@ public sealed class SpeechService(ModelStore models, TimeProvider? timeProvider 
     }, CancellationToken.None);
 
     public Task<SpeechResult> Transcribe(float[] samples, SpeechModel model, string language, bool speakers, bool single,
-        IProgress<(string Stage, double Value)> progress, CancellationToken cancellation, string vocabulary = "")
+        IProgress<(string Stage, double Value)> progress, CancellationToken cancellation, string vocabulary = "", bool preview = false)
     {
         var queued = Stopwatch.StartNew();
         return Task.Run(async () =>
@@ -85,17 +85,18 @@ public sealed class SpeechService(ModelStore models, TimeProvider? timeProvider 
                 List<SpeechWord> words;
                 try
                 {
-                    words = model.Id == "parakeet-v3" ? Parakeet(samples) : await Whisper(samples);
+                    words = model.Id == "parakeet-v3" ? Parakeet(samples) : await Whisper(samples, cancellation);
                 }
-                catch (Exception error) when (model.Id != "parakeet-v3" && !whisperCpu && error is not OperationCanceledException)
+                catch (Exception error) when (!preview && model.Id != "parakeet-v3" && !whisperCpu && error is not OperationCanceledException)
                 {
                     // The GPU backend can fail at inference time; retry once on CPU and stay there for this session.
+                    // A failed live preview only drops its draft; the full transcription decides the fallback.
                     cancellation.ThrowIfCancellationRequested();
                     whisperCpu = true;
                     DisposeWhisper();
                     EnsureWhisper(model, language, speakers && !single, progress, cancellation, vocabulary);
                     cancellation.ThrowIfCancellationRequested();
-                    words = await Whisper(samples);
+                    words = await Whisper(samples, cancellation);
                 }
                 var inferenceSeconds = inference.Elapsed.TotalSeconds;
                 cancellation.ThrowIfCancellationRequested();
@@ -174,11 +175,11 @@ public sealed class SpeechService(ModelStore models, TimeProvider? timeProvider 
         return true;
     }
 
-    private async Task<List<SpeechWord>> Whisper(float[] samples)
+    private async Task<List<SpeechWord>> Whisper(float[] samples, CancellationToken cancellation)
     {
         var processor = whisperProcessor ?? throw new InvalidOperationException("Whisper model is not loaded.");
         var result = new List<SpeechWord>();
-        await foreach (var segment in processor.ProcessAsync(samples))
+        await foreach (var segment in processor.ProcessAsync(samples, cancellation))
         {
             if (segment.Text.Trim() is "[BLANK_AUDIO]" or "[SILENCE]") continue;
             if (!whisperDetailed)

@@ -36,7 +36,7 @@ struct UpdateSheet: View {
 
             // What's New
             VStack(alignment: .leading, spacing: 16) {
-                Text("What's New in Version \(update.version)")
+                Text("What's new in version \(update.version)")
                     .font(Typography.headlineMedium)
                     .foregroundStyle(.primary)
 
@@ -132,19 +132,19 @@ struct UpdateSheet: View {
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity)
                 } else {
-                    Button("Skip This Version") {
+                    Button("Skip this version") {
                         updateService.skipVersion(update.version)
                         if let close { close() } else { dismiss() }
                     }
                     .buttonStyle(.stSecondary)
 
-                    Button("Remind Me Later") {
+                    Button("Remind me later") {
                         updateService.markReminderShown()
                         if let close { close() } else { dismiss() }
                     }
                     .buttonStyle(.stSecondary)
 
-                    Button("Download and Install") {
+                    Button("Download and install") {
                         updateService.installUpdate(url: update.downloadURL)
                     }
                     .buttonStyle(.stPrimary)

@@ -16,8 +16,8 @@ final class YapperUITests: XCTestCase {
             "-transcriptionLanguage", "auto", "-selectedHotkey", "rightOption", "-recordingMode", "1"]
         app.launch()
         if !app.windows.firstMatch.waitForExistence(timeout: 3) { openDashboard() }
-        XCTAssertTrue(app.buttons["Get Started"].firstMatch.waitForExistence(timeout: 10))
-        app.buttons["Get Started"].firstMatch.click()
+        XCTAssertTrue(app.buttons["Get started"].firstMatch.waitForExistence(timeout: 10))
+        app.buttons["Get started"].firstMatch.click()
         XCTAssertTrue(app.buttons["Continue"].firstMatch.waitForExistence(timeout: 5))
         app.buttons["Continue"].firstMatch.click()
         XCTAssertTrue(app.staticTexts["Permissions"].waitForExistence(timeout: 5))
@@ -208,7 +208,7 @@ final class YapperUITests: XCTestCase {
         XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["sidebarSignature"].firstMatch.waitForExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["sidebarSignature"].firstMatch.value as? String, "Shivam")
-        let navigation = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Transcribe Audio")).firstMatch
+        let navigation = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Transcribe audio")).firstMatch
         let pid = try XCTUnwrap(NSRunningApplication.runningApplications(withBundleIdentifier: "com.shishangia.yapper.dev").first?.processIdentifier)
         let element = AXUIElementCreateApplication(pid)
         var windows: CFTypeRef?

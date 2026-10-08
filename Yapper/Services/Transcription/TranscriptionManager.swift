@@ -125,7 +125,8 @@ class TranscriptionManager {
             guard isCurrent() else { throw CancellationError() }
             try await prepare(variant: variant, shouldContinue: isCurrent)
             guard isCurrent() else { throw CancellationError() }
-            activeEngine.setPreferredWords(DictationPreferences.words())
+            // Whisper can echo its prompt on short or silent chunks, so drafts get no preferred words.
+            activeEngine.setPreferredWords([])
             return try await activeEngine.transcribe(audioFile: audioFile, language: language)
         }
     }
@@ -163,31 +164,34 @@ class TranscriptionManager {
         defer { scheduleIdleUnload() }
         try Self.validate(variant: variant, language: language)
         let queuedAt = Date()
-        return try await gate.run {
-            let enteredGateAt = Date()
-            let modelStart = Date()
+        var enteredGateAt = queuedAt
+        var modelSeconds: TimeInterval = 0
+        var inferenceSeconds: TimeInterval = 0
+        let normalized = try await gate.run {
+            enteredGateAt = Date()
             try await prepare(variant: variant)
-            let modelSeconds = Date().timeIntervalSince(modelStart)
+            modelSeconds = Date().timeIntervalSince(enteredGateAt)
             let inferenceStart = Date()
             activeEngine.setPreferredWords(DictationPreferences.words())
             let raw = try await activeEngine.transcribe(audioFile: audioFile, language: language)
-            let inferenceSeconds = Date().timeIntervalSince(inferenceStart)
-            let cleanupStart = Date()
-            let normalized = WhisperService.normalizedTranscription(from: raw)
-            var edited = DictationCleanup.apply(to: normalized, enabled: autoEditEnabled())
-            var cleanupNote: String?
-            if !normalized.isEmpty {
-                do {
-                    if let cleaned = try await smartCleanup(normalized) { edited = cleaned }
-                } catch let error as AppleDictationCleanup.CleanupError { cleanupNote = error.localizedDescription }
-                catch { cleanupNote = "Smart cleanup unavailable or unsuccessful. Standard cleanup was used." }
-            }
-            let text = DictionaryService.apply(to: edited)
-            let cleanupSeconds = Date().timeIntervalSince(cleanupStart)
-            return DictationOutput(text: text, timing: DictationTiming(
-                queue: enteredGateAt.timeIntervalSince(queuedAt), modelPreparation: modelSeconds,
-                inference: inferenceSeconds, cleanup: cleanupSeconds), rawText: normalized, cleanupNote: cleanupNote)
+            inferenceSeconds = Date().timeIntervalSince(inferenceStart)
+            return WhisperService.normalizedTranscription(from: raw)
         }
+        // Smart cleanup can wait up to its timeout, so it runs after the inference lock is released.
+        let cleanupStart = Date()
+        var edited = DictationCleanup.apply(to: normalized, enabled: autoEditEnabled())
+        var cleanupNote: String?
+        if !normalized.isEmpty {
+            do {
+                if let cleaned = try await smartCleanup(edited) { edited = cleaned }
+            } catch let error as AppleDictationCleanup.CleanupError { cleanupNote = error.localizedDescription }
+            catch { cleanupNote = "Apple Intelligence was unavailable, so your Auto edit setting applied." }
+        }
+        let text = DictionaryService.apply(to: edited)
+        let cleanupSeconds = Date().timeIntervalSince(cleanupStart)
+        return DictationOutput(text: text, timing: DictationTiming(
+            queue: enteredGateAt.timeIntervalSince(queuedAt), modelPreparation: modelSeconds,
+            inference: inferenceSeconds, cleanup: cleanupSeconds), rawText: normalized, cleanupNote: cleanupNote)
     }
 
     // ConversationService already holds this non-reentrant gate for the whole native job.

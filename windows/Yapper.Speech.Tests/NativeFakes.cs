@@ -7,7 +7,8 @@ internal static class NativeCalls
     public static List<bool> Loads = [];
     public static List<bool> Inferences = [];
     public static List<string> Prompts = [];
-    public static void Reset() { OnLoad = null; OnInference = null; Loads.Clear(); Inferences.Clear(); Prompts.Clear(); }
+    public static List<CancellationToken> InferenceTokens = [];
+    public static void Reset() { OnLoad = null; OnInference = null; Loads.Clear(); Inferences.Clear(); Prompts.Clear(); InferenceTokens.Clear(); }
 }
 
 namespace Yapper.Windows
@@ -61,9 +62,10 @@ namespace Whisper.net
     public sealed record Segment(string Text, TimeSpan Start, TimeSpan End, Token[] Tokens);
     public sealed class WhisperProcessor(bool gpu) : IDisposable
     {
-        public async IAsyncEnumerable<Segment> ProcessAsync(float[] samples)
+        public async IAsyncEnumerable<Segment> ProcessAsync(float[] samples, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellation = default)
         {
             await Task.Yield();
+            NativeCalls.InferenceTokens.Add(cancellation);
             NativeCalls.Inferences.Add(gpu);
             NativeCalls.OnInference?.Invoke(gpu);
             yield return new("Hello", TimeSpan.Zero, TimeSpan.FromSeconds(1), []);

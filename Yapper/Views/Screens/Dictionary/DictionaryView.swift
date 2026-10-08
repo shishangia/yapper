@@ -22,15 +22,15 @@ struct DictionaryView: View {
                     Text("Preferred words")
                         .font(Typography.labelLarge)
                         .foregroundStyle(Color.textPrimary)
-                    Text("Names and terms you use, one per line. Whisper uses these as recognition hints.")
-                        .font(Typography.captionSmall)
+                    Text("Names and terms you use, one per line. Whisper models use them to spell these words correctly; other models ignore them.")
+                        .font(Typography.caption)
                         .foregroundStyle(Color.textMuted)
                     ThemedTextEditor(text: $preferredWords)
                         .frame(minHeight: 110, maxHeight: 160)
                         .accessibilityLabel("Preferred words, one per line")
                         .accessibilityIdentifier("preferredWords")
-                    Text("Up to 50 terms, 60 characters each. Parakeet uses the replacement rules below.")
-                        .font(Typography.captionSmall)
+                    Text("Up to 50 terms, 60 characters each. For other models, add a replacement rule below.")
+                        .font(Typography.caption)
                         .foregroundStyle(Color.textMuted)
                 }
                 .themedCard()
@@ -68,7 +68,7 @@ struct DictionaryView: View {
             }
         }
         .alert(
-            "Delete Rule?",
+            "Delete rule?",
             isPresented: Binding(
                 get: { entryPendingDeletion != nil },
                 set: { if !$0 { entryPendingDeletion = nil } }
@@ -107,7 +107,7 @@ struct DictionaryView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "plus")
                         .font(.system(size: 12, weight: .semibold))
-                    Text("Add Rule")
+                    Text("Add rule")
                 }
                 .font(Typography.labelMedium)
                 .foregroundStyle(Color.btnPrimaryFg)
@@ -174,7 +174,7 @@ struct DictionaryView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "plus")
                         .font(.system(size: 12, weight: .semibold))
-                    Text("Add Rule")
+                    Text("Add rule")
                 }
                 .font(Typography.labelMedium)
                 .foregroundStyle(Color.btnPrimaryFg)
@@ -331,7 +331,7 @@ private struct DictionaryEntryEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(entry == nil ? "New Rule" : "Edit Rule")
+            Text(entry == nil ? "New rule" : "Edit rule")
                 .font(Typography.displaySmall)
                 .foregroundStyle(Color.textPrimary)
                 .padding(.bottom, 20)

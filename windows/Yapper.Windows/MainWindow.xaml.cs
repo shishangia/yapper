@@ -39,6 +39,7 @@ public partial class MainWindow : Window
     private CancellationTokenSource? previewCancellation;
     private string previewText = "";
     private bool skippedPreview;
+    private bool previewPaused;
     private readonly System.Windows.Threading.DispatcherTimer idleModelTimer = new() { Interval = TimeSpan.FromSeconds(15) };
 
     public MainWindow(string root)
@@ -75,7 +76,12 @@ public partial class MainWindow : Window
         LivePreview.IsChecked = library.Data.Preferences.LivePreview;
         PreferredWords.Text = library.Data.Preferences.PreferredWords;
         ModelIdleMinutes.SelectedItem = ModelIdleMinutes.Items.Cast<ComboBoxItem>().FirstOrDefault(i => (string)i.Tag == library.Data.Preferences.ModelIdleMinutes.ToString()) ?? ModelIdleMinutes.Items[2];
-        idleModelTimer.Tick += async (_, _) => { if (!jobs.IsBusy && !updateBusy) await speech.UnloadIfIdle(library.Data.Preferences.ModelIdleMinutes); };
+        idleModelTimer.Tick += async (_, _) =>
+        {
+            if (jobs.IsBusy || updateBusy) return;
+            try { await speech.UnloadIfIdle(library.Data.Preferences.ModelIdleMinutes); }
+            catch (Exception error) { Debug.WriteLine("Idle model unload failed: " + error.Message); }
+        };
         idleModelTimer.Start();
         Loaded += async (_, _) =>
         {
@@ -174,7 +180,8 @@ public partial class MainWindow : Window
         DashboardWeek.Text = library.Data.Usage.Count(x => x.Date.LocalDateTime >= today.AddDays(-6)).ToString("N0");
         DashboardToday.Text = $"{library.Data.Usage.Count(x => x.Date.LocalDateTime >= today)} today · {library.Data.Usage.Count} all time";
         StatisticsText.Text = $"{library.Data.Usage.Count} transcriptions · {library.Data.Usage.Sum(x => x.Words)} words · {library.Data.Usage.Sum(x => x.Seconds) / 60:F1} recorded minutes\nModel files: {modelStorageBytes / 1_000_000_000d:F2} GB";
-        if (selected is not null) { selected = library.Data.Recordings.FirstOrDefault(r => r.Id == selected.Id); ShowTranscript(); }
+        if (selected is not null) selected = library.Data.Recordings.FirstOrDefault(r => r.Id == selected.Id);
+        ShowTranscript();
     }
     private async Task RefreshModelStorage()
     {
@@ -185,10 +192,13 @@ public partial class MainWindow : Window
     private void ShowTranscript()
     {
         TranscriptText.Text = selected?.DisplayText ?? ""; HistoryText.Text = selected?.DisplayText ?? "";
-        var detail = selected?.Timing is { } t
-            ? $"Processing {t.Total:F2}s · decode {t.Decode:F2}s · wait {t.Queue:F2}s · model {t.ModelPreparation:F2}s · speech {t.Inference:F2}s · speakers {t.SpeakerDetection:F2}s · cleanup {t.Cleanup:F2}s"
-            : "";
-        ProcessingDetails.Text = HistoryProcessingDetails.Text = detail;
+        HistoryDetail.Visibility = selected is null ? Visibility.Collapsed : Visibility.Visible;
+        HistoryEmpty.Visibility = selected is null ? Visibility.Visible : Visibility.Collapsed;
+        HistoryEmpty.Text = library.Data.Recordings.Count == 0 ? "No transcriptions yet" : "Select a transcription to see it here.";
+        var timing = selected?.Timing;
+        ProcessingDetails.Text = HistoryProcessingDetails.Text = timing is null ? "" : $"Processed in {timing.Total:F1}s";
+        ProcessingDetails.ToolTip = HistoryProcessingDetails.ToolTip = timing is null ? null
+            : $"Audio preparation {timing.Decode:F2}s\nWaiting {timing.Queue:F2}s\nModel preparation {timing.ModelPreparation:F2}s\nSpeech recognition {timing.Inference:F2}s\nSpeaker separation {timing.SpeakerDetection:F2}s\nText cleanup {timing.Cleanup:F2}s";
     }
     private void ChangePreferences(object sender, RoutedEventArgs e)
     {
@@ -208,9 +218,9 @@ public partial class MainWindow : Window
         activeId = jobs.Begin();
         audio.StopPlayback();
         cancellation = new();
-        CancelButton.IsEnabled = true;
+        CancelButton.Visibility = Visibility.Visible;
         Progress.Value = 0;
-        RetryButton.IsEnabled = false;
+        RetryButton.Visibility = Visibility.Collapsed;
         return true;
     }
     private void Finish()
@@ -220,8 +230,8 @@ public partial class MainWindow : Window
         jobs.Finish(activeId);
         cancellation?.Dispose(); cancellation = null;
         options = null; recordingPath = null; finishing = false;
-        RetryButton.IsEnabled = retry is not null;
-        CancelButton.IsEnabled = false;
+        RetryButton.Visibility = retry is null ? Visibility.Collapsed : Visibility.Visible;
+        CancelButton.Visibility = Visibility.Collapsed;
         RecordButton.Content = "Record microphone";
         recorder.Dismiss();
         tray.Text = "Yapper";
@@ -249,7 +259,7 @@ public partial class MainWindow : Window
         {
             speech.SetRecording(true);
             previewCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellation!.Token);
-            previewText = ""; skippedPreview = false;
+            previewText = ""; skippedPreview = false; previewPaused = false;
             audio.Start(recordingPath, MicrophoneChoice.SelectedIndex, dictation && options.Preferences.LivePreview, activeId);
             recorder.SetPreview(dictation && options.Preferences.LivePreview ? "Listening… Draft text appears as you speak." : null);
             recorder.Present(true);
@@ -286,7 +296,7 @@ public partial class MainWindow : Window
     }
     private async void PreviewAudio(float[] samples, Guid id)
     {
-        if (id != activeId || finishing || !audio.IsRecording || options is not { Dictation: true } job || previewCancellation is null) return;
+        if (id != activeId || finishing || previewPaused || !audio.IsRecording || options is not { Dictation: true } job || previewCancellation is null) return;
         if (previewBusy) { skippedPreview = true; return; }
         var token = previewCancellation.Token;
         if (token.IsCancellationRequested) return;
@@ -294,7 +304,9 @@ public partial class MainWindow : Window
         var gap = skippedPreview; skippedPreview = false;
         try
         {
-            var result = await speech.Transcribe(samples, job.Model, job.Language, false, false, new Progress<(string, double)>(), token, job.Preferences.PreferredWords);
+            var result = await speech.Transcribe(samples, job.Model, job.Language, false, false, new Progress<(string, double)>(), token, job.Preferences.PreferredWords, preview: true);
+            // A preview slower than real time only competes with the final transcription; stop previews for this recording.
+            if (id == activeId && result.InferenceSeconds > samples.Length / 16000d) previewPaused = true;
             if (id == activeId && !finishing && audio.IsRecording && !token.IsCancellationRequested)
             {
                 var draft = result.Transcript.PlainText.Trim();
@@ -423,7 +435,7 @@ public partial class MainWindow : Window
     private void CancelJob(object sender, RoutedEventArgs e)
     {
         jobs.Cancel(); cancellation?.Cancel();
-        Status.Text = "Canceling. Waiting for active native work to finish…";
+        Status.Text = "Finishing up. Nothing will be saved.";
         recorder.Dismiss();
         if (audio.IsRecording) _ = StopAndProcess();
     }

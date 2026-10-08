@@ -16,7 +16,7 @@ struct TranscribeAudioView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Transcribe Audio").font(Typography.displayLarge)
+                    Text("Transcribe audio").font(Typography.displayLarge)
                     Text("Conversations, in your own words.")
                         .font(Typography.bodyLarge).foregroundStyle(Color.textSecondary)
                 }
@@ -49,6 +49,7 @@ struct TranscribeAudioView: View {
                             Text("Speaker labels").foregroundStyle(Color.textSecondary)
                             Toggle("Detect speakers", isOn: $session.detectSpeakers)
                                 .accessibilityIdentifier("detectSpeakers")
+                                .toggleStyle(.switch)
                         }
                         if session.detectSpeakers {
                             GridRow {
@@ -64,6 +65,7 @@ struct TranscribeAudioView: View {
                             Text("Timestamps").foregroundStyle(Color.textSecondary)
                             Toggle("Include in transcript", isOn: $session.includeTimestamps)
                                 .accessibilityIdentifier("includeTimestamps")
+                                .toggleStyle(.switch)
                         }
                     }
                     .disabled(session.isBusy)
@@ -178,7 +180,7 @@ struct ConversationStatusView: View {
                     .accessibilityLabel("Current processing stage")
             }
             if session.phase == .canceling {
-                Text("Finishing the current native operation before releasing the models. No result will be saved.")
+                Text("Finishing up. Nothing will be saved.")
                     .font(Typography.caption).foregroundStyle(Color.textSecondary)
             } else if let message = session.message {
                 Text(message).font(Typography.bodySmall).foregroundStyle(Color.textSecondary)
