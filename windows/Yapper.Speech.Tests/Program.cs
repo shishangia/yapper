@@ -69,6 +69,13 @@ var tests = new (string Name, Func<Task> Run)[]
             Check(result.Transcript.PlainText == "Hello", "Cold transcription failed.");
         });
     }),
+    ("Whisper inference receives the job's cancellation token", async () =>
+    {
+        using var service = new SpeechService(new());
+        using var cancel = new CancellationTokenSource();
+        await service.Transcribe([0f], model, "en", false, false, progress, cancel.Token);
+        Check(NativeCalls.InferenceTokens.SequenceEqual([cancel.Token]), "Inference cannot be canceled mid-run.");
+    }),
     ("cancel during GPU inference skips CPU retry", async () =>
     {
         using var service = new SpeechService(new());

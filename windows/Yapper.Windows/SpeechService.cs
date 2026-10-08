@@ -85,7 +85,7 @@ public sealed class SpeechService(ModelStore models, TimeProvider? timeProvider 
                 List<SpeechWord> words;
                 try
                 {
-                    words = model.Id == "parakeet-v3" ? Parakeet(samples) : await Whisper(samples);
+                    words = model.Id == "parakeet-v3" ? Parakeet(samples) : await Whisper(samples, cancellation);
                 }
                 catch (Exception error) when (model.Id != "parakeet-v3" && !whisperCpu && error is not OperationCanceledException)
                 {
@@ -95,7 +95,7 @@ public sealed class SpeechService(ModelStore models, TimeProvider? timeProvider 
                     DisposeWhisper();
                     EnsureWhisper(model, language, speakers && !single, progress, cancellation, vocabulary);
                     cancellation.ThrowIfCancellationRequested();
-                    words = await Whisper(samples);
+                    words = await Whisper(samples, cancellation);
                 }
                 var inferenceSeconds = inference.Elapsed.TotalSeconds;
                 cancellation.ThrowIfCancellationRequested();
@@ -174,11 +174,11 @@ public sealed class SpeechService(ModelStore models, TimeProvider? timeProvider 
         return true;
     }
 
-    private async Task<List<SpeechWord>> Whisper(float[] samples)
+    private async Task<List<SpeechWord>> Whisper(float[] samples, CancellationToken cancellation)
     {
         var processor = whisperProcessor ?? throw new InvalidOperationException("Whisper model is not loaded.");
         var result = new List<SpeechWord>();
-        await foreach (var segment in processor.ProcessAsync(samples))
+        await foreach (var segment in processor.ProcessAsync(samples, cancellation))
         {
             if (segment.Text.Trim() is "[BLANK_AUDIO]" or "[SILENCE]") continue;
             if (!whisperDetailed)
