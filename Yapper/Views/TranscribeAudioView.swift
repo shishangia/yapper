@@ -49,6 +49,7 @@ struct TranscribeAudioView: View {
                             Text("Speaker labels").foregroundStyle(Color.textSecondary)
                             Toggle("Detect speakers", isOn: $session.detectSpeakers)
                                 .accessibilityIdentifier("detectSpeakers")
+                                .toggleStyle(.switch)
                         }
                         if session.detectSpeakers {
                             GridRow {
@@ -64,6 +65,7 @@ struct TranscribeAudioView: View {
                             Text("Timestamps").foregroundStyle(Color.textSecondary)
                             Toggle("Include in transcript", isOn: $session.includeTimestamps)
                                 .accessibilityIdentifier("includeTimestamps")
+                                .toggleStyle(.switch)
                         }
                     }
                     .disabled(session.isBusy)

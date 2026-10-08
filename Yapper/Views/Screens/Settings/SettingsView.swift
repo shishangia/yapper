@@ -205,6 +205,7 @@ struct GeneralSettingsTab: View {
                             Spacer()
                             Toggle("", isOn: $showMenuBarIcon)
                                 .labelsHidden()
+                                .toggleStyle(.switch)
                         }
 
                         VStack(alignment: .leading, spacing: 6) {
@@ -215,6 +216,7 @@ struct GeneralSettingsTab: View {
                                 Spacer()
                                 Toggle("", isOn: $restoreClipboardAfterAutoPaste)
                                     .labelsHidden()
+                                    .toggleStyle(.switch)
                             }
 
                             Text(
@@ -234,6 +236,7 @@ struct GeneralSettingsTab: View {
                                 Spacer()
                                 Toggle("", isOn: $alwaysShowRecorderPill)
                                     .labelsHidden()
+                                    .toggleStyle(.switch)
                                     .onChange(of: alwaysShowRecorderPill) {
                                         NotificationCenter.default.post(
                                             name: .recorderIdleVisibilityChanged, object: nil)
@@ -338,6 +341,7 @@ struct GeneralSettingsTab: View {
                             Spacer()
                             Toggle("", isOn: $autoUpdate)
                                 .labelsHidden()
+                                .toggleStyle(.switch)
                                 .disabled(!AppEnvironment.updatesEnabled)
                         }
 
@@ -614,6 +618,7 @@ struct ToggleRow: View {
             Spacer()
             Toggle("", isOn: $isOn)
                 .labelsHidden()
+                .toggleStyle(.switch)
         }
     }
 }

@@ -42,6 +42,7 @@ struct DictationPerformanceSettings: View {
                         Spacer()
                         Toggle("Show live draft text while recording", isOn: $livePreview)
                             .labelsHidden()
+                            .toggleStyle(.switch)
                             .accessibilityIdentifier("liveDictationPreview")
                     }
                     Text("Drafts update every few seconds and can change. The complete recording produces the saved transcript.")
@@ -75,6 +76,7 @@ struct CleanupSettings: View {
                         Spacer()
                         Toggle("Auto edit", isOn: $enableAutoEdit)
                             .labelsHidden()
+                            .toggleStyle(.switch)
                     }
                     Text("Removes safe filler words, capitalizes sentences, and formats spoken commands such as “new paragraph,” “bullet point,” and “number one.” Runs on this Mac. Conversation transcripts stay unchanged.")
                         .font(Typography.captionSmall)
@@ -92,6 +94,7 @@ struct CleanupSettings: View {
                         Spacer()
                         Toggle("Use Apple Intelligence", isOn: $smartCleanup)
                             .labelsHidden()
+                            .toggleStyle(.switch)
                             .accessibilityIdentifier("appleDictationCleanup")
                     }
                     Text("Edits text on this Mac after dictation and keeps the original in History. If it is unavailable, your Auto edit setting applies. Conversation transcripts stay unchanged.")
@@ -137,6 +140,7 @@ struct CleanupSettings: View {
                         Spacer()
                         Toggle("Trim final period on short dictation", isOn: $trimDictationPeriod)
                             .labelsHidden()
+                            .toggleStyle(.switch)
                             .accessibilityIdentifier("trimDictationPeriod")
                     }
                     Text("Removes a lone final period from an email, web address, number, or single word. Sentences and conversation transcripts stay unchanged.")
