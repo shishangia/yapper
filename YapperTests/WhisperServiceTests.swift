@@ -84,6 +84,19 @@ final class WhisperServiceTests: XCTestCase {
         XCTAssertNotNil(fallback.cleanupNote)
     }
     
+    func testSmartCleanupRunsAfterReleasingTheInferenceGate() async throws {
+        let gate = NativeInferenceGate()
+        let manager = TranscriptionManager(whisper: StubSpeechEngine(), parakeet: StubSpeechEngine(), gate: gate,
+            autoEditEnabled: { true }, idleDelay: { 0 }, smartCleanup: { _ in
+                let released = self.expectation(description: "Gate free during smart cleanup")
+                Task { await gate.run { released.fulfill() } }
+                await self.fulfillment(of: [released], timeout: 2)
+                return "Edited words"
+            })
+        let result = try await manager.transcribeDetailed(audioFile: URL(fileURLWithPath: "/unused"), variant: "openai_whisper-large-v3", language: "en")
+        XCTAssertEqual(result.text, "Edited words")
+    }
+
     var service: WhisperService?
     
     override func setUpWithError() throws {
