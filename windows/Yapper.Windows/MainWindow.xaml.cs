@@ -39,6 +39,7 @@ public partial class MainWindow : Window
     private CancellationTokenSource? previewCancellation;
     private string previewText = "";
     private bool skippedPreview;
+    private bool previewPaused;
     private readonly System.Windows.Threading.DispatcherTimer idleModelTimer = new() { Interval = TimeSpan.FromSeconds(15) };
 
     public MainWindow(string root)
@@ -249,7 +250,7 @@ public partial class MainWindow : Window
         {
             speech.SetRecording(true);
             previewCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellation!.Token);
-            previewText = ""; skippedPreview = false;
+            previewText = ""; skippedPreview = false; previewPaused = false;
             audio.Start(recordingPath, MicrophoneChoice.SelectedIndex, dictation && options.Preferences.LivePreview, activeId);
             recorder.SetPreview(dictation && options.Preferences.LivePreview ? "Listening… Draft text appears as you speak." : null);
             recorder.Present(true);
@@ -286,7 +287,7 @@ public partial class MainWindow : Window
     }
     private async void PreviewAudio(float[] samples, Guid id)
     {
-        if (id != activeId || finishing || !audio.IsRecording || options is not { Dictation: true } job || previewCancellation is null) return;
+        if (id != activeId || finishing || previewPaused || !audio.IsRecording || options is not { Dictation: true } job || previewCancellation is null) return;
         if (previewBusy) { skippedPreview = true; return; }
         var token = previewCancellation.Token;
         if (token.IsCancellationRequested) return;
@@ -295,6 +296,8 @@ public partial class MainWindow : Window
         try
         {
             var result = await speech.Transcribe(samples, job.Model, job.Language, false, false, new Progress<(string, double)>(), token, job.Preferences.PreferredWords, preview: true);
+            // A preview slower than real time only competes with the final transcription; stop previews for this recording.
+            if (id == activeId && result.InferenceSeconds > samples.Length / 16000d) previewPaused = true;
             if (id == activeId && !finishing && audio.IsRecording && !token.IsCancellationRequested)
             {
                 var draft = result.Transcript.PlainText.Trim();
