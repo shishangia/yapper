@@ -14,7 +14,8 @@ private final class StubSpeechEngine: SpeechToTextEngine {
     var failLoad = false
     var loads: [String] = []
     var onUnload: (() async -> Void)?
-    func setPreferredWords(_ words: [String]) {}
+    var preferredWords: [String]?
+    func setPreferredWords(_ words: [String]) { preferredWords = words }
     func loadModel(variant: String) async throws {
         loads.append(variant)
         if failLoad { throw ConversationError.modelsMissing }
@@ -46,6 +47,16 @@ final class WhisperServiceTests: XCTestCase {
         try await manager.loadModel(variant: "openai_whisper-large-v3")
         XCTAssertTrue(whisper.isInitialized)
         XCTAssertEqual(whisper.loads.count, 2)
+    }
+
+    func testPreviewDoesNotPromptWithPreferredWords() async throws {
+        let whisper = StubSpeechEngine()
+        whisper.preferredWords = ["stale"]
+        let manager = TranscriptionManager(whisper: whisper, parakeet: StubSpeechEngine(), gate: NativeInferenceGate(),
+            modelReady: { _ in true }, idleDelay: { 0 })
+        _ = try await manager.preview(audioFile: URL(fileURLWithPath: "/unused"),
+            variant: "openai_whisper-large-v3", language: "en", isCurrent: { true })
+        XCTAssertEqual(whisper.preferredWords, [])
     }
 
     func testVocabularyAndSmartCleanupSafety() {
