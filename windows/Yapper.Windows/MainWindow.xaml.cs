@@ -160,7 +160,7 @@ public partial class MainWindow : Window
     }
     private void SystemAppearanceChanged(object sender, Microsoft.Win32.UserPreferenceChangedEventArgs e)
         => Dispatcher.InvokeAsync(() => AppTheme.Apply(library.Data.Preferences.Theme));
-    private void UpdateReady() { if (!jobs.IsBusy) Status.Text = models.Ready(Chosen) ? $"Ready · {Chosen.Name} · {library.Data.Preferences.Hotkey}" : "Download your selected model in AI Models before recording."; }
+    private void UpdateReady() { if (!jobs.IsBusy) Status.Text = models.Ready(Chosen) ? $"Ready · {Chosen.Name} · {library.Data.Preferences.Hotkey}" : "Download your selected model in Settings before recording."; }
     private void RefreshLibrary()
     {
         HistoryList.ItemsSource = library.Data.Recordings;
