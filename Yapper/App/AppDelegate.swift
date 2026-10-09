@@ -39,11 +39,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         #endif
 
-        if !LegacyImportService.shared.canImport { configureDictation() }
-        NotificationCenter.default.publisher(for: .legacyLibraryImported)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.configureDictation() }
-            .store(in: &cancellables)
+        configureDictation()
 
         // Only show the Dock icon while the dashboard is actually open; otherwise
         // live quietly in the menu bar.
@@ -58,7 +54,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard AppEnvironment.updatesEnabled else { return }
         UpdateService.shared.isWorkActive = { [weak self] in
             self?.miniRecorderController?.isBusy == true || ConversationSession.shared.isBusy
-                || LegacyImportService.shared.isImporting || ModelDownloadService.shared.isDownloading.values.contains(true)
+                || ModelDownloadService.shared.isDownloading.values.contains(true)
                 || TranscriptionManager.shared.isLoading || TranscriptionManager.shared.isTranscribing
                 || TranscriptionManager.shared.warmingVariant != nil
         }
@@ -99,13 +95,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let alert = NSAlert()
             alert.messageText = "An app update is being prepared"
             alert.informativeText = "Keep Yapper open until the verified update is ready to restart."
-            alert.runModal()
-            return .terminateCancel
-        }
-        if LegacyImportService.shared.isImporting {
-            let alert = NSAlert()
-            alert.messageText = "Library import is still running"
-            alert.informativeText = "Wait for the verified copy to finish before quitting Yapper."
             alert.runModal()
             return .terminateCancel
         }

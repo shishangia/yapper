@@ -53,7 +53,7 @@ final class ConversationSessionTests: XCTestCase {
         let suite = "Yapper-Session-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        defaults.set("openai_whisper-large-v3_turbo", forKey: ModelSelection.defaultsKey)
+        defaults.set("openai_whisper-large-v3-v20240930_turbo", forKey: ModelSelection.defaultsKey)
         defaults.set("auto", forKey: "transcriptionLanguage")
         let history = HistoryService(defaults: defaults)
         let started = expectation(description: "processing started")
@@ -65,15 +65,15 @@ final class ConversationSessionTests: XCTestCase {
         await fulfillment(of: [started], timeout: 3)
         XCTAssertTrue(session.isBusy)
         XCTAssertEqual(session.phase, .processing)
-        defaults.set("openai_whisper-tiny", forKey: ModelSelection.defaultsKey)
-        XCTAssertEqual(session.activeModel, "openai_whisper-large-v3_turbo")
+        defaults.set("openai_whisper-large-v3", forKey: ModelSelection.defaultsKey)
+        XCTAssertEqual(session.activeModel, "openai_whisper-large-v3-v20240930_turbo")
         processor.continuation?.resume()
         await session.waitUntilFinished()
         XCTAssertEqual(session.phase, .completed)
         XCTAssertEqual(history.items.count, 1)
         XCTAssertEqual(history.statsEntries.count, 1)
         let item = try XCTUnwrap(history.items.first)
-        XCTAssertEqual(item.modelUsed, "Whisper Large v3 (legacy Turbo download)")
+        XCTAssertEqual(item.modelUsed, "Whisper Large v3 Turbo")
         history.addConversation(try XCTUnwrap(item.conversation), duration: 1, id: item.id)
         XCTAssertEqual(history.items.count, 1)
         XCTAssertEqual(history.statsEntries.count, 1)
@@ -84,7 +84,7 @@ final class ConversationSessionTests: XCTestCase {
         let suite = "Yapper-Session-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        defaults.set("openai_whisper-large-v3_turbo", forKey: ModelSelection.defaultsKey)
+        defaults.set("openai_whisper-large-v3-v20240930_turbo", forKey: ModelSelection.defaultsKey)
         defaults.set("auto", forKey: "transcriptionLanguage")
         let history = HistoryService(defaults: defaults)
         let started = expectation(description: "processing started")

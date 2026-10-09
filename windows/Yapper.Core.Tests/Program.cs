@@ -99,6 +99,28 @@ var tests = new (string Name, Action Run)[]
             Equal(input.Replace("\r\n", "\n").Replace('\r', '\n'), DictationText.Process(input, [], false, false));
         }
     }),
+    ("repetition collapse, at-sign and scratch-that aliases", () =>
+    {
+        Equal("The launch went well", DictationText.Process("the the launch went well", [], false, true));
+        Equal("Can you tell me", DictationText.Process("can you can you tell me", [], false, true));
+        Equal("It was a very very long wait", DictationText.Process("it was a very very long wait", [], false, true));
+        Equal("I know that that is true", DictationText.Process("I know that that is true", [], false, true));
+        Equal("Room 22 22 is down the hall", DictationText.Process("room 22 22 is down the hall", [], false, true));
+        Equal("Email john@gmail.com", DictationText.Process("email john at the rate gmail.com", [], false, true));
+        Equal("Reach me@example.com", DictationText.Process("reach me at sign example.com", [], false, true));
+        Equal("", DictationText.Process("first idea, sorry, remove that", [], false, true));
+        Equal("Keep this. Right words.", DictationText.Process("Keep this. Wrong words. Delete that. Right words.", [], false, true));
+    }),
+    ("preferred word learner accepts a small correction and rejects the rest", () =>
+    {
+        Equal("Jaimin", PreferredWordLearner.Learn("the meeting is with jamin tomorrow", "the meeting is with Jaimin tomorrow"));
+        Equal("Jon Smyth", PreferredWordLearner.Learn("contact john smith please", "contact Jon Smyth please"));
+        True(PreferredWordLearner.Learn("He has did it", "He has done it") is null); // grammar-only edit
+        True(PreferredWordLearner.Learn("Hello there", "Hello there") is null); // no change
+        True(PreferredWordLearner.Learn("I think we should go to the park", "Let us visit the museum instead") is null); // whole rewrite
+        True(PreferredWordLearner.Learn("I like banana today", "I like xylophone today") is null); // too dissimilar
+        True(PreferredWordLearner.Learn("see you tomorrow", "see you tomorrow afternoon") is null); // pure insertion
+    }),
     ("cancellation keeps busy ownership and rejects stale finish", () =>
     {
         var gate = new JobGate(); var first = gate.Begin(); gate.Cancel();

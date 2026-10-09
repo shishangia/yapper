@@ -24,7 +24,7 @@ public partial class MainWindow : Window
     private Guid activeId;
     private string? recordingPath;
     private Recording? selected;
-    private sealed record JobOptions(SpeechModel Model, string Language, bool Speakers, bool Single, bool Dictation,
+    private sealed record JobOptions(SpeechModel Model, string Language, bool Speakers, bool Dictation,
         bool IncludeTimestamps, IntPtr Target, Preferences Preferences, DictionaryRule[] Dictionary);
     private JobOptions? options;
     private (string Path, JobOptions Options)? retry;
@@ -60,16 +60,14 @@ public partial class MainWindow : Window
         Height = Math.Min(Height, SystemParameters.WorkArea.Height - 32);
         Left = SystemParameters.WorkArea.Left + (SystemParameters.WorkArea.Width - Width) / 2;
         Top = SystemParameters.WorkArea.Top + (SystemParameters.WorkArea.Height - Height) / 2;
-        ModelChoice.ItemsSource = ModelStore.Catalog;
-        ModelsList.ItemsSource = ModelStore.Catalog;
-        ModelChoice.SelectedItem = ModelStore.Catalog.FirstOrDefault(m => m.Id == library.Data.Preferences.SelectedModel) ?? ModelStore.Catalog[1];
+        ModelChoice.ItemsSource = ModelStore.Visible;
+        ModelsList.ItemsSource = ModelStore.Visible;
+        ModelChoice.SelectedItem = ModelStore.Resolve(library.Data.Preferences.SelectedModel);
         ModelsList.SelectedItem = ModelChoice.SelectedItem;
         LanguageChoice.SelectedItem = LanguageChoice.Items.Cast<ComboBoxItem>().FirstOrDefault(i => (string)i.Tag == library.Data.Preferences.Language) ?? LanguageChoice.Items[0];
         SyncDisplayedModel();
         HotkeyChoice.SelectedItem = HotkeyChoice.Items.Cast<ComboBoxItem>().FirstOrDefault(i => (string)i.Content == library.Data.Preferences.Hotkey) ?? HotkeyChoice.Items[0];
         ToggleMode.IsChecked = library.Data.Preferences.ToggleRecording;
-        RestoreClipboard.IsChecked = library.Data.Preferences.RestoreClipboard;
-        TrimPeriod.IsChecked = library.Data.Preferences.TrimPeriod;
         AutoEdit.IsChecked = library.Data.Preferences.AutoEdit;
         IncludeTimestamps.IsChecked = library.Data.Preferences.IncludeTimestamps;
         AutoCheckUpdates.IsChecked = library.Data.Preferences.AutoCheckUpdates;
@@ -128,7 +126,7 @@ public partial class MainWindow : Window
         var hinglish = SpokenLanguage == "hinglish";
         var model = hinglish
             ? ModelStore.Catalog.Single(m => m.Id == "whisper-hinglish")
-            : ModelStore.Catalog.FirstOrDefault(m => m.Id == library.Data.Preferences.SelectedModel) ?? ModelStore.Catalog[1];
+            : ModelStore.Resolve(library.Data.Preferences.SelectedModel);
         var wasInitialized = initialized;
         initialized = false;
         ModelChoice.SelectedItem = model;
@@ -162,13 +160,15 @@ public partial class MainWindow : Window
     }
     private void SystemAppearanceChanged(object sender, Microsoft.Win32.UserPreferenceChangedEventArgs e)
         => Dispatcher.InvokeAsync(() => AppTheme.Apply(library.Data.Preferences.Theme));
-    private void UpdateReady() { if (!jobs.IsBusy) Status.Text = models.Ready(Chosen) ? $"Ready · {Chosen.Name} · {library.Data.Preferences.Hotkey}" : "Download your selected model in AI Models before recording."; }
+    private void UpdateReady() { if (!jobs.IsBusy) Status.Text = models.Ready(Chosen) ? $"Ready · {Chosen.Name} · {library.Data.Preferences.Hotkey}" : "Download your selected model in Settings before recording."; }
     private void RefreshLibrary()
     {
         HistoryList.ItemsSource = library.Data.Recordings;
         RecentList.ItemsSource = library.Data.Recordings.Take(5).ToArray();
         RecentEmpty.Visibility = library.Data.Recordings.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         RulesGrid.ItemsSource = library.Data.Dictionary;
+        // Resync after a learned word updates preferences elsewhere; never clobber an in-progress edit here.
+        if (!PreferredWords.IsKeyboardFocusWithin) PreferredWords.Text = library.Data.Preferences.PreferredWords;
         var words = library.Data.Usage.Sum(x => x.Words);
         var today = DateTime.Today;
         Greeting.Text = DateTime.Now.Hour < 12 ? "Good morning," : DateTime.Now.Hour < 18 ? "Good afternoon," : "Welcome back,";
@@ -205,7 +205,6 @@ public partial class MainWindow : Window
         if (!initialized) return;
         library.Save(library.Data with { Preferences = library.Data.Preferences with {
             Language = SpokenLanguage, ToggleRecording = ToggleMode.IsChecked == true,
-            RestoreClipboard = RestoreClipboard.IsChecked == true, TrimPeriod = TrimPeriod.IsChecked == true,
             AutoEdit = AutoEdit.IsChecked == true, AutoCheckUpdates = AutoCheckUpdates.IsChecked == true,
             IncludeTimestamps = IncludeTimestamps.IsChecked == true, LivePreview = LivePreview.IsChecked == true,
             PreferredWords = PreferredWords.Text, ModelIdleMinutes = int.Parse((string)((ComboBoxItem)ModelIdleMinutes.SelectedItem).Tag) } });
@@ -252,7 +251,7 @@ public partial class MainWindow : Window
     {
         if (DownloadMissingModel(dictation ? "Dictation" : "Recording")) return;
         if (!Begin()) return;
-        options = new(Chosen, SpokenLanguage, !dictation && DetectSpeakers.IsChecked == true, !dictation && SingleSpeaker.IsChecked == true,
+        options = new(Chosen, SpokenLanguage, !dictation && DetectSpeakers.IsChecked == true,
             dictation, IncludeTimestamps.IsChecked == true, target, library.Data.Preferences, library.Data.Dictionary.ToArray());
         recordingPath = Path.Combine(library.Root, "Recordings", Guid.NewGuid().ToString("N") + ".wav");
         try
@@ -283,7 +282,7 @@ public partial class MainWindow : Window
     }
     private async Task WarmDuringRecording(JobOptions job, CancellationToken cancellation)
     {
-        try { await speech.Warm(job.Model, job.Language, job.Speakers && !job.Single, cancellation, job.Dictation ? job.Preferences.PreferredWords : ""); }
+        try { await speech.Warm(job.Model, job.Language, job.Speakers, cancellation, job.Dictation ? job.Preferences.PreferredWords : ""); }
         catch (OperationCanceledException) { }
         catch (Exception error) { Debug.WriteLine("Model warm-up failed; transcription will retry: " + error.Message); }
     }
@@ -348,7 +347,7 @@ public partial class MainWindow : Window
         if (jobs.IsBusy || DownloadMissingModel("Transcription")) return;
         var dialog = new Microsoft.Win32.OpenFileDialog { Filter = "Audio|*.wav;*.mp3;*.m4a;*.wma;*.aiff|All files|*.*" };
         if (dialog.ShowDialog(this) != true || !Begin()) return;
-        options = new(Chosen, SpokenLanguage, DetectSpeakers.IsChecked == true, SingleSpeaker.IsChecked == true, false,
+        options = new(Chosen, SpokenLanguage, DetectSpeakers.IsChecked == true, false,
             IncludeTimestamps.IsChecked == true, IntPtr.Zero,
             library.Data.Preferences, library.Data.Dictionary.ToArray());
         try { await Process(dialog.FileName, false); }
@@ -377,13 +376,13 @@ public partial class MainWindow : Window
             var decodeSeconds = decodeClock.Elapsed.TotalSeconds;
             decoded = true;
             token.ThrowIfCancellationRequested();
-            var speechResult = await speech.Transcribe(samples, job.Model, job.Language, job.Speakers, job.Single, Reporter, token, job.Dictation ? job.Preferences.PreferredWords : "");
+            var speechResult = await speech.Transcribe(samples, job.Model, job.Language, job.Speakers, false, Reporter, token, job.Dictation ? job.Preferences.PreferredWords : "");
             var transcript = speechResult.Transcript with { TimestampsVisible = job.IncludeTimestamps };
             token.ThrowIfCancellationRequested();
             if (transcript.PlainText.Trim().Length == 0) throw new InvalidDataException("No speech was transcribed.");
             var cleanupClock = Stopwatch.StartNew();
             var text = job.Dictation ? DictationText.Process(transcript.PlainText, job.Dictionary,
-                job.Preferences.TrimPeriod, job.Preferences.AutoEdit) : transcript.PlainText;
+                true, job.Preferences.AutoEdit) : transcript.PlainText;
             var cleanupSeconds = cleanupClock.Elapsed.TotalSeconds;
             var timing = new ProcessingTiming(decodeSeconds, speechResult.QueueSeconds, speechResult.ModelPreparationSeconds,
                 speechResult.InferenceSeconds, speechResult.SpeakerDetectionSeconds, cleanupSeconds);
@@ -397,7 +396,7 @@ public partial class MainWindow : Window
             Status.Text = transcript.Warning ?? $"Transcript saved in {timing.Total:F1}s.";
             if (job.Dictation)
             {
-                var outcome = await WindowsInput.Paste(text, job.Target, job.Preferences.RestoreClipboard, () => jobs.CanCommit(id));
+                var outcome = await WindowsInput.Paste(text, job.Target, true, () => jobs.CanCommit(id));
                 if (outcome is not null) { Status.Text = outcome; tray.ShowBalloonTip(6000, "Yapper", outcome, Forms.ToolTipIcon.Info); }
             }
         }
@@ -493,6 +492,16 @@ public partial class MainWindow : Window
         if (model.Id == "whisper-hinglish" && SpokenLanguage == "hinglish")
             LanguageChoice.SelectedItem = LanguageChoice.Items.Cast<ComboBoxItem>().Single(i => (string)i.Tag == "auto");
         _ = RefreshModelStorage(); UpdateReady();
+    }
+    private void RemoveUnusedModels(object sender, RoutedEventArgs e)
+    {
+        if (jobs.IsBusy || updateBusy) { Status.Text = "Wait for processing or updating to finish before removing model files."; return; }
+        var (paths, bytes) = models.FindUnused();
+        if (paths.Length == 0) { Status.Text = "No unused model files found."; return; }
+        if (MessageBox.Show(this, $"Delete {paths.Length} unused model folder(s), freeing {bytes / 1_000_000_000d:F2} GB?", "Yapper", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+        models.DeleteUnused(paths);
+        _ = RefreshModelStorage();
+        Status.Text = "Unused model files removed.";
     }
     private void AddRule(object sender, RoutedEventArgs e)
     {

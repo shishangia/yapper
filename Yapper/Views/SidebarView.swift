@@ -118,36 +118,30 @@ struct SidebarButton: View {
 }
 
 enum SidebarItem: String, CaseIterable, Identifiable {
-    case dashboard = "Dashboard"
+    case home = "Home"
     case transcribeAudio = "Transcribe audio"
     case history = "History"
     case dictionary = "Dictionary"
-    case statistics = "Statistics"
-    case aiModels = "AI Models"
     case settings = "Settings"
 
     var id: String { rawValue }
 
     var icon: String {
         switch self {
-        case .dashboard: return "square.grid.2x2"
+        case .home: return "house"
         case .transcribeAudio: return "waveform"
         case .history: return "doc.text"
         case .dictionary: return "character.book.closed"
-        case .statistics: return "chart.bar"
-        case .aiModels: return "cpu"
         case .settings: return "gearshape"
         }
     }
 
     var accessibilityIdentifier: String {
         switch self {
-        case .dashboard: return "sidebar.dashboard"
+        case .home: return "sidebar.home"
         case .transcribeAudio: return "sidebar.transcribeAudio"
         case .history: return "sidebar.history"
         case .dictionary: return "sidebar.dictionary"
-        case .statistics: return "sidebar.statistics"
-        case .aiModels: return "sidebar.aiModels"
         case .settings: return "sidebar.settings"
         }
     }

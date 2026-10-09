@@ -267,7 +267,10 @@ class WhisperService {
             if !preferredWords.isEmpty, let tokenizer = pipe.tokenizer {
                 options.promptTokens = Array(tokenizer.encode(text: preferredWords.joined(separator: ", ")).prefix(192))
             }
-            let results = try await pipe.transcribe(audioPath: audioFile.path, decodeOptions: options)
+            let samples = try await Task.detached(priority: .userInitiated) {
+                Self.trimmingLongSilences(try AudioConverter().resampleAudioFile(audioFile))
+            }.value
+            let results = try await pipe.transcribe(audioArray: samples, decodeOptions: options)
             let text = Self.normalizedTranscription(
                 from: results.map { $0.text }.joined(separator: " "))
 
@@ -386,6 +389,40 @@ class WhisperService {
                 })
             }
             progress(Double(index + 1) / Double(max(1, ranges.count)))
+        }
+        return output
+    }
+
+    /// Shortens pauses over 2 s to 0.3 s on each side, since long non-speech stretches make
+    /// Whisper hallucinate (arXiv:2402.08021). A simple energy gate avoids loading a VAD model
+    /// for every dictation; it errs toward keeping audio when the room is noisy.
+    nonisolated static func trimmingLongSilences(_ samples: [Float], sampleRate: Int = 16000) -> [Float] {
+        let frame = sampleRate / 50
+        let levels = stride(from: 0, to: samples.count, by: frame).map { start -> Float in
+            let chunk = samples[start..<min(start + frame, samples.count)]
+            return (chunk.reduce(0) { $0 + $1 * $1 } / Float(chunk.count)).squareRoot()
+        }
+        guard let peak = levels.max(), peak > 0 else { return samples }
+        let threshold = max(0.002, peak * 0.02)
+        guard peak >= threshold else { return samples }
+        let maxPause = 100, context = 15  // 2 s and 0.3 s in 20 ms frames
+        var output: [Float] = []
+        output.reserveCapacity(samples.count)
+        func append(_ frames: Range<Int>) {
+            output += samples[frames.lowerBound * frame..<min(frames.upperBound * frame, samples.count)]
+        }
+        var start = 0
+        while start < levels.count {
+            let quiet = levels[start] < threshold
+            var end = start
+            while end < levels.count, (levels[end] < threshold) == quiet { end += 1 }
+            if quiet, end - start > maxPause {
+                append(start..<start + context)
+                append(end - context..<end)
+            } else {
+                append(start..<end)
+            }
+            start = end
         }
         return output
     }

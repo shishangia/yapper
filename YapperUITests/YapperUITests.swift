@@ -12,7 +12,7 @@ final class YapperUITests: XCTestCase {
         let app = XCUIApplication()
         addTeardownBlock { @MainActor in app.terminate() }
         app.launchArguments = ["--uitesting", "--test-onboarding", "--test-permissions-denied", "-ApplePersistenceIgnoreState", "YES",
-            "-legacyImportOffered", "YES", "-selectedModelVariant", "openai_whisper-large-v3_turbo",
+            "-selectedModelVariant", "openai_whisper-large-v3-v20240930_turbo",
             "-transcriptionLanguage", "auto", "-selectedHotkey", "rightOption", "-recordingMode", "1"]
         app.launch()
         if !app.windows.firstMatch.waitForExistence(timeout: 3) { openDashboard() }
@@ -28,18 +28,7 @@ final class YapperUITests: XCTestCase {
         app.buttons["sidebar.transcribeAudio"].click()
         XCTAssertTrue(app.buttons["importConversation"].waitForExistence(timeout: 5))
         capture(app.windows.firstMatch, name: "Import-only setup complete")
-        app.buttons["sidebar.settings"].click()
-        let trim = app.checkBoxes["trimDictationPeriod"]
-        XCTAssertTrue(trim.waitForExistence(timeout: 5))
-        let settingsScroll = app.scrollViews.containing(.checkBox, identifier: "trimDictationPeriod").firstMatch
-        settingsScroll.scroll(byDeltaX: 0, deltaY: -420)
-        capture(app.windows.firstMatch, name: "Punctuation control before interaction")
-        let original = try XCTUnwrap(trim.value as? NSNumber)
-        trim.click()
-        XCTAssertNotEqual(trim.value as? NSNumber, original)
-        trim.click()
-        capture(app.windows.firstMatch, name: "Dictation punctuation setting")
-        app.buttons["sidebar.dashboard"].click()
+        app.buttons["sidebar.home"].click()
         let play = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "recent.play.")).firstMatch
         XCTAssertTrue(play.waitForExistence(timeout: 5))
         play.click()
@@ -88,11 +77,11 @@ final class YapperUITests: XCTestCase {
             let app = XCUIApplication()
             addTeardownBlock { @MainActor in app.terminate() }
             app.launchArguments = ["--uitesting", "-ApplePersistenceIgnoreState", "YES", "-appTheme", appearance,
-                "-showMenuBarIcon", "YES", "-selectedModelVariant", "openai_whisper-large-v3_turbo",
+                "-showMenuBarIcon", "YES", "-selectedModelVariant", "openai_whisper-large-v3-v20240930_turbo",
                 "-transcriptionLanguage", "auto"]
             app.launch()
             openDashboard()
-            XCTAssertTrue(app.buttons["sidebar.aiModels"].waitForExistence(timeout: 10))
+            XCTAssertTrue(app.buttons["sidebar.settings"].waitForExistence(timeout: 10))
             let pid = try XCTUnwrap(NSRunningApplication.runningApplications(withBundleIdentifier: "com.shishangia.yapper.dev").first?.processIdentifier)
             let element = AXUIElementCreateApplication(pid)
             var windows: CFTypeRef?
@@ -101,7 +90,7 @@ final class YapperUITests: XCTestCase {
                 var size = CGSize(width: 900, height: 720)
                 AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, AXValueCreate(.cgSize, &size)!)
             }
-            app.buttons["sidebar.aiModels"].click()
+            app.buttons["sidebar.settings"].click(); app.buttons["settings.tab.models"].click()
             XCTAssertTrue(app.descendants(matching: .any)["model.metric.speed.parakeet-tdt-0.6b-v3"].waitForExistence(timeout: 5))
             capture(app.windows.firstMatch, name: "\(appearance) model comparison narrow")
             if let window = (windows as? [AXUIElement])?.first {
@@ -109,7 +98,7 @@ final class YapperUITests: XCTestCase {
                 AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, AXValueCreate(.cgSize, &size)!)
             }
             capture(app.windows.firstMatch, name: "\(appearance) model comparison wide")
-            for route in ["transcribeAudio", "dictionary", "statistics", "settings"] {
+            for route in ["transcribeAudio", "dictionary", "settings"] {
                 app.buttons["sidebar.\(route)"].click()
                 capture(app.windows.firstMatch, name: "\(appearance) \(route)")
             }
@@ -156,44 +145,6 @@ final class YapperUITests: XCTestCase {
     }
 
     @MainActor
-    func testSingleSpeakerTranscriptionHasNoUncertainLabels() throws {
-        let app = XCUIApplication()
-        let home = String(cString: try XCTUnwrap(getpwuid(getuid())).pointee.pw_dir)
-        let fixture = home + "/Library/Application Support/Yapper-Dev/TestAudio/conversation.wav"
-        app.launchArguments = ["--uitesting", "-ApplePersistenceIgnoreState", "YES", "-selectedModelVariant", "openai_whisper-large-v3_turbo", "-transcriptionLanguage", "auto"]
-        addTeardownBlock { @MainActor in app.terminate() }
-        app.launch()
-        openDashboard()
-        XCTAssertTrue(app.buttons["sidebar.transcribeAudio"].waitForExistence(timeout: 10))
-        app.buttons["sidebar.transcribeAudio"].click()
-        let speakers = app.popUpButtons["speakerMode"]
-        XCTAssertTrue(speakers.waitForExistence(timeout: 5))
-        speakers.click()
-        app.menuItems["One speaker"].click()
-        app.buttons["importConversation"].click()
-        let panel = app.sheets.firstMatch
-        XCTAssertTrue(panel.waitForExistence(timeout: 5))
-        app.typeKey("g", modifierFlags: [.command, .shift])
-        let path = panel.sheets.textFields.firstMatch
-        XCTAssertTrue(path.waitForExistence(timeout: 5))
-        path.click()
-        path.typeKey("a", modifierFlags: .command)
-        path.typeText(fixture)
-        path.typeKey(.return, modifierFlags: [])
-        XCTAssertTrue(path.waitForNonExistence(timeout: 5))
-        panel.buttons["Open"].click()
-        let copy = app.buttons["copyConversation"]
-        XCTAssertTrue(copy.waitForExistence(timeout: 180))
-        copy.click()
-        let text = try XCTUnwrap(NSPasteboard.general.string(forType: .string))
-        XCTAssertTrue(text.contains("Speaker 1:"))
-        XCTAssertFalse(text.contains("†"))
-        XCTAssertFalse(text.contains("Needs review"))
-        XCTAssertFalse(app.buttons["confirmSingleSpeaker"].exists)
-        capture(app.windows.firstMatch, name: "Single-speaker segment timing")
-    }
-
-    @MainActor
     func testConversationImportRenameAndRestart() throws {
         let app = XCUIApplication()
         // NSHomeDirectory() resolves inside the sandboxed UI test runner's container.
@@ -201,7 +152,7 @@ final class YapperUITests: XCTestCase {
         let fixture = URL(fileURLWithPath: home)
             .appendingPathComponent("Library/Application Support/Yapper-Dev/TestAudio/conversation.wav")
         XCTAssertTrue(FileManager.default.fileExists(atPath: fixture.path), fixture.path)
-        app.launchArguments = ["--uitesting", "-ApplePersistenceIgnoreState", "YES", "-selectedModelVariant", "openai_whisper-large-v3_turbo", "-transcriptionLanguage", "auto"]
+        app.launchArguments = ["--uitesting", "-ApplePersistenceIgnoreState", "YES", "-selectedModelVariant", "openai_whisper-large-v3-v20240930_turbo", "-transcriptionLanguage", "auto"]
         addTeardownBlock { @MainActor in app.terminate() }
         app.launch()
         openDashboard()
@@ -243,7 +194,7 @@ final class YapperUITests: XCTestCase {
         open.click()
         let progress = app.staticTexts["conversationProgress"]
         XCTAssertTrue(progress.waitForExistence(timeout: 10))
-        app.buttons["sidebar.aiModels"].click()
+        app.buttons["sidebar.settings"].click(); app.buttons["settings.tab.models"].click()
         XCTAssertTrue(app.buttons["returnToTranscription"].waitForExistence(timeout: 5))
         app.buttons["sidebar.settings"].click()
         app.buttons["returnToTranscription"].click()

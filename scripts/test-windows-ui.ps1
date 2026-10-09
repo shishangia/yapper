@@ -61,25 +61,28 @@ try {
         $choice = $theme.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, $appearance))
         if (!$choice) { throw "Theme choice missing: $appearance" }
         $choice.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
-        foreach ($route in @('dashboard', 'transcribeAudio', 'history', 'dictionary', 'statistics', 'aiModels', 'settings')) {
+        foreach ($route in @('dashboard', 'transcribeAudio', 'history', 'dictionary', 'settings')) {
             Select-Page "sidebar.$route"
             Capture-Window $window "$appearance-$route"
         }
+        Select-Page 'sidebar.dictionary'
         $wordsField = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'preferredWords'))
         if (!$wordsField) { throw 'Preferred words setting missing' }
         $wordsField.SetFocus()
         $wordsField.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue("Yapper`nWorkstation")
         Capture-Window $window "$appearance-preferred-words"
+        Select-Page 'sidebar.settings'
         $idleField = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'modelIdleMinutes'))
         if (!$idleField) { throw 'Idle model setting missing' }
         $idleField.SetFocus()
         Capture-Window $window "$appearance-dictation-performance"
     }
-    Select-Page 'sidebar.settings'
+    Select-Page 'sidebar.dictionary'
     $preferredWords = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'preferredWords'))
     if (!$preferredWords) { throw 'Preferred words setting missing' }
     $preferredWords.SetFocus()
     $preferredWords.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue("Yapper`nWorkstation")
+    Select-Page 'sidebar.settings'
     $idleSetting = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'modelIdleMinutes'))
     if (!$idleSetting) { throw 'Idle model setting missing' }
     $idleSetting.SetFocus()
@@ -98,7 +101,7 @@ try {
     $saved = Get-Content (Join-Path $testRoot 'library.json') -Raw | ConvertFrom-Json
     if ($saved.Preferences.Theme -ne 'Dark') { throw 'Theme did not persist' }
     if ($saved.Preferences.Language -ne 'hinglish') { throw "New library did not default to Hinglish: $($saved.Preferences.Language)" }
-    if ($saved.Preferences.SelectedModel -ne 'whisper-small') { throw 'Hinglish mode overwrote the saved general model' }
+    if ($saved.Preferences.SelectedModel -ne 'whisper-turbo') { throw 'Hinglish mode overwrote the saved general model' }
     if (!$saved.Preferences.AutoEdit) { throw 'New library did not enable local dictation cleanup' }
     Select-Page 'sidebar.history'
     $entry = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem))

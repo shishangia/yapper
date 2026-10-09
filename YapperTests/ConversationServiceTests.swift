@@ -41,11 +41,11 @@ final class ConversationServiceTests: XCTestCase {
     func testSuccessAndDiarizationDisabled() async throws {
         let processor = ControlledConversationProcessor()
         let service = ConversationService(processor: processor, gate: NativeInferenceGate())
-        let result = try await service.process(audio, variant: "openai_whisper-large-v3_turbo", detectSpeakers: true)
+        let result = try await service.process(audio, variant: "openai_whisper-large-v3-v20240930_turbo", detectSpeakers: true)
         XCTAssertEqual(result.plainText, " um German")
         XCTAssertEqual(result.speakerIDs, ["1"])
         XCTAssertFalse(service.isProcessing)
-        let unlabeled = try await service.process(audio, variant: "openai_whisper-large-v3_turbo", detectSpeakers: false)
+        let unlabeled = try await service.process(audio, variant: "openai_whisper-large-v3-v20240930_turbo", detectSpeakers: false)
         XCTAssertFalse(unlabeled.speakerDetectionRequested)
         XCTAssertEqual(unlabeled.plainText, result.plainText)
         XCTAssertEqual(processor.diarizationCount, 1)
@@ -56,7 +56,7 @@ final class ConversationServiceTests: XCTestCase {
         let processor = ControlledConversationProcessor()
         processor.diarizeError = ConversationError.invalidSpeakerModels
         let service = ConversationService(processor: processor, gate: NativeInferenceGate())
-        let result = try await service.process(audio, variant: "openai_whisper-large-v3_turbo", detectSpeakers: true)
+        let result = try await service.process(audio, variant: "openai_whisper-large-v3-v20240930_turbo", detectSpeakers: true)
         XCTAssertEqual(result.plainText, " um German")
         XCTAssertTrue(result.speakerIDs.isEmpty)
         XCTAssertTrue(result.warning?.contains("full unlabeled transcript was kept") == true)
@@ -68,12 +68,12 @@ final class ConversationServiceTests: XCTestCase {
         processor.transcribeError = ConversationError.invalidAudio
         let service = ConversationService(processor: processor, gate: NativeInferenceGate())
         do {
-            _ = try await service.process(audio, variant: "openai_whisper-large-v3_turbo", detectSpeakers: true)
+            _ = try await service.process(audio, variant: "openai_whisper-large-v3-v20240930_turbo", detectSpeakers: true)
             XCTFail("Expected the transcription error")
         } catch { XCTAssertFalse(service.isProcessing) }
         processor.transcribeError = nil
         processor.words = []
-        let result = try await service.process(audio, variant: "openai_whisper-large-v3_turbo", detectSpeakers: true)
+        let result = try await service.process(audio, variant: "openai_whisper-large-v3-v20240930_turbo", detectSpeakers: true)
         XCTAssertTrue(result.segments.isEmpty)
         XCTAssertEqual(processor.diarizationCount, 0)
     }
@@ -88,13 +88,13 @@ final class ConversationServiceTests: XCTestCase {
             else { processor.transcriptionStarted = started }
             let gate = NativeInferenceGate()
             let service = ConversationService(processor: processor, gate: gate)
-            let task = Task { try await service.process(audio, variant: "openai_whisper-large-v3_turbo", detectSpeakers: true) }
+            let task = Task { try await service.process(audio, variant: "openai_whisper-large-v3-v20240930_turbo", detectSpeakers: true) }
             await fulfillment(of: [started], timeout: 3)
             service.cancel()
             XCTAssertTrue(service.isProcessing)
             XCTAssertTrue(service.cancellationRequested)
             do {
-                _ = try await service.process(audio, variant: "openai_whisper-large-v3_turbo", detectSpeakers: false)
+                _ = try await service.process(audio, variant: "openai_whisper-large-v3-v20240930_turbo", detectSpeakers: false)
                 XCTFail("Must reject overlapping job")
             } catch { XCTAssertEqual(error.localizedDescription, ConversationError.busy.localizedDescription) }
             var nextInferenceStarted = false
@@ -118,7 +118,7 @@ final class ConversationServiceTests: XCTestCase {
         let processor = ControlledConversationProcessor()
         processor.words.append(.init(text: " again", start: 3, end: 4, hasReliableTiming: false))
         let service = ConversationService(processor: processor, gate: NativeInferenceGate())
-        let result = try await service.process(audio, variant: "openai_whisper-large-v3_turbo", detectSpeakers: true, singleSpeaker: true)
+        let result = try await service.process(audio, variant: "openai_whisper-large-v3-v20240930_turbo", detectSpeakers: true, singleSpeaker: true)
         XCTAssertEqual(result.plainText, " um German again")
         XCTAssertEqual(result.segments.map(\.speakerID), ["1", "1"])
         XCTAssertEqual(processor.diarizationCount, 0)
@@ -129,10 +129,10 @@ final class ConversationServiceTests: XCTestCase {
 
     func testMissingModelsFailWithoutDownload() async throws {
         XCTAssertTrue(AppEnvironment.usesIsolatedStorage)
-        XCTAssertFalse(LocalConversationProcessor.transcriptionModelsReady(variant: "openai_whisper-large-v3_turbo"))
+        XCTAssertFalse(LocalConversationProcessor.transcriptionModelsReady(variant: "openai_whisper-large-v3-v20240930_turbo"))
         let processor = LocalConversationProcessor()
         do {
-            _ = try await processor.transcribe(audio, variant: "openai_whisper-large-v3_turbo", language: "auto", wordTimestamps: true) { _ in }
+            _ = try await processor.transcribe(audio, variant: "openai_whisper-large-v3-v20240930_turbo", language: "auto", wordTimestamps: true) { _ in }
             XCTFail("Missing models must not trigger a download")
         } catch { XCTAssertEqual(error.localizedDescription, ConversationError.modelsMissing.localizedDescription) }
     }

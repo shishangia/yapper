@@ -5,58 +5,38 @@ struct AIModelsView: View {
     @ObservedObject private var downloadService = ModelDownloadService.shared
     @AppStorage(ModelSelection.defaultsKey) private var selectedModel: String = ModelSelection.none
     @AppStorage("transcriptionLanguage") private var transcriptionLanguage = ModelSelection.defaultLanguage
-    @AppStorage("modelUseCase") private var useCaseRaw: String = AIModel.UseCase.dictation.rawValue
 
     private var capability: DeviceCapability { .current }
-    private var useCase: AIModel.UseCase { AIModel.UseCase(rawValue: useCaseRaw) ?? .dictation }
-    private var recommendedModel: AIModel { AIModel.recommendedModel(for: capability, useCase: useCase) }
+    private var recommendedModel: AIModel { AIModel.recommendedModel(for: capability) }
     private var selectedModelObject: AIModel? {
         let variant = ModelSelection.displayedVariant(selectedModel, language: transcriptionLanguage)
         return AIModel.availableModels.first { $0.variant == variant }
     }
 
-    private var engineGroups: [(title: String, subtitle: String, models: [AIModel])] {
-        [
-            ("Hinglish", "Hindi + English · natural Latin-script output",
-             AIModel.availableModels.filter(\.isHinglish)),
-            ("Parakeet", "NVIDIA · on-device speech recognition", visibleModels(for: .parakeet)),
-            ("Whisper", "OpenAI · on-device speech recognition", visibleModels(for: .whisper)),
-        ]
+    /// Hinglish first, then the general models in catalog order.
+    private var models: [AIModel] {
+        AIModel.availableModels.filter(\.isHinglish) + AIModel.availableModels.filter { !$0.isHinglish }
     }
 
-    private func visibleModels(for engine: TranscriptionEngineKind) -> [AIModel] {
-        AIModel.models(for: engine).filter { model in
-            !model.isSpecialized
-                && (!model.isLegacy || model.variant == selectedModel
-                    || ModelStorage.transcriptionModelReady(model.variant))
-        }
-    }
+    @State private var unusedFolders: [URL] = []
+    @State private var unusedBytes: Int64 = 0
+    @State private var isRemovingUnused = false
+    @State private var confirmingUnusedRemoval = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("AI Models")
-                        .font(Typography.displayLarge)
-                        .foregroundStyle(Color.textPrimary)
-                    Text("Download and manage the models used on this Mac.")
-                        .font(Typography.bodyMedium)
-                        .foregroundStyle(Color.textSecondary)
-                }
-
                 currentSelection
-                recommendationControls
                 modelList
+                if !unusedFolders.isEmpty { unusedFilesRow }
             }
-            .frame(maxWidth: 860, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding(28)
+            .padding(24)
         }
-        .background(Color.bgContent)
         .tint(Color.accentPrimary)
         .accessibilityIdentifier("aiModels")
         .task {
             await downloadService.refreshDownloadedModels()
+            await findUnusedFiles()
         }
     }
 
@@ -101,54 +81,60 @@ struct AIModelsView: View {
         .themedCard(padding: 18)
     }
 
-    private var recommendationControls: some View {
+    private var modelList: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Model suggestions")
-                .font(Typography.headlineMedium)
-                .foregroundStyle(Color.textPrimary)
-
-            Picker("Recommendation preference", selection: $useCaseRaw) {
-                ForEach(AIModel.UseCase.allCases) { useCase in
-                    Text(useCase.title).tag(useCase.rawValue)
-                }
+            ForEach(models) { model in
+                ModelRow(
+                    model: model,
+                    selectedModel: $selectedModel,
+                    isRecommended: model.variant == recommendedModel.variant
+                )
             }
-            .pickerStyle(.segmented)
-            .frame(maxWidth: 420)
-            .accessibilityIdentifier("models.useCase")
-
-            Text("Suggested: \(recommendedModel.name)")
-                .font(Typography.labelMedium)
-                .foregroundStyle(Color.textPrimary)
-
-            Text("Speed and accuracy bars are relative estimates, not benchmarks or accuracy percentages. Suggestions consider your Mac (\(capability.summary)); changing this preference does not select a model.")
-                .font(Typography.bodySmall)
-                .foregroundStyle(Color.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private var modelList: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            ForEach(engineGroups, id: \.title) { group in
-                VStack(alignment: .leading, spacing: 10) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(group.title)
-                            .font(Typography.sectionTitle)
-                            .foregroundStyle(Color.textPrimary)
-                        Text(group.subtitle)
-                            .font(Typography.bodySmall)
-                            .foregroundStyle(Color.textSecondary)
-                    }
-
-                    ForEach(group.models) { model in
-                        ModelRow(
-                            model: model,
-                            selectedModel: $selectedModel,
-                            isRecommended: model.variant == recommendedModel.variant
-                        )
-                    }
-                }
+    private var unusedFilesRow: some View {
+        HStack(alignment: .center, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Remove unused model files")
+                    .font(Typography.labelLarge)
+                    .foregroundStyle(Color.textPrimary)
+                Text("\(ByteCountFormatter.string(fromByteCount: unusedBytes, countStyle: .file)) from models Yapper no longer offers.")
+                    .font(Typography.caption)
+                    .foregroundStyle(Color.textSecondary)
             }
+            Spacer(minLength: 12)
+            Button(isRemovingUnused ? "Removing…" : "Remove") { confirmingUnusedRemoval = true }
+                .buttonStyle(.stSecondary)
+                .disabled(isRemovingUnused || downloadService.isDownloading.values.contains(true))
+                .accessibilityIdentifier("models.removeUnused")
         }
+        .themedCard(padding: 16)
+        .confirmationDialog("Remove unused model files?", isPresented: $confirmingUnusedRemoval) {
+            Button("Remove files", role: .destructive) { Task { await removeUnusedFiles() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This frees \(ByteCountFormatter.string(fromByteCount: unusedBytes, countStyle: .file)). Your recordings, transcripts, and current models stay.")
+        }
+    }
+
+    private func findUnusedFiles() async {
+        let (folders, bytes) = await Task.detached(priority: .utility) {
+            let folders = AIModel.unusedModelFolders()
+            return (folders, AIModel.allocatedSize(of: folders))
+        }.value
+        unusedFolders = folders
+        unusedBytes = bytes
+    }
+
+    private func removeUnusedFiles() async {
+        isRemovingUnused = true
+        let folders = unusedFolders
+        await Task.detached(priority: .userInitiated) {
+            for folder in folders { try? FileManager.default.removeItem(at: folder) }
+        }.value
+        await downloadService.refreshDownloadedModels()
+        await findUnusedFiles()
+        isRemovingUnused = false
     }
 }

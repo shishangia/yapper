@@ -112,21 +112,7 @@ struct HistoryView: View {
         }
         .overlay(alignment: .bottom) {
             if showCopyToast {
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.accentBlue)
-                    Text("Text copied")
-                        .font(Typography.labelMedium)
-                        .foregroundStyle(.white)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(Material.ultraThinMaterial)
-                .background(Color.black.opacity(0.8))
-                .cornerRadius(24)
-                .shadow(radius: 10)
-                .padding(.bottom, 30)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+                Toast(message: "Text copied")
             }
         }
         .alert("Clear all history?", isPresented: $showDeleteAlert) {
@@ -135,7 +121,7 @@ struct HistoryView: View {
                 historyService.clearAll()
             }
         } message: {
-            Text("This removes your saved transcripts, but keeps your statistics history.")
+            Text("This removes your saved transcripts. Your totals on Home stay.")
         }
         .alert(
             "Delete transcript?",

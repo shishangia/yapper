@@ -7,7 +7,7 @@ using SharpCompress.Readers;
 namespace Yapper.Windows;
 
 public sealed record ModelAsset(string File, string Url, string Sha256, long Size, bool Archive = false);
-public sealed record SpeechModel(string Id, string Name, string Description, double Speed, double Accuracy, ModelAsset Asset, string[] Required)
+public sealed record SpeechModel(string Id, string Name, string Description, double Speed, double Accuracy, ModelAsset Asset, string[] Required, bool Hidden = false)
 {
     public override string ToString() => Name;
 }
@@ -17,10 +17,10 @@ public sealed class ModelStore
     private const string Whisper = "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/";
     public static readonly SpeechModel[] Catalog =
     [
+        // Hidden from the model picker (only whisper-hinglish, whisper-turbo, whisper-large and parakeet-v3
+        // are offered), but kept by id for the CI native smoke test.
         new("whisper-tiny", "Whisper Tiny", "Multilingual · 78 MB · quickest CPU option", 9.5, 6,
-            new("ggml-tiny.bin", Whisper + "ggml-tiny.bin", "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21", 77691713), ["ggml-tiny.bin"]),
-        new("whisper-small", "Whisper Small", "Multilingual · 488 MB · balanced CPU option", 8, 8.5,
-            new("ggml-small.bin", Whisper + "ggml-small.bin", "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b", 487601967), ["ggml-small.bin"]),
+            new("ggml-tiny.bin", Whisper + "ggml-tiny.bin", "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21", 77691713), ["ggml-tiny.bin"], Hidden: true),
         new("whisper-turbo", "Whisper Large v3 Turbo", "Multilingual · 1.6 GB · needs more memory and time on CPU", 7, 9.5,
             new("ggml-large-v3-turbo.bin", Whisper + "ggml-large-v3-turbo.bin", "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69", 1624555275), ["ggml-large-v3-turbo.bin"]),
         new("whisper-hinglish", "Whisper Hinglish Turbo", "Hindi and English · natural Latin script · 624 MB", 7.5, 8.8,
@@ -34,6 +34,11 @@ public sealed class ModelStore
             new("parakeet.tar.bz2", "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2", "5793d0fd397c5778d2cf2126994d58e9d56b1be7c04d13c7a15bb1b4eafb16bf", 487170055, true),
             ["encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt"])
     ];
+    public static readonly SpeechModel[] Visible = Catalog.Where(m => !m.Hidden).ToArray();
+    /// Resolves a saved model id, falling back to whisper-turbo (or parakeet-v3 for a parakeet id)
+    /// when it names a model that is missing or no longer offered in the picker.
+    public static SpeechModel Resolve(string id) => Catalog.FirstOrDefault(m => m.Id == id && !m.Hidden)
+        ?? Catalog.Single(m => m.Id == (id.Contains("parakeet") ? "parakeet-v3" : "whisper-turbo"));
     private const string Nemotron = "https://huggingface.co/onnx-community/Nemotron-3-Diarization-ONNX/resolve/353b6f8ad2cac3580e982d7fbdf0a010786b0406/onnx/";
     public static readonly ModelAsset NemotronGraph = new("model_quantized.onnx", Nemotron + "model_quantized.onnx",
         "fff7d18c7439c9fdc1c6c4dfec924cb42d3344264ca879780dfaf7ee886e6c1e", 364375);
@@ -48,6 +53,20 @@ public sealed class ModelStore
     public bool SpeakersReady => File.Exists(Path.Combine(DirectoryFor("speakers-nemotron"), NemotronGraph.File))
         && File.Exists(Path.Combine(DirectoryFor("speakers-nemotron"), NemotronWeights.File))
         && File.Exists(Path.Combine(DirectoryFor("speakers-nemotron"), ".complete"));
+
+    /// Model folders on disk that no longer match any catalog id or the speaker model, e.g. left
+    /// over from a model removed from the catalog. Returns their paths and total size in bytes.
+    public (string[] Paths, long Bytes) FindUnused()
+    {
+        if (!Directory.Exists(Root)) return ([], 0);
+        var known = Catalog.Select(m => m.Id).Append("speakers-nemotron").ToHashSet();
+        var paths = Directory.EnumerateDirectories(Root)
+            .Where(dir => !known.Contains(Path.GetFileName(dir)) && !Path.GetFileName(dir).StartsWith(".download-"))
+            .ToArray();
+        var bytes = paths.Sum(dir => Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories).Sum(f => new FileInfo(f).Length));
+        return (paths, bytes);
+    }
+    public void DeleteUnused(string[] paths) { foreach (var path in paths) if (Directory.Exists(path)) Directory.Delete(path, true); }
 
     public async Task Download(SpeechModel model, bool speakers, IProgress<(string Stage, double Value)> progress, CancellationToken cancellation)
     {

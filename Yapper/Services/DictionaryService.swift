@@ -50,7 +50,6 @@ final class DictionaryService: ObservableObject {
     private init() {
         migrateLegacyRulesIfNeeded()
         loadEntries()
-        NotificationCenter.default.addObserver(self, selector: #selector(loadEntries), name: .legacyLibraryImported, object: nil)
     }
 
     // MARK: - CRUD

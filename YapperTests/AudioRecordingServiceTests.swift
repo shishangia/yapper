@@ -1,5 +1,6 @@
 import XCTest
 import AVFoundation
+import CoreAudio
 @testable import Yapper
 
 final class AudioRecordingServiceTests: XCTestCase {
@@ -21,6 +22,53 @@ final class AudioRecordingServiceTests: XCTestCase {
         XCTAssertFalse(service.generatesStreamingChunks)
     }
     
+    func testAutomaticInputPrefersBuiltInMicOverBluetoothWhenLidIsOpen() {
+        let bluetooth = kAudioDeviceTransportTypeBluetooth, usb = kAudioDeviceTransportTypeUSB
+        XCTAssertEqual(AutomaticInput.choose(defaultUID: "airpods", defaultTransport: bluetooth,
+                                             builtInUID: "builtin", lidOpen: true), "builtin")
+        XCTAssertEqual(AutomaticInput.choose(defaultUID: "airpods", defaultTransport: kAudioDeviceTransportTypeBluetoothLE,
+                                             builtInUID: "builtin", lidOpen: true), "builtin")
+        XCTAssertEqual(AutomaticInput.choose(defaultUID: "airpods", defaultTransport: bluetooth,
+                                             builtInUID: "builtin", lidOpen: false), "airpods")
+        XCTAssertEqual(AutomaticInput.choose(defaultUID: "airpods", defaultTransport: bluetooth,
+                                             builtInUID: nil, lidOpen: true), "airpods")
+        XCTAssertEqual(AutomaticInput.choose(defaultUID: "usb-mic", defaultTransport: usb,
+                                             builtInUID: "builtin", lidOpen: true), "usb-mic")
+        XCTAssertNil(AutomaticInput.choose(defaultUID: nil, defaultTransport: nil, builtInUID: "builtin", lidOpen: true))
+    }
+
+    func testOneTimeResetMakesAnAutoSavedBuiltInMicAutomatic() throws {
+        let suite = "AudioRecordingServiceTests.reset"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let key = AudioRecordingService.selectedDeviceDefaultsKey
+
+        defaults.set("BuiltInMicrophoneDevice", forKey: key)
+        AudioRecordingService.resetAutoSavedInput(defaults, builtInUID: "BuiltInMicrophoneDevice")
+        XCTAssertNil(defaults.string(forKey: key))
+
+        // Runs once: a later deliberate built-in choice is kept.
+        defaults.set("BuiltInMicrophoneDevice", forKey: key)
+        AudioRecordingService.resetAutoSavedInput(defaults, builtInUID: "BuiltInMicrophoneDevice")
+        XCTAssertEqual(defaults.string(forKey: key), "BuiltInMicrophoneDevice")
+
+        defaults.removePersistentDomain(forName: suite)
+        defaults.set("usb-mic", forKey: key)
+        AudioRecordingService.resetAutoSavedInput(defaults, builtInUID: "BuiltInMicrophoneDevice")
+        XCTAssertEqual(defaults.string(forKey: key), "usb-mic")
+    }
+
+    func testUseAutomaticInputForgetsTheExplicitChoice() {
+        let key = AudioRecordingService.selectedDeviceDefaultsKey
+        let original = UserDefaults.standard.object(forKey: key)
+        defer { UserDefaults.standard.set(original, forKey: key) }
+        UserDefaults.standard.set("some-explicit-mic", forKey: key)
+        service.useAutomaticInput()
+        XCTAssertTrue(service.isAutomaticSelection)
+        XCTAssertNil(UserDefaults.standard.string(forKey: AudioRecordingService.selectedDeviceDefaultsKey))
+    }
+
     func testStopRecordingWhenNotRecording() async {
         let url = await service.stopRecording()
         XCTAssertNil(url, "Should return nil url when not recording")

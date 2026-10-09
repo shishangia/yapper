@@ -2,6 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct TranscribeAudioView: View {
+    var showModels: () -> Void = {}
     @Environment(ConversationSession.self) private var session
     @ObservedObject private var history = HistoryService.shared
     @AppStorage(ModelSelection.defaultsKey) private var selectedModel = ModelSelection.none
@@ -51,16 +52,6 @@ struct TranscribeAudioView: View {
                                 .accessibilityIdentifier("detectSpeakers")
                                 .toggleStyle(.switch)
                         }
-                        if session.detectSpeakers {
-                            GridRow {
-                                Text("Participants").foregroundStyle(Color.textSecondary)
-                                Picker("Speakers", selection: $session.singleSpeaker) {
-                                    Text("Automatic · up to 8 speakers").tag(false)
-                                    Text("One speaker").tag(true)
-                                }
-                                .labelsHidden().accessibilityIdentifier("speakerMode")
-                            }
-                        }
                         GridRow {
                             Text("Timestamps").foregroundStyle(Color.textSecondary)
                             Toggle("Include in transcript", isOn: $session.includeTimestamps)
@@ -69,14 +60,9 @@ struct TranscribeAudioView: View {
                         }
                     }
                     .disabled(session.isBusy)
-                    if session.detectSpeakers && session.singleSpeaker {
-                        Text("One speaker skips speaker detection and word alignment. You still get timestamped passages, without uncertain speaker labels.")
-                            .font(Typography.caption).foregroundStyle(Color.textSecondary)
-                    }
-                    Text("You can switch between paragraph and timestamped views after processing. Timing data is always retained.")
+                    Text("After processing, you can edit words and speaker labels and switch between paragraphs and timestamps. Mixed languages and overlapping speech can cause mistakes.")
                         .font(Typography.caption).foregroundStyle(Color.textSecondary)
-                    Text("Mixed languages and overlapping speech can produce errors. You can edit words and speaker labels after processing.")
-                        .font(Typography.bodySmall).foregroundStyle(Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                     if session.isBusy || session.phase != .idle {
                         ConversationStatusView()
                     }
@@ -88,8 +74,8 @@ struct TranscribeAudioView: View {
                                 Button("Record microphone", systemImage: "mic", action: session.startRecording)
                                     .buttonStyle(.stSecondary).accessibilityIdentifier("startConversationRecording")
                             } else if session.selectedModel.isEmpty {
-                                Text("Choose a model in AI Models to get started.")
-                                    .font(Typography.bodySmall).foregroundStyle(Color.textSecondary)
+                                Button("Choose a model", systemImage: "cpu", action: showModels)
+                                    .buttonStyle(.stPrimary)
                             } else {
                                 Button("Download required models", systemImage: "arrow.down.circle", action: session.downloadModels)
                                     .buttonStyle(.stPrimary)
@@ -142,7 +128,6 @@ struct TranscribeAudioView: View {
         .onChange(of: selectedModel) { session.refreshModels() }
         .onChange(of: session.language) { session.refreshModels() }
         .onChange(of: session.detectSpeakers) { session.refreshModels() }
-        .onChange(of: session.singleSpeaker) { session.refreshModels() }
     }
 }
 

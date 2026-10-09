@@ -146,13 +146,7 @@ final class WhisperServiceTests: XCTestCase {
         XCTAssertTrue(turbo.supports(language: "hi"))
         XCTAssertTrue(turbo.supports(language: "mixed"))
         XCTAssertEqual(ModelStorage.whisperVariant(for: turbo.variant)?.description, "large-v3")
-        let legacy = try XCTUnwrap(AIModel.availableModels.first { $0.variant == "openai_whisper-large-v3_turbo" })
-        XCTAssertTrue(legacy.isLegacy)
-        XCTAssertNotEqual(AIModel.recommendedModel(for: .current, useCase: .dictation).variant, legacy.variant)
-        let english = try XCTUnwrap(AIModel.availableModels.first { $0.variant == "openai_whisper-small.en" })
-        XCTAssertFalse(english.supports(language: "hi"))
-        XCTAssertTrue(english.supports(language: "auto"))
-        XCTAssertEqual(ModelStorage.whisperVariant(for: english.variant)?.description, "small.en")
+        XCTAssertEqual(AIModel.availableModels.count, 4)
         let parakeet = try XCTUnwrap(AIModel.availableModels.first { $0.variant == ParakeetCatalog.v3Variant })
         XCTAssertTrue(parakeet.supports(language: "fr"))
         XCTAssertFalse(parakeet.supports(language: "gu"))
@@ -191,9 +185,9 @@ final class WhisperServiceTests: XCTestCase {
         let manager = TranscriptionManager(whisper: whisper, parakeet: parakeet, gate: gate)
         let url = URL(fileURLWithPath: "/unused.wav")
         _ = try await gate.run {
-            try await manager.transcribeConversationWhileLocked(audioFile: url, variant: "openai_whisper-large-v3_turbo", language: "auto") { _ in }
+            try await manager.transcribeConversationWhileLocked(audioFile: url, variant: "openai_whisper-large-v3-v20240930_turbo", language: "auto") { _ in }
         }
-        XCTAssertEqual(whisper.currentModelVariant, "openai_whisper-large-v3_turbo")
+        XCTAssertEqual(whisper.currentModelVariant, "openai_whisper-large-v3-v20240930_turbo")
         XCTAssertEqual(whisper.structuredCalls, 1)
         _ = try await gate.run {
             try await manager.transcribeConversationWhileLocked(audioFile: url, variant: ParakeetCatalog.v3Variant, language: "en") { _ in }
@@ -202,13 +196,14 @@ final class WhisperServiceTests: XCTestCase {
         XCTAssertEqual(parakeet.structuredCalls, 1)
         XCTAssertEqual(manager.currentModelVariant, ParakeetCatalog.v3Variant)
         parakeet.failLoad = true
-        do { try await manager.loadModel(variant: ParakeetCatalog.v2Variant); XCTFail("Expected failure") }
+        parakeet.isInitialized = false
+        do { try await manager.loadModel(variant: ParakeetCatalog.v3Variant); XCTFail("Expected failure") }
         catch { XCTAssertFalse(manager.isInitialized) }
     }
 
     func testWarmupDeduplicatesAndRechecksSelectionAfterUnload() async throws {
         let whisper = StubSpeechEngine()
-        var selection = "openai_whisper-large-v3_turbo"
+        var selection = "openai_whisper-large-v3-v20240930_turbo"
         let manager = TranscriptionManager(whisper: whisper, parakeet: StubSpeechEngine(), gate: NativeInferenceGate(),
             selectedVariant: { selection }, modelReady: { _ in true })
         var resume: CheckedContinuation<Void, Never>?
@@ -235,7 +230,7 @@ final class WhisperServiceTests: XCTestCase {
     func testWarmupWaitsForInferenceAndSkipsMissingOrDeselectedModel() async throws {
         let whisper = StubSpeechEngine()
         let gate = NativeInferenceGate()
-        var selection = "openai_whisper-large-v3_turbo"
+        var selection = "openai_whisper-large-v3-v20240930_turbo"
         let manager = TranscriptionManager(whisper: whisper, parakeet: StubSpeechEngine(), gate: gate,
             selectedVariant: { selection }, modelReady: { !$0.isEmpty })
         let occupied = expectation(description: "Gate occupied")
@@ -257,7 +252,7 @@ final class WhisperServiceTests: XCTestCase {
     func testReselectingResidentModelDuringUnloadQueuesItsWarmup() async throws {
         let whisper = StubSpeechEngine()
         let parakeet = StubSpeechEngine()
-        let turbo = "openai_whisper-large-v3_turbo"
+        let turbo = "openai_whisper-large-v3-v20240930_turbo"
         let selection = NSMutableString(string: turbo)
         let manager = TranscriptionManager(whisper: whisper, parakeet: parakeet, gate: NativeInferenceGate(),
             selectedVariant: { selection as String }, modelReady: { _ in true })
@@ -278,6 +273,18 @@ final class WhisperServiceTests: XCTestCase {
         XCTAssertTrue(parakeet.loads.isEmpty)
         XCTAssertTrue(manager.isInitialized)
         XCTAssertEqual(manager.currentModelVariant, turbo)
+    }
+
+    func testDictationTrimsLongPausesButKeepsShortOnesAndContext() {
+        let rate = 16000
+        func tone(_ seconds: Double) -> [Float] { (0..<Int(seconds * Double(rate))).map { 0.3 * sin(Float($0) * 0.1) } }
+        func hush(_ seconds: Double) -> [Float] { (0..<Int(seconds * Double(rate))).map { 0.0005 * sin(Float($0)) } }
+        let audio = hush(3) + tone(1) + hush(5) + tone(1) + hush(1) + tone(1) + hush(4)
+        let trimmed = WhisperService.trimmingLongSilences(audio)
+        // Each long pause keeps 0.3 s per side; the 1 s pause stays whole.
+        XCTAssertEqual(Double(trimmed.count) / Double(rate), 0.6 + 1 + 0.6 + 1 + 1 + 1 + 0.6, accuracy: 0.05)
+        XCTAssertEqual(WhisperService.trimmingLongSilences(hush(5)), hush(5), "audio with no speech passes through")
+        XCTAssertEqual(WhisperService.trimmingLongSilences(tone(2)), tone(2))
     }
 
     func testDictationPunctuationIsConservativeAndOptional() {
@@ -442,6 +449,19 @@ final class WhisperServiceTests: XCTestCase {
             "Call me")
     }
 
+    func testCleanupCollapsesAccidentalRepeatsCaseInsensitively() {
+        XCTAssertEqual(DictationCleanup.apply(to: "The the launch moved. I I I agree", enabled: true),
+                       "The launch moved. I agree")
+        XCTAssertEqual(DictationCleanup.apply(to: "really really good, one one", enabled: true), "Really really good, one one")
+        XCTAssertEqual(DictationCleanup.apply(to: "the the launch", enabled: false), "the the launch")
+    }
+
+    func testSpokenAtSignAndRemoveThatAliases() {
+        XCTAssertEqual(DictationCleanup.apply(to: "at the rate sam please review", enabled: true), "@sam please review")
+        XCTAssertEqual(DictationCleanup.apply(to: "first idea, sorry remove that, second idea", enabled: true), "Second idea")
+        XCTAssertEqual(DictationCleanup.apply(to: "wrong idea, delete that", enabled: true), "")
+    }
+
     func testCleanupDoesNotGuessAmbiguousFillersOrLists() {
         let text = "i like this, you know number one reason"
         XCTAssertEqual(DictationCleanup.apply(to: text, enabled: true),
@@ -461,7 +481,7 @@ final class WhisperServiceTests: XCTestCase {
         let manager = TranscriptionManager(whisper: whisper, parakeet: parakeet,
             gate: NativeInferenceGate(), autoEditEnabled: { true })
         let output = try await manager.transcribeDetailed(audioFile: URL(fileURLWithPath: "/unused.wav"),
-            variant: "openai_whisper-large-v3_turbo", language: "auto")
+            variant: "openai_whisper-large-v3-v20240930_turbo", language: "auto")
         XCTAssertEqual(output.text, "Raw words")
         XCTAssertGreaterThanOrEqual(output.timing.queue, 0)
         XCTAssertGreaterThanOrEqual(output.timing.modelPreparation, 0)
@@ -505,7 +525,7 @@ final class WhisperServiceTests: XCTestCase {
         }
         let manager = TranscriptionManager.shared
         let variants = (ProcessInfo.processInfo.environment["YAPPER_NATIVE_VARIANT"]).map { [$0] }
-            ?? ["openai_whisper-large-v3_turbo", AIModel.hinglishVariant, ParakeetCatalog.v3Variant]
+            ?? ["openai_whisper-large-v3-v20240930_turbo", AIModel.hinglishVariant, ParakeetCatalog.v3Variant]
         for variant in variants {
             let words = try await NativeInferenceGate.shared.run {
                 try await manager.transcribeConversationWhileLocked(

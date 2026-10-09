@@ -3,7 +3,7 @@ import KeyboardShortcuts
 import SwiftUI
 
 struct SettingsView: View {
-    @State private var selectedTab: SettingsTab = .general
+    @Binding var selectedTab: SettingsTab
 
     var body: some View {
         VStack(spacing: 0) {
@@ -37,6 +37,8 @@ struct SettingsView: View {
                 AudioSettingsTab()
             case .permissions:
                 PermissionsSettingsTab()
+            case .models:
+                AIModelsView()
             }
         }
         .background(Color.clear)
@@ -45,6 +47,7 @@ struct SettingsView: View {
 
 enum SettingsTab: String, CaseIterable, Identifiable {
     case general = "General"
+    case models = "Models"
     case audio = "Audio"
     case permissions = "Permissions"
 
@@ -55,6 +58,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .general: return "gearshape"
         case .audio: return "mic"
         case .permissions: return "shield"
+        case .models: return "cpu"
         }
     }
 }
@@ -79,6 +83,7 @@ struct SettingsTabButton: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("settings.tab.\(tab.rawValue.lowercased())")
     }
 }
 
@@ -89,8 +94,6 @@ struct GeneralSettingsTab: View {
     @AppStorage("autoUpdate") private var autoUpdate = true
     @AppStorage("selectedHotkey") private var selectedHotkey: HotkeyOption = .fn
     @AppStorage("recordingMode") private var recordingMode: Int = 0  // 0: Hold to record, 1: Toggle
-    @AppStorage("restoreClipboardAfterAutoPaste") private var restoreClipboardAfterAutoPaste =
-        true
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon: Bool = true
     @AppStorage("alwaysShowRecorderPill") private var alwaysShowRecorderPill: Bool = false
     @AppStorage("transcriptionLanguage") private var transcriptionLanguage: String = ModelSelection.defaultLanguage
@@ -210,26 +213,6 @@ struct GeneralSettingsTab: View {
 
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
-                                Text("Restore clipboard after auto-paste")
-                                    .font(Typography.bodyMedium)
-                                    .foregroundStyle(Color.textPrimary)
-                                Spacer()
-                                Toggle("", isOn: $restoreClipboardAfterAutoPaste)
-                                    .labelsHidden()
-                                    .toggleStyle(.switch)
-                            }
-
-                            Text(
-                                restoreClipboardAfterAutoPaste
-                                    ? "After Yapper pastes into the active app, it restores whatever was already on your clipboard."
-                                    : "After Yapper pastes into the active app, the transcript stays on your clipboard for manual pasting."
-                            )
-                            .font(Typography.captionSmall)
-                            .foregroundStyle(Color.textMuted)
-                        }
-
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
                                 Text("Always show recorder pill")
                                     .font(Typography.bodyMedium)
                                     .foregroundStyle(Color.textPrimary)
@@ -312,16 +295,6 @@ struct GeneralSettingsTab: View {
                         .padding(.top, 4)
 
                     Text("If this does not match the language you actually speak, the result can be inaccurate or even come back in the wrong language. Auto-detect is the safest default.")
-                        .font(Typography.captionSmall)
-                        .foregroundStyle(Color.textMuted)
-                        .padding(.top, 4)
-
-                    Text("Use a multilingual model for non-English dictation. Accuracy for languages like Hindi depends heavily on the model you selected.")
-                        .font(Typography.captionSmall)
-                        .foregroundStyle(Color.textMuted)
-                        .padding(.top, 4)
-
-                    Text("English-only models (.en) can only output English.")
                         .font(Typography.captionSmall)
                         .foregroundStyle(Color.textMuted)
                         .padding(.top, 4)
@@ -451,11 +424,20 @@ struct AudioSettingsTab: View {
                                 .foregroundStyle(Color.textMuted)
                                 .padding(.vertical, 20)
                         } else {
+                            // Automatic follows the system input, except that an open MacBook
+                            // keeps its built-in mic when AirPods would drop to call quality.
+                            DeviceRow(
+                                name: "Automatic (recommended)",
+                                isActive: audioRecorder.isAutomaticSelection,
+                                isSelected: audioRecorder.isAutomaticSelection
+                            )
+                            .onTapGesture { audioRecorder.useAutomaticInput() }
                             ForEach(audioRecorder.availableDevices, id: \.uniqueID) { device in
                                 DeviceRow(
                                     name: device.localizedName,
                                     isActive: audioRecorder.selectedDeviceId == device.uniqueID,
-                                    isSelected: audioRecorder.selectedDeviceId == device.uniqueID
+                                    isSelected: !audioRecorder.isAutomaticSelection
+                                        && audioRecorder.selectedDeviceId == device.uniqueID
                                 )
                                 .onTapGesture {
                                     audioRecorder.selectedDeviceId = device.uniqueID
