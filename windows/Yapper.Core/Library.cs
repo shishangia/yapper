@@ -109,6 +109,11 @@ public static class DictationText
     private static readonly HashSet<string> ProtectedDoubles = new(StringComparer.OrdinalIgnoreCase)
     { "very", "really", "long", "no", "bye", "that", "had" };
 
+    // Spoken numbers repeat on purpose ("four four five"), so they are never collapsed.
+    private static readonly HashSet<string> NumberWords = new(StringComparer.OrdinalIgnoreCase)
+    { "zero", "oh", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve",
+      "twenty", "thirty", "forty", "fifty", "hundred", "thousand", "million" };
+
     private static string AutoEdit(string text)
     {
         text = Scratch(text);
@@ -148,7 +153,8 @@ public static class DictationText
             if (!match.Success) break;
             var phrase = match.Groups[1].Value;
             var isSingleWord = !phrase.Contains(' ') && !phrase.Contains(',');
-            if (Regex.IsMatch(phrase, @"\d") || (isSingleWord && ProtectedDoubles.Contains(phrase)))
+            var words = phrase.ToLowerInvariant().Split([' ', ','], StringSplitOptions.RemoveEmptyEntries);
+            if (Regex.IsMatch(phrase, @"\d") || words.Any(NumberWords.Contains) || (isSingleWord && ProtectedDoubles.Contains(phrase)))
             {
                 start = match.Index + 1;
                 continue;
