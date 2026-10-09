@@ -275,6 +275,9 @@ class MiniRecorderWindowController: NSObject {
                 }, sendPaste: { clipboard.paste() },
                 restore: { clipboard.restore($0, ifCurrentStringMatches: $1) },
                 wait: { try? await Task.sleep(for: $0) })
+            if outcome == .pasteRequested, let pid = snapshot.targetPID {
+                CorrectionWatcher.shared.watch(pid: pid, pasted: text)
+            }
             job.finish(snapshot.id)
             TranscriptionManager.shared.endRecording(snapshot.id)
             let feedback = job.showPasteFeedback(outcome)
