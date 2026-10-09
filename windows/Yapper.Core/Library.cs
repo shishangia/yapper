@@ -17,8 +17,8 @@ public sealed record Recording(Guid Id, DateTimeOffset Date, string Text, double
 }
 public sealed record UsageEntry(Guid Id, DateTimeOffset Date, int Words, double Seconds);
 public sealed record DictionaryRule(string Trigger, string Replacement, bool Enabled = true);
-public sealed record Preferences(string SelectedModel = "whisper-small", string Language = "hinglish", bool ToggleRecording = true,
-    bool RestoreClipboard = true, bool TrimPeriod = true, string Hotkey = "Control+Alt+Space", bool AutoEdit = true, string Theme = "System",
+public sealed record Preferences(string SelectedModel = "whisper-turbo", string Language = "hinglish", bool ToggleRecording = true,
+    string Hotkey = "Control+Alt+Space", bool AutoEdit = true, string Theme = "System",
     bool AutoCheckUpdates = true, DateTimeOffset? LastUpdateCheck = null, bool IncludeTimestamps = false,
     int ModelIdleMinutes = 5, bool LivePreview = true, string PreferredWords = "");
 public sealed record LibraryData
@@ -106,9 +106,14 @@ public static class DictationText
         return token || number || email || url ? stem : text;
     }
 
+    private static readonly HashSet<string> ProtectedDoubles = new(StringComparer.OrdinalIgnoreCase)
+    { "very", "really", "long", "no", "bye", "that", "had" };
+
     private static string AutoEdit(string text)
     {
         text = Scratch(text);
+        text = ConvertAtSign(text);
+        text = CollapseRepeats(text);
         text = Regex.Replace(text, @"(?i)(^|[\s,.;:!?])(?:uh+|um+|umm+|uhm+|erm+|hmm+)(?=$|[\s,.;:!?])[,.;:!?]?", "$1");
         text = Regex.Replace(text, Command("new paragraph"), "\n\n");
         text = Regex.Replace(text, Command("new line"), "\n");
@@ -125,9 +130,37 @@ public static class DictationText
     private static string Command(string phrase) =>
         @"(?i)(?:^|[,;:]|(?<=[.!?\n]))[ \t]*" + phrase + @"(?=[ \t]*(?:[.,;:!?\n]|$))[ \t]*[,.]?";
 
+    // "at the rate X" / "at sign X" is a spoken "@X", written tight against the previous word.
+    private static string ConvertAtSign(string text) =>
+        Regex.Replace(text, @"(?i)\s*\bat\s+(?:the\s+rate|sign)\s+(\w+)\b", "@$1");
+
+    // Collapses an accidental immediate repeat of a 1-3 word phrase ("the the launch") to one
+    // copy, but keeps emphatic ("very very") and grammatical ("that that") doubles, and never
+    // touches a repeated number.
+    private static string CollapseRepeats(string text)
+    {
+        var regex = new Regex(@"\b(\w+(?:[\s,]+\w+){0,2})\b[\s,]+\1\b", RegexOptions.IgnoreCase);
+        var start = 0;
+        while (start <= text.Length)
+        {
+            var match = regex.Match(text, start);
+            if (!match.Success) break;
+            var phrase = match.Groups[1].Value;
+            var isSingleWord = !phrase.Contains(' ') && !phrase.Contains(',');
+            if (Regex.IsMatch(phrase, @"\d") || (isSingleWord && ProtectedDoubles.Contains(phrase)))
+            {
+                start = match.Index + 1;
+                continue;
+            }
+            text = text[..match.Index] + phrase + text[(match.Index + match.Length)..];
+            start = match.Index;
+        }
+        return text;
+    }
+
     private static string Scratch(string text)
     {
-        var command = new Regex(Command("(?:scratch that|scratch it)") + @"[\s,:;-]*");
+        var command = new Regex(Command(@"(?:scratch that|scratch it|sorry,?\s*remove that|delete that)") + @"[\s,:;-]*");
         while (command.Match(text) is { Success: true } match)
         {
             var prefix = text[..match.Index];

@@ -99,6 +99,18 @@ var tests = new (string Name, Action Run)[]
             Equal(input.Replace("\r\n", "\n").Replace('\r', '\n'), DictationText.Process(input, [], false, false));
         }
     }),
+    ("repetition collapse, at-sign and scratch-that aliases", () =>
+    {
+        Equal("The launch went well", DictationText.Process("the the launch went well", [], false, true));
+        Equal("Can you tell me", DictationText.Process("can you can you tell me", [], false, true));
+        Equal("It was a very very long wait", DictationText.Process("it was a very very long wait", [], false, true));
+        Equal("I know that that is true", DictationText.Process("I know that that is true", [], false, true));
+        Equal("Room 22 22 is down the hall", DictationText.Process("room 22 22 is down the hall", [], false, true));
+        Equal("Email john@gmail", DictationText.Process("email john at the rate gmail", [], false, true));
+        Equal("Reach me@example", DictationText.Process("reach me at sign example", [], false, true));
+        Equal("", DictationText.Process("first idea, sorry, remove that", [], false, true));
+        Equal("Keep this. Right words.", DictationText.Process("Keep this. Wrong words. Delete that. Right words.", [], false, true));
+    }),
     ("cancellation keeps busy ownership and rejects stale finish", () =>
     {
         var gate = new JobGate(); var first = gate.Begin(); gate.Cancel();
