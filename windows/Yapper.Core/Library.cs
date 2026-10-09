@@ -113,8 +113,9 @@ public static class DictationText
     {
         text = Scratch(text);
         text = ConvertAtSign(text);
-        text = CollapseRepeats(text);
         text = Regex.Replace(text, @"(?i)(^|[\s,.;:!?])(?:uh+|um+|umm+|uhm+|erm+|hmm+)(?=$|[\s,.;:!?])[,.;:!?]?", "$1");
+        // Fillers go first so "I um I think" collapses like the Mac cleanup.
+        text = CollapseRepeats(text);
         text = Regex.Replace(text, Command("new paragraph"), "\n\n");
         text = Regex.Replace(text, Command("new line"), "\n");
         text = FormatBullets(text);
