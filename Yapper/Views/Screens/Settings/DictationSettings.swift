@@ -58,7 +58,6 @@ struct CleanupSettings: View {
     @AppStorage("enableAutoEdit") private var enableAutoEdit: Bool = true
     @AppStorage(DictationPreferences.smartCleanupKey) private var smartCleanup = false
     @AppStorage(DictationPreferences.promptKey) private var cleanupPrompt = DictationPreferences.defaultPrompt
-    @AppStorage("trimDictationPeriod") private var trimDictationPeriod = true
     @State private var showsInstructions = false
 
     var body: some View {
@@ -128,25 +127,6 @@ struct CleanupSettings: View {
                         }
                         .padding(.top, 6)
                     }
-                }
-
-                Divider()
-
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text("Trim final period on short dictation")
-                            .font(Typography.bodyMedium)
-                            .foregroundStyle(Color.textPrimary)
-                        Spacer()
-                        Toggle("Trim final period on short dictation", isOn: $trimDictationPeriod)
-                            .labelsHidden()
-                            .toggleStyle(.switch)
-                            .accessibilityIdentifier("trimDictationPeriod")
-                    }
-                    Text("Removes a lone final period from an email, web address, number, or single word. Sentences and conversation transcripts stay unchanged.")
-                        .font(Typography.caption)
-                        .foregroundStyle(Color.textMuted)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Divider()

@@ -726,8 +726,7 @@ struct MiniRecorderView: View {
         do {
             if job.isPresented { statusMessage = "Transcribing..." }
             let output = try await transcription.transcribeDetailed(audioFile: url, variant: snapshot.model, language: snapshot.language)
-            let trimPeriod = UserDefaults.standard.object(forKey: "trimDictationPeriod") as? Bool ?? true
-            let text = DictationPunctuation.apply(to: output.text, enabled: trimPeriod)
+            let text = DictationPunctuation.apply(to: output.text, enabled: true)
             guard !text.isEmpty else { showError("No speech detected", for: snapshot); return }
             let duration = await getAudioDuration(url: url)
             let modelName = AIModel.availableModels.first(where: { $0.variant == snapshot.model })?.name ?? snapshot.model

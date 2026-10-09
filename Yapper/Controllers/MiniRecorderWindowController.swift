@@ -68,9 +68,6 @@ class MiniRecorderWindowController: NSObject {
     var isBusy: Bool { job.isBusy }
     private var panel: NSPanel?
     private var hostingController: NSHostingController<AnyView>?
-    private var shouldRestoreClipboardAfterAutoPaste: Bool {
-        UserDefaults.standard.object(forKey: "restoreClipboardAfterAutoPaste") as? Bool ?? true
-    }
 
     /// When on, the resting pill stays on screen even when idle. Default off:
     /// the recorder appears only while dictating and hides afterward (issue #100).
@@ -259,8 +256,7 @@ class MiniRecorderWindowController: NSObject {
         returnToIdle()
         Task {
             let clipboard = ClipboardService.shared
-            let restoreClipboard = shouldRestoreClipboardAfterAutoPaste
-            let outcome = await ClipboardService.deliver(text: text, restoreClipboard: restoreClipboard,
+            let outcome = await ClipboardService.deliver(text: text, restoreClipboard: true,
                 canCommit: { self.job.canCommit(snapshot.id) },
                 accessibilityTrusted: { clipboard.isAccessibilityTrusted },
                 activateTarget: {
@@ -268,11 +264,7 @@ class MiniRecorderWindowController: NSObject {
                     return app.activate()
                 },
                 targetIsFocused: { NSWorkspace.shared.frontmostApplication?.processIdentifier == snapshot.targetPID },
-                copy: { text in
-                    if restoreClipboard { return clipboard.copyForTemporaryPaste(text: text) }
-                    clipboard.copy(text: text)
-                    return nil
-                }, sendPaste: { clipboard.paste() },
+                copy: { clipboard.copyForTemporaryPaste(text: $0) }, sendPaste: { clipboard.paste() },
                 restore: { clipboard.restore($0, ifCurrentStringMatches: $1) },
                 wait: { try? await Task.sleep(for: $0) })
             if outcome == .pasteRequested, let pid = snapshot.targetPID {

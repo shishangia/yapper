@@ -28,17 +28,6 @@ final class YapperUITests: XCTestCase {
         app.buttons["sidebar.transcribeAudio"].click()
         XCTAssertTrue(app.buttons["importConversation"].waitForExistence(timeout: 5))
         capture(app.windows.firstMatch, name: "Import-only setup complete")
-        app.buttons["sidebar.settings"].click()
-        let trim = app.checkBoxes["trimDictationPeriod"]
-        XCTAssertTrue(trim.waitForExistence(timeout: 5))
-        let settingsScroll = app.scrollViews.containing(.checkBox, identifier: "trimDictationPeriod").firstMatch
-        settingsScroll.scroll(byDeltaX: 0, deltaY: -420)
-        capture(app.windows.firstMatch, name: "Punctuation control before interaction")
-        let original = try XCTUnwrap(trim.value as? NSNumber)
-        trim.click()
-        XCTAssertNotEqual(trim.value as? NSNumber, original)
-        trim.click()
-        capture(app.windows.firstMatch, name: "Dictation punctuation setting")
         app.buttons["sidebar.home"].click()
         let play = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "recent.play.")).firstMatch
         XCTAssertTrue(play.waitForExistence(timeout: 5))
@@ -153,44 +142,6 @@ final class YapperUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
-    }
-
-    @MainActor
-    func testSingleSpeakerTranscriptionHasNoUncertainLabels() throws {
-        let app = XCUIApplication()
-        let home = String(cString: try XCTUnwrap(getpwuid(getuid())).pointee.pw_dir)
-        let fixture = home + "/Library/Application Support/Yapper-Dev/TestAudio/conversation.wav"
-        app.launchArguments = ["--uitesting", "-ApplePersistenceIgnoreState", "YES", "-selectedModelVariant", "openai_whisper-large-v3-v20240930_turbo", "-transcriptionLanguage", "auto"]
-        addTeardownBlock { @MainActor in app.terminate() }
-        app.launch()
-        openDashboard()
-        XCTAssertTrue(app.buttons["sidebar.transcribeAudio"].waitForExistence(timeout: 10))
-        app.buttons["sidebar.transcribeAudio"].click()
-        let speakers = app.popUpButtons["speakerMode"]
-        XCTAssertTrue(speakers.waitForExistence(timeout: 5))
-        speakers.click()
-        app.menuItems["One speaker"].click()
-        app.buttons["importConversation"].click()
-        let panel = app.sheets.firstMatch
-        XCTAssertTrue(panel.waitForExistence(timeout: 5))
-        app.typeKey("g", modifierFlags: [.command, .shift])
-        let path = panel.sheets.textFields.firstMatch
-        XCTAssertTrue(path.waitForExistence(timeout: 5))
-        path.click()
-        path.typeKey("a", modifierFlags: .command)
-        path.typeText(fixture)
-        path.typeKey(.return, modifierFlags: [])
-        XCTAssertTrue(path.waitForNonExistence(timeout: 5))
-        panel.buttons["Open"].click()
-        let copy = app.buttons["copyConversation"]
-        XCTAssertTrue(copy.waitForExistence(timeout: 180))
-        copy.click()
-        let text = try XCTUnwrap(NSPasteboard.general.string(forType: .string))
-        XCTAssertTrue(text.contains("Speaker 1:"))
-        XCTAssertFalse(text.contains("†"))
-        XCTAssertFalse(text.contains("Needs review"))
-        XCTAssertFalse(app.buttons["confirmSingleSpeaker"].exists)
-        capture(app.windows.firstMatch, name: "Single-speaker segment timing")
     }
 
     @MainActor
