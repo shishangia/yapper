@@ -2,102 +2,43 @@
 
 <img src="Yapper/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" width="128" alt="Yapper's smiling chat bubble">
 
-Local dictation and conversation transcription for macOS and Windows, maintained by Shivam Shishangia.
+Free, private dictation for Mac and Windows. Hold a key, speak, and the text lands in whatever app you were typing in. Everything runs on your computer.
 
-Yapper records from the microphone or imports an audio file, transcribes it on your device, and keeps the result in a local history. Conversation mode can add timestamped speaker turns that you can rename, reassign, merge, and edit.
+## Download
 
-## Install
+**[Latest release](https://github.com/shishangia/yapper/releases/latest)**: the Mac disk image (`.dmg`, Apple Silicon, macOS 14 or later) and the Windows installer (`.exe`, Windows 11 x64), with checksums.
 
-**[Download Yapper for Mac](https://github.com/shishangia/yapper/releases/download/v1.2.2/Yapper-1.2.2-15-arm64.dmg)** | [Release notes and checksums](https://github.com/shishangia/yapper/releases/tag/v1.2.2)
+Mac: open the DMG and drag Yapper into Applications. Allow microphone access, and Accessibility access so Yapper can paste for you. The app is signed and notarized by Apple.
 
-1. Open the DMG and drag Yapper into Applications.
-2. Open Yapper from Applications.
-3. Allow microphone access for recording and Accessibility for global dictation and auto-paste. You can skip both permissions when you only want to import files.
-4. Download a model in AI Models and click Use. Transcribe Audio may ask for an additional speech or speaker model.
+Windows: run the installer. It is not code signed yet, so SmartScreen may warn; do not turn off Windows security to install it. The default shortcut is Ctrl+Alt+Space.
 
-The Mac installer is Developer ID signed and notarized by Apple. It requires macOS 14 or later on an Apple Silicon Mac. Version 1.2.2 makes Apple Intelligence cleanup safer and quicker and tidies the newer screens. Optional Apple Intelligence cleanup requires macOS 26 or later.
+Both apps check GitHub for updates and ask before installing one.
 
-## Windows
+## What it does
 
-**[Download Yapper for Windows 11 x64](https://github.com/shishangia/yapper/releases/download/v1.2.2/Yapper-1.2.2-win-x64-setup.exe)** | [Release notes and checksums](https://github.com/shishangia/yapper/releases/tag/v1.2.2)
+- Hold or toggle a shortcut to dictate into any app. A small overlay shows a live draft while you speak.
+- Cleans up what you said: filler sounds, accidental repeats, capitalization, and spoken commands such as "new paragraph", "bullet point", "scratch that" and "at the rate" for "@". On macOS 26 with Apple Intelligence turned on, an optional on-device pass tidies the text further, and the original is always kept in History.
+- Learns your names. Fix a misheard word right after Yapper pastes it (Mac) or in History, and it goes into your preferred words.
+- Transcribes audio files and microphone conversations, with optional speaker labels for up to eight people and timestamped turns you can edit. The Mac app also reads WhatsApp `.opus` voice notes.
+- Speaks your languages. New installs default to Hindi-English (Hinglish) in Latin script; Whisper covers many more, and Parakeet is a fast option for English and European languages.
+- Keeps recordings, transcripts, preferred words and snippets on your computer.
 
-Version 1.2.2 makes Cancel stop transcription right away and tidies the newer screens. Windows preview-2 and later can find it through Check for updates. Preview-1 needs one manual installation because it did not include an updater.
+## Privacy
 
-The Windows app is a native implementation with the same visual identity and local-first behavior as the Mac app. It includes tray dictation, a configurable shortcut, the floating recording pill, file import, editable speaker turns, history, dictionary rules, and Light, Dark, and System themes. The default shortcut is Ctrl+Alt+Space because Fn is firmware-controlled on many Windows keyboards.
+Audio and text never leave your computer. The only network use is downloading a model you choose from Hugging Face and checking GitHub for updates. There are no accounts, analytics, or stored voice profiles.
 
-On compatible PCs, Windows uses Vulkan for Whisper and DirectML for Nemotron. Both paths fall back to the CPU. Start with Whisper Tiny or Small on a modest PC. The installer is currently unsigned, so Windows may show a SmartScreen warning. Do not weaken Windows security settings to install it. Windows data stays under `%LOCALAPPDATA%\Yapper` and does not sync with the Mac library. Physical microphone, shortcut, browser-paste, and performance testing still need to be completed on user hardware.
+Mac data lives in `~/Library/Application Support/Yapper`; Windows data in `%LOCALAPPDATA%\Yapper`. Yapper records the microphone only, never system audio. Record other people only with their consent.
 
-## Features
+## If auto-paste stops working on Mac
 
-- Hold or toggle a global shortcut for dictation, with clipboard restoration and a compact recording window.
-- Use local Whisper or Parakeet models. New installs default to Whisper Hinglish Turbo, which produces Hindi-English speech in natural Latin script instead of Devanagari. Existing explicit language and general-model choices are preserved.
-- Import audio and video for conversation transcription. The Mac app also handles WhatsApp `.opus` files.
-- Switch conversation copy and reading views between clean paragraphs and timestamped turns without transcribing again.
-- Use offline dictation cleanup for safe filler removal, capitalization, explicit lists and paragraph commands, and bounded "scratch that" corrections.
-- Add optional local speaker labels for up to eight people with NVIDIA Nemotron 3. Speaker names stay within one recording. Yapper does not store voice profiles or recognize people across recordings.
-- Review timestamped turns, correct text and speakers, and keep changes after reopening the app. Corrections do not create duplicate history or statistics entries.
-- Keep recordings, transcripts, dictionary entries, preferences, and model files in local app storage.
-- Cancel safely. Active native inference finishes before another job starts, but canceled results are not saved or pasted.
+Remove Yapper from System Settings > Privacy & Security > Accessibility, add `/Applications/Yapper.app` again, turn it on, and reopen Yapper. This happens after a signing change makes an old permission entry stale.
 
-Conversation transcripts bypass personal dictionary replacements and dictation cleanup. Yapper preserves the original recording and keeps uncertain speaker attribution visible for review.
+## Build from source
 
-Auto Edit is enabled by default on new installs. It is deterministic: it removes a small set of filler sounds, capitalizes sentences, and follows explicit commands such as "new paragraph," "bullet point," and "number one." It does not infer tone, rewrite prose, or guess list structure with a language model. Existing Auto Edit preferences remain unchanged.
+Mac: `make build`, `make run`, `make test`. The app uses SwiftUI, [WhisperKit](https://github.com/argmaxinc/WhisperKit), [FluidAudio](https://github.com/FluidInference/FluidAudio) and [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts). A notarized DMG needs a Developer ID certificate and a `notarytool` profile: `SIGN_IDENTITY="..." APPLE_TEAM_ID="..." NOTARY_PROFILE="..." make dmg`.
 
-## Local dictation controls in 1.2.0
-
-The latest version is available for both Mac and Windows through the downloads above and Check for updates.
-
-The recording overlay shows a live draft and follows the newest words. Speech models unload after five idle minutes by default; choose another timeout or Never in Settings. Draft previews process short chunks and can skip updates on slower hardware. The complete recording remains the source of the saved transcript. Live previews can be disabled in Settings.
-
-On macOS 26 or later, optional Apple Intelligence cleanup uses the on-device system text model with editable instructions. It must be enabled and available in macOS; standard cleanup remains the fallback. Original recognition and any cleanup failure note remain in History. Windows continues to use local deterministic cleanup. No new audio model, cloud transcription, or automatic history deletion is added. Preferred-word hints are not supported by the current Parakeet decoder; explicit replacement rules remain available.
-
-## Models, privacy, and limits
-
-Model downloads connect to Hugging Face and may follow its download redirects. After the required files are downloaded, transcription and speaker processing run locally. Yapper does not use a cloud transcription API, upload audio, collect analytics, or create stored voice profiles. Release builds may contact GitHub for update metadata.
-
-Whisper supports many languages, including English, Hindi, Gujarati, and Chinese, but accuracy varies. Whisper Hinglish Turbo is specialized for Hindi-English speech in Latin script and is not intended for Gujarati or Chinese. Rapid language switching remains experimental and can cause omissions, repetition, transliteration, or translation. Parakeet v3 supports 25 European languages, not Hindi, Gujarati, or Chinese.
-
-Automatic speaker labels can split one voice or confuse short replies and overlapping speech. Choose One speaker for a known single-person recording to skip speaker detection and word alignment. Important medical, legal, or financial transcripts should always be checked against the recording.
-
-Full Whisper Large v3 needs roughly 3 GB of model storage and is recommended for Macs with at least 16 GB of memory. Large v3 Turbo is intended for lower-latency dictation. The speed and accuracy bars in Yapper are relative estimates, not measured benchmarks.
-
-## Updates
-
-Both apps have Check for updates in Settings. Yapper checks GitHub at launch when the last successful check is more than 24 hours old, unless you turn automatic checks off. It never installs an update without confirmation or while recording, transcribing, or downloading a model.
-
-The Mac updater checks the SHA-256, bundle version, Developer ID team, and Gatekeeper result before replacing the app. It keeps a rollback copy and leaves the separate local library in place. The Windows updater verifies the installer size and checksum, then opens the normal installer. It does not bypass SmartScreen.
-
-## Permissions and local data
-
-Microphone access is needed only for recording. Accessibility enables global shortcuts and pasting into another app. If dictation reaches History and manual Cmd+V works but auto-paste fails, remove Yapper from System Settings > Privacy & Security > Accessibility, add `/Applications/Yapper.app` again, enable it, then reopen Yapper. A signing-certificate change can make an old permission entry look enabled while macOS rejects it.
-
-Mac data is stored in `~/Library/Application Support/Yapper`, with preferences under `com.shishangia.yapper`. Debug builds use `Yapper-Dev` and `com.shishangia.yapper.dev`, and their global shortcuts are disabled so they cannot interfere with the installed app. Yapper records microphone audio only, not system audio. Record other people only with their consent.
-
-## Build and test
-
-The Mac app uses SwiftUI, AppKit, AVFoundation, [WhisperKit](https://github.com/argmaxinc/WhisperKit), [FluidAudio](https://github.com/FluidInference/FluidAudio), and [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts). Exact dependency versions are in `Package.resolved`.
-
-```sh
-git clone https://github.com/shishangia/yapper.git
-cd yapper
-make build
-make run
-make test
-```
-
-The default build uses ad-hoc signing. A signed Release build is required for system-wide dictation. Maintainers can create the notarized DMG with a Developer ID Application certificate and Keychain-backed `notarytool` profile:
-
-```sh
-SIGN_IDENTITY="Developer ID Application: Your Name (TEAM_ID)" \
-APPLE_TEAM_ID="YOUR_TEAM_ID" \
-NOTARY_PROFILE="yapper-notary" \
-make dmg
-```
-
-The packaging script adds dependency notices, verifies the app, submits the app and DMG to Apple, checks the installer layout, and writes a SHA-256 sidecar. It does not upload a release or replace an installed app. Never commit signing credentials, certificates, model files, recordings, or test transcripts.
-
-Windows developers need .NET 10, Rust, the `x86_64-pc-windows-msvc` Rust target, and Inno Setup 6. Run `dotnet run --project windows/Yapper.Core.Tests` for core tests and `dotnet run --project windows/Yapper.Windows` for the app. `scripts/package-windows.ps1` builds the Nemotron helper and creates the installer.
+Windows: .NET 10, Rust with the `x86_64-pc-windows-msvc` target, and Inno Setup 6. `dotnet run --project windows/Yapper.Core.Tests` runs the core tests; `scripts/package-windows.ps1` builds the installer.
 
 ## License
 
-Yapper is based on [SpeakType](https://github.com/karansinghgit/speaktype) v1.3.0 by Karan Singh. [LICENSE](LICENSE) keeps Karan Singh's original MIT notice and adds Shivam Shishangia's copyright for Yapper's changes. Dependency code and downloaded model weights retain their own licenses and terms.
+Yapper started as a fork of [SpeakType](https://github.com/karansinghgit/speaktype) by Karan Singh. [LICENSE](LICENSE) keeps the original MIT notice and adds Shivam Shishangia's copyright for Yapper's changes. Dependencies and downloaded model weights keep their own licenses.
