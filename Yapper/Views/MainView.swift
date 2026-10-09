@@ -1,7 +1,8 @@
 import SwiftUI
 
 struct MainView: View {
-    @State private var selection: SidebarItem? = .dashboard
+    @State private var selection: SidebarItem? = .home
+    @State private var settingsTab: SettingsTab = .general
     @Environment(ConversationSession.self) private var conversation
     @ObservedObject private var downloadService = ModelDownloadService.shared
     @AppStorage("hasShownModelPrompt") private var hasShownModelPrompt: Bool = false
@@ -43,33 +44,32 @@ struct MainView: View {
         }
         .background(Color.bgSidebar)
         .onAppear {
-            // If no model downloaded and haven't shown prompt, go to AI Models
+            // If no model downloaded and haven't shown prompt, go to Settings > Models
             if !hasAnyModelDownloaded && !hasShownModelPrompt {
                 hasShownModelPrompt = true
-                selection = .aiModels
+                showModels()
             }
         }
     }
     
+    private func showModels() {
+        settingsTab = .models
+        selection = .settings
+    }
+
     @ViewBuilder
     private var contentView: some View {
         switch selection {
-        case .dashboard:
+        case .home, .none:
             DashboardView(selection: $selection)
         case .transcribeAudio:
-            TranscribeAudioView()
+            TranscribeAudioView(showModels: showModels)
         case .history:
             HistoryView()
         case .dictionary:
             DictionaryView()
-        case .statistics:
-            StatisticsView()
-        case .aiModels:
-            AIModelsView()
         case .settings:
-            SettingsView()
-        case .none:
-            DashboardView(selection: $selection)
+            SettingsView(selectedTab: $settingsTab)
         }
     }
 }

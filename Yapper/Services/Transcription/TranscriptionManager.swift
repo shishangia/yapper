@@ -209,8 +209,8 @@ class TranscriptionManager {
         case noSelection, unsupportedLanguage(String)
         var errorDescription: String? {
             switch self {
-            case .noSelection: return "Choose a model in AI Models before recording or importing audio."
-            case .unsupportedLanguage(let name): return "\(name) does not support this language. Choose a compatible model in AI Models. Your selection has not been changed."
+            case .noSelection: return "Choose a model in Settings > Models before recording or importing audio."
+            case .unsupportedLanguage(let name): return "\(name) does not support this language. Choose a compatible model in Settings > Models. Your selection has not been changed."
             }
         }
     }

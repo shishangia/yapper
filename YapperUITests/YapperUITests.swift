@@ -39,7 +39,7 @@ final class YapperUITests: XCTestCase {
         XCTAssertNotEqual(trim.value as? NSNumber, original)
         trim.click()
         capture(app.windows.firstMatch, name: "Dictation punctuation setting")
-        app.buttons["sidebar.dashboard"].click()
+        app.buttons["sidebar.home"].click()
         let play = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "recent.play.")).firstMatch
         XCTAssertTrue(play.waitForExistence(timeout: 5))
         play.click()
@@ -92,7 +92,7 @@ final class YapperUITests: XCTestCase {
                 "-transcriptionLanguage", "auto"]
             app.launch()
             openDashboard()
-            XCTAssertTrue(app.buttons["sidebar.aiModels"].waitForExistence(timeout: 10))
+            XCTAssertTrue(app.buttons["sidebar.settings"].waitForExistence(timeout: 10))
             let pid = try XCTUnwrap(NSRunningApplication.runningApplications(withBundleIdentifier: "com.shishangia.yapper.dev").first?.processIdentifier)
             let element = AXUIElementCreateApplication(pid)
             var windows: CFTypeRef?
@@ -101,7 +101,7 @@ final class YapperUITests: XCTestCase {
                 var size = CGSize(width: 900, height: 720)
                 AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, AXValueCreate(.cgSize, &size)!)
             }
-            app.buttons["sidebar.aiModels"].click()
+            app.buttons["sidebar.settings"].click(); app.buttons["settings.tab.models"].click()
             XCTAssertTrue(app.descendants(matching: .any)["model.metric.speed.parakeet-tdt-0.6b-v3"].waitForExistence(timeout: 5))
             capture(app.windows.firstMatch, name: "\(appearance) model comparison narrow")
             if let window = (windows as? [AXUIElement])?.first {
@@ -109,7 +109,7 @@ final class YapperUITests: XCTestCase {
                 AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, AXValueCreate(.cgSize, &size)!)
             }
             capture(app.windows.firstMatch, name: "\(appearance) model comparison wide")
-            for route in ["transcribeAudio", "dictionary", "statistics", "settings"] {
+            for route in ["transcribeAudio", "dictionary", "settings"] {
                 app.buttons["sidebar.\(route)"].click()
                 capture(app.windows.firstMatch, name: "\(appearance) \(route)")
             }
@@ -243,7 +243,7 @@ final class YapperUITests: XCTestCase {
         open.click()
         let progress = app.staticTexts["conversationProgress"]
         XCTAssertTrue(progress.waitForExistence(timeout: 10))
-        app.buttons["sidebar.aiModels"].click()
+        app.buttons["sidebar.settings"].click(); app.buttons["settings.tab.models"].click()
         XCTAssertTrue(app.buttons["returnToTranscription"].waitForExistence(timeout: 5))
         app.buttons["sidebar.settings"].click()
         app.buttons["returnToTranscription"].click()

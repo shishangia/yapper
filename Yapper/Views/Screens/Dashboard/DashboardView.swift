@@ -1,335 +1,177 @@
-import AVKit
 import AppKit
-import CoreMedia
 import SwiftUI
-import UniformTypeIdentifiers
 
+/// Home: words dictated, this week's activity, and recent transcripts.
 struct DashboardView: View {
     @Binding var selection: SidebarItem?
     @StateObject private var historyService = HistoryService.shared
-    @StateObject private var audioRecorder = AudioRecordingService()
     private var transcription: TranscriptionManager { TranscriptionManager.shared }
-    @State private var leftColumnHeight: CGFloat = 0
 
     @AppStorage(ModelSelection.defaultsKey) private var selectedModel: String = ModelSelection.none
     @AppStorage("transcriptionLanguage") private var transcriptionLanguage: String = ModelSelection.defaultLanguage
     @AppStorage("selectedHotkey") private var selectedHotkey: HotkeyOption = .fn
     @AppStorage("recordingMode") private var recordingMode = 0
-    @State private var showFileImporter = false
-    @State private var isTranscribing = false
-    @State private var transcriptionStatus = ""
 
-    // Computed Metrics
-    var transcriptionCountToday: Int {
-        historyService.transcriptionCount(
-            since: Calendar.current.startOfDay(for: Date())
+    private var weekStart: Date {
+        Calendar.current.date(byAdding: .day, value: -6, to: Calendar.current.startOfDay(for: Date())) ?? Date()
+    }
+
+    private var stats: HomeStats {
+        let words = historyService.totalWordCount()
+        let minutesSpoken = historyService.totalDuration() / 60
+        return HomeStats(
+            words: words,
+            // Typing at an average 40 words per minute.
+            minutesSaved: words / 40,
+            wordsPerMinute: minutesSpoken >= 1 ? Int(Double(words) / minutesSpoken) : nil,
+            todayCount: historyService.transcriptionCount(since: Calendar.current.startOfDay(for: Date())),
+            weekWords: historyService.statsEntries(since: weekStart).reduce(0) { $0 + $1.wordCount }
         )
     }
 
-    var totalWordsTranscribed: Int {
-        historyService.totalWordCount()
-    }
-
-    var timeSavedMinutes: Int {
-        // Average typing speed: 40 WPM.
-        // Time saved = (Words / 40) - (Duration / 60)
-        // Simplified: Just typing time for positive reinforcement.
-        return totalWordsTranscribed / 40
-    }
-
-    var totalDurationSeconds: TimeInterval {
-        historyService.totalDuration()
-    }
-
-    var timeBasedGreeting: String {
-        let hour = Calendar.current.component(.hour, from: Date())
-        switch hour {
-        case 6..<12: return "Good morning,"
-        case 12..<17: return "Good afternoon,"
-        case 17..<22: return "Good evening,"
-        default: return "Welcome back,"
-        }
-    }
-
-    var weeklyData: [(day: String, count: Int)] {
+    private var weeklyData: [(day: String, words: Int)] {
         let calendar = Calendar.current
-        let today = Date()
-        // Last 7 days including today
-        return (0..<7).reversed().map { i in
-            let date = calendar.date(byAdding: .day, value: -i, to: today) ?? today
-            let count = historyService.statsEntries(since: calendar.startOfDay(for: date))
-                .filter { calendar.isDate($0.date, inSameDayAs: date) }
-                .count
-            let formatter = DateFormatter()
-            formatter.dateFormat = "EEE"  // Mon, Tue, Wed
-            let dayStr = String(formatter.string(from: date).prefix(3))
-            return (dayStr, count)
+        let entries = historyService.statsEntries(since: weekStart)
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEE"
+        return (0..<7).map { offset in
+            let date = calendar.date(byAdding: .day, value: offset, to: weekStart) ?? weekStart
+            let words = entries.filter { calendar.isDate($0.date, inSameDayAs: date) }.reduce(0) { $0 + $1.wordCount }
+            return (formatter.string(from: date), words)
         }
     }
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
-                // Two horizontal boxes: Stats + Activity Chart
-                HStack(alignment: .top, spacing: 20) {
-                    // Left: Stats Card
-                    StatsCard(
-                        greeting: timeBasedGreeting,
-                        wordCount: totalWordsTranscribed,
-                        timeSaved: timeSavedMinutes,
-                        todayCount: transcriptionCountToday,
-                        allTimeCount: historyService.transcriptionCount()
-                    )
-
-                    // Right: Activity Chart Card
-                    ActivityChartCard(weeklyData: weeklyData)
+            VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Home")
+                        .font(Typography.displayLarge)
+                        .foregroundStyle(Color.textPrimary)
+                    Text(selectedHotkey.recordingHint(mode: recordingMode))
+                        .font(Typography.bodySmall)
+                        .foregroundStyle(Color.textSecondary)
                 }
 
-                // Recent Transcriptions - Enhanced
-                VStack(alignment: .leading, spacing: 16) {
-                    // Header with actions
-                    HStack(alignment: .center) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Recent transcriptions")
-                                .font(Typography.displaySmall)
-                                .foregroundStyle(Color.textPrimary)
-
-                            if !historyService.items.isEmpty {
-                                Text("\(historyService.items.count) total transcriptions")
-                                    .font(Typography.caption)
-                                    .foregroundStyle(Color.textMuted)
-                            }
-                        }
-
-                        Spacer()
-
-                        if !historyService.items.isEmpty {
-                            Button(action: { selection = .history }) {
-                                HStack(spacing: 6) {
-                                    Text("View all")
-                                        .font(Typography.labelSmall)
-                                    Image(systemName: "arrow.right")
-                                        .font(.system(size: 11))
-                                }
-                                .foregroundStyle(Color.textSecondary)
-                            }
-                            .buttonStyle(.plain)
-                        }
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 20) {
+                        StatsCard(stats: stats).frame(minWidth: 380)
+                        ActivityChartCard(weeklyData: weeklyData).frame(width: 360)
                     }
-
-                    if historyService.items.isEmpty {
-                        // Empty state
-                        VStack(spacing: 16) {
-                            Image(systemName: "waveform.badge.mic")
-                                .font(.system(size: 40))
-                                .foregroundStyle(Color.textMuted.opacity(0.5))
-
-                            VStack(spacing: 6) {
-                                Text("No transcriptions yet")
-                                    .font(Typography.bodyMedium)
-                                    .foregroundStyle(Color.textPrimary)
-
-                                Text(selectedHotkey.recordingHint(mode: recordingMode))
-                                    .font(Typography.bodySmall)
-                                    .foregroundStyle(Color.textSecondary)
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 40)
-                    } else {
-                        VStack(spacing: 12) {
-                            ForEach(historyService.items.prefix(5)) { item in
-                                RecentTranscriptionRow(item: item)
-                            }
-                        }
+                    VStack(spacing: 20) {
+                        StatsCard(stats: stats)
+                        ActivityChartCard(weeklyData: weeklyData)
                     }
                 }
-                .padding(24)
-                .background(Color.bgCard)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.border, lineWidth: 1)
-                )
+
+                recentTranscriptions
             }
-            .padding(20)
-        }
-        .fileImporter(
-            isPresented: $showFileImporter,
-            allowedContentTypes: [.audio, .movie],
-            allowsMultipleSelection: false
-        ) { result in
-            switch result {
-            case .success(let urls):
-                if let url = urls.first {
-                    handleFileSelection(url: url)
-                }
-            case .failure(let error):
-                print("File selection error: \(error.localizedDescription)")
-            }
+            .padding(24)
         }
         .onAppear { transcription.warmSelectedModel() }
         .onChange(of: selectedModel) { transcription.warmSelectedModel() }
         .onChange(of: transcriptionLanguage) { transcription.warmSelectedModel() }
     }
 
-    // MARK: - Helpers
+    private var recentTranscriptions: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Recent transcriptions")
+                        .font(Typography.headlineLarge)
+                        .foregroundStyle(Color.textPrimary)
 
-    private func formatTimeSaved(minutes: Int) -> String {
-        if minutes < 60 {
-            return "\(minutes)m"
-        } else {
-            let hours = Double(minutes) / 60.0
-            return String(format: "%.1fh", hours)
-        }
-    }
-
-    private func formatDurationHighLevel(_ seconds: TimeInterval) -> String {
-        let mins = Int(seconds) / 60
-        if mins < 60 {
-            return "\(mins)m"
-        } else {
-            let hours = Double(mins) / 60.0
-            return String(format: "%.1fh", hours)
-        }
-    }
-
-    // MARK: - Actions
-
-    private func toggleRecording() {
-        if audioRecorder.isRecording {
-            Task {
-                if let url = await audioRecorder.stopRecording() {
-                    startTranscription(url: url)
-                }
-            }
-        } else {
-            audioRecorder.startRecording()
-        }
-    }
-
-    private func handleFileSelection(url: URL) {
-        let didStartAccessing = url.startAccessingSecurityScopedResource()
-        defer { if didStartAccessing { url.stopAccessingSecurityScopedResource() } }
-
-        do {
-            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(
-                url.lastPathComponent)
-            try? FileManager.default.removeItem(at: tempURL)
-            try FileManager.default.copyItem(at: url, to: tempURL)
-            startTranscription(url: tempURL)
-        } catch {
-            print("Error copying file: \(error)")
-            startTranscription(url: url)
-        }
-    }
-
-    private func startTranscription(url: URL) {
-        let variant = ModelSelection.resolvedVariant(selectedModel, language: transcriptionLanguage)
-        let language = transcriptionLanguage
-        Task {
-            isTranscribing = true
-            transcriptionStatus = "Transcribing..."
-
-            do {
-                let output = try await transcription.transcribeDetailed(audioFile: url, variant: variant, language: language)
-                let text = output.text
-                let duration = try await getAudioDuration(url: url)
-                let modelName =
-                    AIModel.availableModels.first(where: { $0.variant == variant })?.name
-                    ?? variant
-
-                DispatchQueue.main.async {
-                    historyService.addItem(
-                        transcript: text,
-                        duration: duration,
-                        audioFileURL: url,
-                        modelUsed: modelName,
-                        transcriptionTime: output.timing.total,
-                        dictationTiming: output.timing, rawTranscription: output.rawText, cleanupNote: output.cleanupNote
-                    )
-                    transcriptionStatus = "Done!"
-                    isTranscribing = false
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                        transcriptionStatus = ""
+                    if !historyService.items.isEmpty {
+                        Text(historyService.items.count == 1 ? "1 saved" : "\(historyService.items.count) saved")
+                            .font(Typography.caption)
+                            .foregroundStyle(Color.textMuted)
                     }
                 }
-            } catch {
-                DispatchQueue.main.async {
-                    transcriptionStatus = "Error"
-                    isTranscribing = false
+
+                Spacer()
+
+                if !historyService.items.isEmpty {
+                    Button(action: { selection = .history }) {
+                        HStack(spacing: 6) {
+                            Text("View all")
+                                .font(Typography.labelSmall)
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 11))
+                        }
+                        .foregroundStyle(Color.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            if historyService.items.isEmpty {
+                VStack(spacing: 6) {
+                    Text("No transcriptions yet")
+                        .font(Typography.bodyMedium)
+                        .foregroundStyle(Color.textPrimary)
+
+                    Text(selectedHotkey.recordingHint(mode: recordingMode))
+                        .font(Typography.bodySmall)
+                        .foregroundStyle(Color.textSecondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 32)
+            } else {
+                VStack(spacing: 12) {
+                    ForEach(historyService.items.prefix(5)) { item in
+                        RecentTranscriptionRow(item: item)
+                    }
                 }
             }
         }
+        .themedCard()
     }
+}
 
-    private func getAudioDuration(url: URL) async throws -> TimeInterval {
-        let asset = AVURLAsset(url: url)
-        let duration = try await asset.load(.duration)
-        return CMTimeGetSeconds(duration)
-    }
+struct HomeStats {
+    let words: Int
+    let minutesSaved: Int
+    let wordsPerMinute: Int?
+    let todayCount: Int
+    let weekWords: Int
 }
 
 // MARK: - Stats Card
 
 struct StatsCard: View {
-    let greeting: String
-    let wordCount: Int
-    let timeSaved: Int
-    let todayCount: Int
-    let allTimeCount: Int
+    let stats: HomeStats
 
-    var avgWordsPerTranscription: Int {
-        allTimeCount > 0 ? wordCount / allTimeCount : 0
+    private var timeSaved: String {
+        stats.minutesSaved < 60
+            ? "\(stats.minutesSaved) min"
+            : String(format: "%.1f h", Double(stats.minutesSaved) / 60)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            // Greeting + Hero stat
-            VStack(alignment: .leading, spacing: 12) {
-                Text(greeting)
-                    .font(Typography.displayMedium)
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(stats.words.formatted())
+                    .font(.system(size: 56, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
                     .foregroundStyle(Color.textPrimary)
-
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text("\(wordCount)")
-                        .font(.system(size: 64, weight: .light, design: .rounded))
-                        .foregroundStyle(Color.textPrimary)
-
-                    Text("words transcribed")
-                        .font(Typography.bodyLarge)
-                        .foregroundStyle(Color.textSecondary)
-                        .padding(.bottom, 10)
-                }
-
-                // Insight text
-                if timeSaved > 0 {
-                    Text("Saving you \(timeSaved) minutes of typing time")
-                        .font(Typography.bodySmall)
-                        .foregroundStyle(Color.textMuted)
-                }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                Text("words dictated")
+                    .font(Typography.bodyLarge)
+                    .foregroundStyle(Color.textSecondary)
             }
 
             Divider()
 
-            // Stats grid - 2x2
-            VStack(spacing: 20) {
-                HStack(spacing: 24) {
-                    StatBlock(
-                        value: "\(todayCount)", label: "Transcriptions today", icon: "mic.fill")
-                    Spacer()
-                    StatBlock(
-                        value: "\(allTimeCount)", label: "Total transcriptions",
-                        icon: "tray.full.fill")
+            Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 16) {
+                GridRow {
+                    StatBlock(value: timeSaved, label: "Typing time saved")
+                    StatBlock(value: stats.wordsPerMinute.map { "\($0) wpm" } ?? "None yet", label: "Speaking pace")
                 }
-
-                HStack(spacing: 24) {
-                    StatBlock(
-                        value: "\(timeSaved)m", label: "Time saved typing", icon: "clock.fill")
-                    Spacer()
-                    StatBlock(
-                        value: "\(avgWordsPerTranscription)", label: "Avg words per note",
-                        icon: "textformat.123")
+                GridRow {
+                    StatBlock(value: stats.todayCount.formatted(), label: "Transcriptions today")
+                    StatBlock(value: stats.weekWords.formatted(), label: "Words this week")
                 }
             }
         }
@@ -341,76 +183,51 @@ struct StatsCard: View {
 // MARK: - Activity Chart Card
 
 struct ActivityChartCard: View {
-    let weeklyData: [(day: String, count: Int)]
+    let weeklyData: [(day: String, words: Int)]
 
-    var totalThisWeek: Int {
-        weeklyData.reduce(0) { $0 + $1.count }
-    }
-
-    var mostActiveDay: String {
-        guard let maxDay = weeklyData.max(by: { $0.count < $1.count }) else {
-            return "None"
-        }
-        return maxDay.count > 0 ? maxDay.day : "None"
+    private var mostActiveDay: String? {
+        guard let best = weeklyData.max(by: { $0.words < $1.words }), best.words > 0 else { return nil }
+        return best.day
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            // Header
             VStack(alignment: .leading, spacing: 4) {
                 Text("This week")
-                    .font(Typography.displaySmall)
+                    .font(Typography.headlineLarge)
                     .foregroundStyle(Color.textPrimary)
-
-                HStack(spacing: 6) {
-                    Text("\(totalThisWeek)")
-                        .font(Typography.bodyMedium)
-                        .foregroundStyle(Color.textPrimary)
-                    Text("transcriptions")
-                        .font(Typography.bodySmall)
-                        .foregroundStyle(Color.textSecondary)
-
-                    if totalThisWeek > 0 {
-                        Text("•")
-                            .font(Typography.bodySmall)
-                            .foregroundStyle(Color.textMuted.opacity(0.5))
-
-                        Text("Most active: \(mostActiveDay)")
-                            .font(Typography.bodySmall)
-                            .foregroundStyle(Color.textMuted)
-                    }
-                }
+                Text(mostActiveDay.map { "Words per day · most on \($0)" } ?? "Words per day")
+                    .font(Typography.bodySmall)
+                    .foregroundStyle(Color.textSecondary)
             }
 
-            Spacer()
+            Spacer(minLength: 0)
 
-            // Chart
-            HStack(alignment: .bottom, spacing: 14) {
-                let maxCount = max(weeklyData.map { $0.count }.max() ?? 1, 1)
+            HStack(alignment: .bottom, spacing: 12) {
+                let maxWords = max(weeklyData.map(\.words).max() ?? 1, 1)
 
-                ForEach(Array(weeklyData.enumerated()), id: \.offset) { index, data in
+                ForEach(weeklyData, id: \.day) { data in
                     VStack(spacing: 8) {
-                        // Count label on top (only if > 0)
-                        Text(data.count > 0 ? "\(data.count)" : "")
+                        Text(data.words > 0 ? data.words.formatted(.number.notation(.compactName)) : " ")
                             .font(Typography.captionSmall)
+                            .monospacedDigit()
                             .foregroundStyle(Color.textMuted)
-                            .frame(height: 14)
 
-                        // Bar
                         RoundedRectangle(cornerRadius: 5)
-                            .fill(data.count > 0 ? Color.textPrimary : Color.border.opacity(0.3))
-                            .frame(height: max(CGFloat(data.count) / CGFloat(maxCount) * 120, 8))
+                            .fill(data.words > 0 ? Color.accentPrimary : Color.border.opacity(0.4))
+                            .frame(height: max(CGFloat(data.words) / CGFloat(maxWords) * 120, 6))
 
-                        // Day label
                         Text(data.day)
                             .font(Typography.captionSmall)
-                            .foregroundStyle(data.count > 0 ? Color.textPrimary : Color.textMuted)
+                            .foregroundStyle(data.words > 0 ? Color.textPrimary : Color.textMuted)
                     }
                     .frame(maxWidth: .infinity)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(data.day), \(data.words) words")
                 }
             }
         }
-        .frame(width: 420)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .themedCard()
     }
 }
@@ -420,27 +237,18 @@ struct ActivityChartCard: View {
 struct StatBlock: View {
     let value: String
     let label: String
-    let icon: String
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 18))
-                .foregroundStyle(Color.textMuted)
-                .frame(width: 24)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(value)
-                    .font(.system(size: 24, weight: .medium, design: .rounded))
-                    .foregroundStyle(Color.textPrimary)
-
-                Text(label)
-                    .font(Typography.captionSmall)
-                    .foregroundStyle(Color.textMuted)
-            }
-
-            Spacer()
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value)
+                .font(.system(size: 22, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(Color.textPrimary)
+            Text(label)
+                .font(Typography.caption)
+                .foregroundStyle(Color.textSecondary)
         }
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -614,13 +422,5 @@ struct RecentTranscriptionRow: View {
         if seconds < 3600 { return "\(seconds / 60)m ago" }
         if seconds < 86400 { return "\(seconds / 3600)h ago" }
         return "\(seconds / 86400)d ago"
-    }
-}
-
-// MARK: - Preference Key
-struct HeightPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
     }
 }

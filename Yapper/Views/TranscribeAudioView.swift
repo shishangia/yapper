@@ -2,6 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct TranscribeAudioView: View {
+    var showModels: () -> Void = {}
     @Environment(ConversationSession.self) private var session
     @ObservedObject private var history = HistoryService.shared
     @AppStorage(ModelSelection.defaultsKey) private var selectedModel = ModelSelection.none
@@ -88,8 +89,8 @@ struct TranscribeAudioView: View {
                                 Button("Record microphone", systemImage: "mic", action: session.startRecording)
                                     .buttonStyle(.stSecondary).accessibilityIdentifier("startConversationRecording")
                             } else if session.selectedModel.isEmpty {
-                                Text("Choose a model in AI Models to get started.")
-                                    .font(Typography.bodySmall).foregroundStyle(Color.textSecondary)
+                                Button("Choose a model", systemImage: "cpu", action: showModels)
+                                    .buttonStyle(.stPrimary)
                             } else {
                                 Button("Download required models", systemImage: "arrow.down.circle", action: session.downloadModels)
                                     .buttonStyle(.stPrimary)

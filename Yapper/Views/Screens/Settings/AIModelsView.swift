@@ -35,24 +35,12 @@ struct AIModelsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("AI Models")
-                        .font(Typography.displayLarge)
-                        .foregroundStyle(Color.textPrimary)
-                    Text("Download and manage the models used on this Mac.")
-                        .font(Typography.bodyMedium)
-                        .foregroundStyle(Color.textSecondary)
-                }
-
                 currentSelection
                 recommendationControls
                 modelList
             }
-            .frame(maxWidth: 860, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding(28)
+            .padding(24)
         }
-        .background(Color.bgContent)
         .tint(Color.accentPrimary)
         .accessibilityIdentifier("aiModels")
         .task {

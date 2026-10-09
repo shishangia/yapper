@@ -3,7 +3,7 @@ import KeyboardShortcuts
 import SwiftUI
 
 struct SettingsView: View {
-    @State private var selectedTab: SettingsTab = .general
+    @Binding var selectedTab: SettingsTab
 
     var body: some View {
         VStack(spacing: 0) {
@@ -37,6 +37,8 @@ struct SettingsView: View {
                 AudioSettingsTab()
             case .permissions:
                 PermissionsSettingsTab()
+            case .models:
+                AIModelsView()
             }
         }
         .background(Color.clear)
@@ -45,6 +47,7 @@ struct SettingsView: View {
 
 enum SettingsTab: String, CaseIterable, Identifiable {
     case general = "General"
+    case models = "Models"
     case audio = "Audio"
     case permissions = "Permissions"
 
@@ -55,6 +58,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .general: return "gearshape"
         case .audio: return "mic"
         case .permissions: return "shield"
+        case .models: return "cpu"
         }
     }
 }
@@ -79,6 +83,7 @@ struct SettingsTabButton: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("settings.tab.\(tab.rawValue.lowercased())")
     }
 }
 

@@ -135,7 +135,7 @@ struct HistoryView: View {
                 historyService.clearAll()
             }
         } message: {
-            Text("This removes your saved transcripts, but keeps your statistics history.")
+            Text("This removes your saved transcripts. Your totals on Home stay.")
         }
         .alert(
             "Delete transcript?",
