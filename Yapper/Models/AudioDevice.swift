@@ -212,11 +212,12 @@ enum AutomaticInput {
     static func currentUID() -> String? {
         var device = AudioDeviceID(0)
         let defaultID = property(AudioObjectID(kAudioObjectSystemObject), kAudioHardwarePropertyDefaultInputDevice, &device) ? device : nil
-        let builtIn = deviceIDs().first {
-            transport($0) == kAudioDeviceTransportTypeBuiltIn && hasInput($0)
-        }
         return choose(defaultUID: defaultID.flatMap(uid), defaultTransport: defaultID.flatMap(transport),
-                      builtInUID: builtIn.flatMap(uid), lidOpen: lidOpen())
+                      builtInUID: builtInUID(), lidOpen: lidOpen())
+    }
+
+    static func builtInUID() -> String? {
+        deviceIDs().first { transport($0) == kAudioDeviceTransportTypeBuiltIn && hasInput($0) }.flatMap(uid)
     }
 
     /// Desktops have no clamshell state, so a missing value counts as open.

@@ -37,6 +37,28 @@ final class AudioRecordingServiceTests: XCTestCase {
         XCTAssertNil(AutomaticInput.choose(defaultUID: nil, defaultTransport: nil, builtInUID: "builtin", lidOpen: true))
     }
 
+    func testOneTimeResetMakesAnAutoSavedBuiltInMicAutomatic() throws {
+        let suite = "AudioRecordingServiceTests.reset"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let key = AudioRecordingService.selectedDeviceDefaultsKey
+
+        defaults.set("BuiltInMicrophoneDevice", forKey: key)
+        AudioRecordingService.resetAutoSavedInput(defaults, builtInUID: "BuiltInMicrophoneDevice")
+        XCTAssertNil(defaults.string(forKey: key))
+
+        // Runs once: a later deliberate built-in choice is kept.
+        defaults.set("BuiltInMicrophoneDevice", forKey: key)
+        AudioRecordingService.resetAutoSavedInput(defaults, builtInUID: "BuiltInMicrophoneDevice")
+        XCTAssertEqual(defaults.string(forKey: key), "BuiltInMicrophoneDevice")
+
+        defaults.removePersistentDomain(forName: suite)
+        defaults.set("usb-mic", forKey: key)
+        AudioRecordingService.resetAutoSavedInput(defaults, builtInUID: "BuiltInMicrophoneDevice")
+        XCTAssertEqual(defaults.string(forKey: key), "usb-mic")
+    }
+
     func testStopRecordingWhenNotRecording() async {
         let url = await service.stopRecording()
         XCTAssertNil(url, "Should return nil url when not recording")

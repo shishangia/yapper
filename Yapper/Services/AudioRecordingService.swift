@@ -26,14 +26,26 @@ class AudioRecordingService: NSObject, ObservableObject {
         didSet {
             setupSession()
             // Persist explicit choices so they survive restarts; automatic picks stay automatic.
-            if !isAutomaticSelection, let selectedDeviceId {
+            if !isSettingAutomatically, let selectedDeviceId {
                 UserDefaults.standard.set(selectedDeviceId, forKey: Self.selectedDeviceDefaultsKey)
             }
         }
     }
 
-    private static let selectedDeviceDefaultsKey = "selectedAudioDeviceId"
-    private var isAutomaticSelection = false
+    static let selectedDeviceDefaultsKey = "selectedAudioDeviceId"
+    private static let autoSavedInputResetKey = "didResetAutoSavedInputDevice"
+    private var isSettingAutomatically = false
+
+    /// Builds before 1.3.0 saved the first device as a fallback, which looks like an explicit choice.
+    /// A saved built-in mic is almost always that fallback, so it becomes automatic once. Any other
+    /// saved device was picked on purpose and stays.
+    static func resetAutoSavedInput(_ defaults: UserDefaults, builtInUID: String?) {
+        guard !defaults.bool(forKey: autoSavedInputResetKey) else { return }
+        defaults.set(true, forKey: autoSavedInputResetKey)
+        if let builtInUID, defaults.string(forKey: selectedDeviceDefaultsKey) == builtInUID {
+            defaults.removeObject(forKey: selectedDeviceDefaultsKey)
+        }
+    }
 
     private var captureSession: AVCaptureSession?
     private var audioOutput: AVCaptureAudioDataOutput?
@@ -136,6 +148,7 @@ class AudioRecordingService: NSObject, ObservableObject {
         // Restore the persisted device before discovery completes; AVCaptureDevice(uniqueID:)
         // resolves it directly, and fetchAvailableDevices() falls back if it is gone.
         // (didSet does not fire during init, matching the previous lazy session setup.)
+        if !AppEnvironment.isRunningTests { Self.resetAutoSavedInput(.standard, builtInUID: AutomaticInput.builtInUID()) }
         selectedDeviceId = UserDefaults.standard.string(forKey: Self.selectedDeviceDefaultsKey) ?? AutomaticInput.currentUID()
         fetchAvailableDevices()
 
@@ -184,9 +197,9 @@ class AudioRecordingService: NSObject, ObservableObject {
         let next = explicit ?? AutomaticInput.currentUID().flatMap { ids.contains($0) ? $0 : nil }
             ?? availableDevices.first?.uniqueID
         guard next != selectedDeviceId else { return }
-        isAutomaticSelection = explicit == nil
+        isSettingAutomatically = explicit == nil
         selectedDeviceId = next
-        isAutomaticSelection = false
+        isSettingAutomatically = false
     }
 
     func setupSession() {
