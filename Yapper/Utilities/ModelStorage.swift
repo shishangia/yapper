@@ -3,7 +3,6 @@
 //  Yapper
 //
 //  All model downloads and tokenizer caches belong to this app's isolated store.
-//  Older locations are read only by the explicit LegacyImportService operation.
 //
 
 import Foundation

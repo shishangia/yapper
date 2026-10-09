@@ -49,12 +49,6 @@ class HistoryService: ObservableObject {
         self.defaults = defaults
         loadStats()
         loadHistory()
-        NotificationCenter.default.addObserver(self, selector: #selector(reloadAfterImport), name: .legacyLibraryImported, object: nil)
-    }
-
-    @objc private func reloadAfterImport() {
-        loadStats()
-        loadHistory()
     }
     
     func addItem(transcript: String, duration: TimeInterval, audioFileURL: URL? = nil, modelUsed: String? = nil,

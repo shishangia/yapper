@@ -29,7 +29,6 @@ struct YapperApp: App {
     @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding: Bool = false
     @AppStorage("appTheme") private var appTheme: AppTheme = .system
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon: Bool = true
-    @AppStorage("legacyImportOffered") private var legacyImportOffered = false
 
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @State private var conversation = ConversationSession.shared
@@ -46,9 +45,7 @@ struct YapperApp: App {
         WindowGroup(AppEnvironment.displayName, id: "main-dashboard") {
             ThemeProvider {
                 Group {
-                    if !legacyImportOffered && LegacyImportService.shared.canImport {
-                        LegacyImportView()
-                    } else if hasCompletedOnboarding {
+                    if hasCompletedOnboarding {
                         MainView()
                     } else {
                         OnboardingView()
@@ -73,9 +70,6 @@ struct YapperApp: App {
         MenuBarExtra(isInserted: $showMenuBarIcon) {
             ThemeProvider {
                 VStack(spacing: 12) {
-                    if !legacyImportOffered && LegacyImportService.shared.canImport {
-                        Button("Open Yapper", action: openDashboard).buttonStyle(.stPrimary).padding()
-                    } else {
                     if conversation.isBusy {
                         Button(action: openDashboard) {
                             Label(conversation.status, systemImage: "waveform")
@@ -85,10 +79,9 @@ struct YapperApp: App {
                         .padding(.top, 12)
                     }
                     MenuBarDashboardView(
-                    openDashboard: openDashboard,
-                    quit: { NSApplication.shared.terminate(nil) }
+                        openDashboard: openDashboard,
+                        quit: { NSApplication.shared.terminate(nil) }
                     )
-                    }
                 }
             }
             .preferredColorScheme(appTheme.colorScheme)

@@ -12,7 +12,7 @@ final class YapperUITests: XCTestCase {
         let app = XCUIApplication()
         addTeardownBlock { @MainActor in app.terminate() }
         app.launchArguments = ["--uitesting", "--test-onboarding", "--test-permissions-denied", "-ApplePersistenceIgnoreState", "YES",
-            "-legacyImportOffered", "YES", "-selectedModelVariant", "openai_whisper-large-v3-v20240930_turbo",
+            "-selectedModelVariant", "openai_whisper-large-v3-v20240930_turbo",
             "-transcriptionLanguage", "auto", "-selectedHotkey", "rightOption", "-recordingMode", "1"]
         app.launch()
         if !app.windows.firstMatch.waitForExistence(timeout: 3) { openDashboard() }
