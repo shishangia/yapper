@@ -34,7 +34,7 @@ class AudioRecordingService: NSObject, ObservableObject {
     }
 
     static let selectedDeviceDefaultsKey = "selectedAudioDeviceId"
-    private static let autoSavedInputResetKey = "didResetAutoSavedInputDevice"
+    private static let autoSavedInputResetKey = "didResetAutoSavedInputDevice2"
     private var isSettingAutomatically = false
     /// True when no input was chosen explicitly, so Yapper picks one (see AutomaticInput).
     @Published private(set) var isAutomaticSelection = true
@@ -42,6 +42,7 @@ class AudioRecordingService: NSObject, ObservableObject {
     /// Builds before 1.3.0 saved the first device as a fallback, which looks like an explicit choice.
     /// A saved built-in mic is almost always that fallback, so it becomes automatic once. Any other
     /// saved device was picked on purpose and stays.
+    // Versioned: 1.3.0 reset the key but then saved the automatic pick again at launch, so run once more.
     static func resetAutoSavedInput(_ defaults: UserDefaults, builtInUID: String?) {
         guard !defaults.bool(forKey: autoSavedInputResetKey) else { return }
         defaults.set(true, forKey: autoSavedInputResetKey)
@@ -161,7 +162,10 @@ class AudioRecordingService: NSObject, ObservableObject {
         if !AppEnvironment.isRunningTests { Self.resetAutoSavedInput(.standard, builtInUID: AutomaticInput.builtInUID()) }
         let saved = UserDefaults.standard.string(forKey: Self.selectedDeviceDefaultsKey)
         isAutomaticSelection = saved == nil
+        // An automatic pick must not be saved, or it counts as an explicit choice on the next launch.
+        isSettingAutomatically = saved == nil
         selectedDeviceId = saved ?? AutomaticInput.currentUID()
+        isSettingAutomatically = false
         fetchAvailableDevices()
 
         // Listen for device changes (plug/unplug)
