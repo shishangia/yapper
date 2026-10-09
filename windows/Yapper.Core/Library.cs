@@ -137,8 +137,12 @@ public static class DictationText
         @"(?i)(?:^|[,;:]|(?<=[.!?\n]))[ \t]*" + phrase + @"(?=[ \t]*(?:[.,;:!?\n]|$))[ \t]*[,.]?";
 
     // "at the rate X" / "at sign X" is a spoken "@X", written tight against the previous word.
+    // Mirrors the Mac rule: tight against the previous word only for an email domain
+    // ("john at the rate gmail.com"), otherwise "@handle"; prose like "at the rate of" is left alone.
     private static string ConvertAtSign(string text) =>
-        Regex.Replace(text, @"(?i)\s*\bat\s+(?:the\s+rate|sign)\s+(\w+)\b", "@$1");
+        Regex.Replace(text,
+            @"(?i)(?:(?<=[\p{L}\p{N}._-])[ \t]+(?:at the rate|at sign)[ \t]+(?=[\p{L}\p{N}_-]+\.[\p{L}])|(?<![\p{L}\p{N}])(?:at the rate|at sign)[ \t]+(?!(?:of|we|we're|they|they're|you|you're|i|i'm|he|she|it|it's|this|that|which|things|at|in)\b)(?=[\p{L}\p{N}_]))",
+            "@");
 
     // Collapses an accidental immediate repeat of a 1-3 word phrase ("the the launch") to one
     // copy, but keeps emphatic ("very very") and grammatical ("that that") doubles, and never
