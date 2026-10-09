@@ -424,11 +424,20 @@ struct AudioSettingsTab: View {
                                 .foregroundStyle(Color.textMuted)
                                 .padding(.vertical, 20)
                         } else {
+                            // Automatic follows the system input, except that an open MacBook
+                            // keeps its built-in mic when AirPods would drop to call quality.
+                            DeviceRow(
+                                name: "Automatic (recommended)",
+                                isActive: audioRecorder.isAutomaticSelection,
+                                isSelected: audioRecorder.isAutomaticSelection
+                            )
+                            .onTapGesture { audioRecorder.useAutomaticInput() }
                             ForEach(audioRecorder.availableDevices, id: \.uniqueID) { device in
                                 DeviceRow(
                                     name: device.localizedName,
                                     isActive: audioRecorder.selectedDeviceId == device.uniqueID,
-                                    isSelected: audioRecorder.selectedDeviceId == device.uniqueID
+                                    isSelected: !audioRecorder.isAutomaticSelection
+                                        && audioRecorder.selectedDeviceId == device.uniqueID
                                 )
                                 .onTapGesture {
                                     audioRecorder.selectedDeviceId = device.uniqueID
