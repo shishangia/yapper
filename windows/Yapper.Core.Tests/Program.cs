@@ -106,8 +106,8 @@ var tests = new (string Name, Action Run)[]
         Equal("It was a very very long wait", DictationText.Process("it was a very very long wait", [], false, true));
         Equal("I know that that is true", DictationText.Process("I know that that is true", [], false, true));
         Equal("Room 22 22 is down the hall", DictationText.Process("room 22 22 is down the hall", [], false, true));
-        Equal("Email john@gmail", DictationText.Process("email john at the rate gmail", [], false, true));
-        Equal("Reach me@example", DictationText.Process("reach me at sign example", [], false, true));
+        Equal("Email john@gmail.com", DictationText.Process("email john at the rate gmail.com", [], false, true));
+        Equal("Reach me@example.com", DictationText.Process("reach me at sign example.com", [], false, true));
         Equal("", DictationText.Process("first idea, sorry, remove that", [], false, true));
         Equal("Keep this. Right words.", DictationText.Process("Keep this. Wrong words. Delete that. Right words.", [], false, true));
     }),
