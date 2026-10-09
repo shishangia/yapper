@@ -25,14 +25,15 @@ class AudioRecordingService: NSObject, ObservableObject {
     @Published var selectedDeviceId: String? {
         didSet {
             setupSession()
-            // Persist so the selection survives app restarts.
-            if let selectedDeviceId {
+            // Persist explicit choices so they survive restarts; automatic picks stay automatic.
+            if !isAutomaticSelection, let selectedDeviceId {
                 UserDefaults.standard.set(selectedDeviceId, forKey: Self.selectedDeviceDefaultsKey)
             }
         }
     }
 
     private static let selectedDeviceDefaultsKey = "selectedAudioDeviceId"
+    private var isAutomaticSelection = false
 
     private var captureSession: AVCaptureSession?
     private var audioOutput: AVCaptureAudioDataOutput?
@@ -135,11 +136,8 @@ class AudioRecordingService: NSObject, ObservableObject {
         // Restore the persisted device before discovery completes; AVCaptureDevice(uniqueID:)
         // resolves it directly, and fetchAvailableDevices() falls back if it is gone.
         // (didSet does not fire during init, matching the previous lazy session setup.)
-        selectedDeviceId = UserDefaults.standard.string(forKey: Self.selectedDeviceDefaultsKey)
+        selectedDeviceId = UserDefaults.standard.string(forKey: Self.selectedDeviceDefaultsKey) ?? AutomaticInput.currentUID()
         fetchAvailableDevices()
-        if selectedDeviceId == nil, let first = availableDevices.first {
-            selectedDeviceId = first.uniqueID
-        }
 
         // Listen for device changes (plug/unplug)
         NotificationCenter.default.addObserver(
@@ -172,21 +170,23 @@ class AudioRecordingService: NSObject, ObservableObject {
             self.availableDevices = discoverySession.devices.filter { device in
                 !device.localizedName.localizedCaseInsensitiveContains("Microsoft Teams")
             }
-            // Keep the current (possibly persisted) selection if it is still
-            // connected; otherwise fall back to the first available device, or
-            // clear it when no inputs remain.
-            let selectionIsAvailable = self.availableDevices.contains {
-                $0.uniqueID == self.selectedDeviceId
-            }
-            if !selectionIsAvailable {
-                if let first = self.availableDevices.first {
-                    print("🎤 Falling back to available input device: \(first.localizedName)")
-                    self.selectedDeviceId = first.uniqueID
-                } else {
-                    self.selectedDeviceId = nil
-                }
-            }
+            self.refreshSelection()
         }
+    }
+
+    /// Uses the persisted explicit choice while it is connected; otherwise the automatic input,
+    /// then the first available device, or nothing when no inputs remain.
+    private func refreshSelection() {
+        let ids = Set(availableDevices.map(\.uniqueID))
+        // Never switch mid-recording unless the current input disappeared.
+        if isRecording, let current = selectedDeviceId, ids.contains(current) { return }
+        let explicit = UserDefaults.standard.string(forKey: Self.selectedDeviceDefaultsKey).flatMap { ids.contains($0) ? $0 : nil }
+        let next = explicit ?? AutomaticInput.currentUID().flatMap { ids.contains($0) ? $0 : nil }
+            ?? availableDevices.first?.uniqueID
+        guard next != selectedDeviceId else { return }
+        isAutomaticSelection = explicit == nil
+        selectedDeviceId = next
+        isAutomaticSelection = false
     }
 
     func setupSession() {
@@ -260,6 +260,8 @@ class AudioRecordingService: NSObject, ObservableObject {
         requestPermission()
 
         guard !isRecording else { return }
+        // The default input can change without a connect event, e.g. in Sound settings.
+        if !availableDevices.isEmpty { refreshSelection() }
         let emits = generatesChunks && previewSession != nil && (UserDefaults.standard.object(forKey: DictationPreferences.previewKey) as? Bool ?? true)
         // Read on audioQueue by the capture delegate and chunk writers; queued ahead of writer setup.
         audioQueue.async { self.previewSession = previewSession; self.emitsPreview = emits }

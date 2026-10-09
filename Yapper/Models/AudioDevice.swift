@@ -7,6 +7,8 @@
 
 import Foundation
 import AVFoundation
+import CoreAudio
+import IOKit
 
 /// Represents an audio input device
 struct AudioDevice: Identifiable, Codable, Equatable {
@@ -193,3 +195,80 @@ enum InputMode: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+
+// MARK: - Automatic Input
+
+/// Picks the input when the user has not chosen one. AirPods and other Bluetooth mics switch the
+/// headset to a low-quality call profile, so an open MacBook's built-in mic is used instead.
+enum AutomaticInput {
+    static func choose(defaultUID: String?, defaultTransport: UInt32?, builtInUID: String?, lidOpen: Bool) -> String? {
+        let bluetooth = defaultTransport == kAudioDeviceTransportTypeBluetooth
+            || defaultTransport == kAudioDeviceTransportTypeBluetoothLE
+        guard bluetooth, lidOpen, let builtInUID else { return defaultUID }
+        return builtInUID
+    }
+
+    /// The Core Audio UID of the automatic input, which matches AVCaptureDevice.uniqueID.
+    static func currentUID() -> String? {
+        var device = AudioDeviceID(0)
+        let defaultID = property(AudioObjectID(kAudioObjectSystemObject), kAudioHardwarePropertyDefaultInputDevice, &device) ? device : nil
+        let builtIn = deviceIDs().first {
+            transport($0) == kAudioDeviceTransportTypeBuiltIn && hasInput($0)
+        }
+        return choose(defaultUID: defaultID.flatMap(uid), defaultTransport: defaultID.flatMap(transport),
+                      builtInUID: builtIn.flatMap(uid), lidOpen: lidOpen())
+    }
+
+    /// Desktops have no clamshell state, so a missing value counts as open.
+    static func lidOpen() -> Bool {
+        let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPMrootDomain"))
+        guard service != 0 else { return true }
+        defer { IOObjectRelease(service) }
+        let closed = IORegistryEntryCreateCFProperty(service, "AppleClamshellState" as CFString, kCFAllocatorDefault, 0)?
+            .takeRetainedValue() as? Bool
+        return closed != true
+    }
+
+    private static func address(_ selector: AudioObjectPropertySelector,
+                                scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal) -> AudioObjectPropertyAddress {
+        AudioObjectPropertyAddress(mSelector: selector, mScope: scope, mElement: kAudioObjectPropertyElementMain)
+    }
+
+    private static func property(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, _ value: inout UInt32) -> Bool {
+        var address = address(selector)
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        return AudioObjectGetPropertyData(object, &address, 0, nil, &size, &value) == noErr
+    }
+
+    private static func deviceIDs() -> [AudioDeviceID] {
+        var address = address(kAudioHardwarePropertyDevices)
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size) == noErr
+        else { return [] }
+        var ids = [AudioDeviceID](repeating: 0, count: Int(size) / MemoryLayout<AudioDeviceID>.size)
+        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &ids) == noErr
+        else { return [] }
+        return ids
+    }
+
+    private static func transport(_ device: AudioDeviceID) -> UInt32? {
+        var value: UInt32 = 0
+        return property(device, kAudioDevicePropertyTransportType, &value) ? value : nil
+    }
+
+    private static func uid(_ device: AudioDeviceID) -> String? {
+        var address = address(kAudioDevicePropertyDeviceUID)
+        var value: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        guard withUnsafeMutablePointer(to: &value, {
+            AudioObjectGetPropertyData(device, &address, 0, nil, &size, $0) == noErr
+        }) else { return nil }
+        return value?.takeRetainedValue() as String?
+    }
+
+    private static func hasInput(_ device: AudioDeviceID) -> Bool {
+        var address = address(kAudioDevicePropertyStreams, scope: kAudioObjectPropertyScopeInput)
+        var size: UInt32 = 0
+        return AudioObjectGetPropertyDataSize(device, &address, 0, nil, &size) == noErr && size > 0
+    }
+}

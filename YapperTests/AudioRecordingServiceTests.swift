@@ -1,5 +1,6 @@
 import XCTest
 import AVFoundation
+import CoreAudio
 @testable import Yapper
 
 final class AudioRecordingServiceTests: XCTestCase {
@@ -21,6 +22,21 @@ final class AudioRecordingServiceTests: XCTestCase {
         XCTAssertFalse(service.generatesStreamingChunks)
     }
     
+    func testAutomaticInputPrefersBuiltInMicOverBluetoothWhenLidIsOpen() {
+        let bluetooth = kAudioDeviceTransportTypeBluetooth, usb = kAudioDeviceTransportTypeUSB
+        XCTAssertEqual(AutomaticInput.choose(defaultUID: "airpods", defaultTransport: bluetooth,
+                                             builtInUID: "builtin", lidOpen: true), "builtin")
+        XCTAssertEqual(AutomaticInput.choose(defaultUID: "airpods", defaultTransport: kAudioDeviceTransportTypeBluetoothLE,
+                                             builtInUID: "builtin", lidOpen: true), "builtin")
+        XCTAssertEqual(AutomaticInput.choose(defaultUID: "airpods", defaultTransport: bluetooth,
+                                             builtInUID: "builtin", lidOpen: false), "airpods")
+        XCTAssertEqual(AutomaticInput.choose(defaultUID: "airpods", defaultTransport: bluetooth,
+                                             builtInUID: nil, lidOpen: true), "airpods")
+        XCTAssertEqual(AutomaticInput.choose(defaultUID: "usb-mic", defaultTransport: usb,
+                                             builtInUID: "builtin", lidOpen: true), "usb-mic")
+        XCTAssertNil(AutomaticInput.choose(defaultUID: nil, defaultTransport: nil, builtInUID: "builtin", lidOpen: true))
+    }
+
     func testStopRecordingWhenNotRecording() async {
         let url = await service.stopRecording()
         XCTAssertNil(url, "Should return nil url when not recording")
