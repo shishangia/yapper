@@ -59,6 +59,16 @@ final class AudioRecordingServiceTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: key), "usb-mic")
     }
 
+    func testUseAutomaticInputForgetsTheExplicitChoice() {
+        let key = AudioRecordingService.selectedDeviceDefaultsKey
+        let original = UserDefaults.standard.object(forKey: key)
+        defer { UserDefaults.standard.set(original, forKey: key) }
+        UserDefaults.standard.set("some-explicit-mic", forKey: key)
+        service.useAutomaticInput()
+        XCTAssertTrue(service.isAutomaticSelection)
+        XCTAssertNil(UserDefaults.standard.string(forKey: AudioRecordingService.selectedDeviceDefaultsKey))
+    }
+
     func testStopRecordingWhenNotRecording() async {
         let url = await service.stopRecording()
         XCTAssertNil(url, "Should return nil url when not recording")
