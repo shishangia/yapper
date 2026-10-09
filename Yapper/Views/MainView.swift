@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 struct MainView: View {
@@ -6,6 +7,8 @@ struct MainView: View {
     @Environment(ConversationSession.self) private var conversation
     @ObservedObject private var downloadService = ModelDownloadService.shared
     @AppStorage("hasShownModelPrompt") private var hasShownModelPrompt: Bool = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var learnedMessage: String?
     
     private var hasAnyModelDownloaded: Bool {
         downloadService.downloadProgress.values.contains { $0 >= 1.0 }
@@ -41,6 +44,22 @@ struct MainView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .bottom) {
+                if let learnedMessage { Toast(message: learnedMessage) }
+            }
+            .task(id: learnedMessage) {
+                guard learnedMessage != nil else { return }
+                try? await Task.sleep(for: .seconds(2.5))
+                withAnimation(reduceMotion ? nil : .default) { learnedMessage = nil }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .yapperLearnedWords).receive(on: RunLoop.main)) { note in
+                let words = note.userInfo?["words"] as? [String] ?? []
+                let full = note.userInfo?["full"] as? Bool ?? false
+                guard full || !words.isEmpty else { return }
+                withAnimation(reduceMotion ? nil : .default) {
+                    learnedMessage = full ? "Preferred words are full" : "Learned \(words.formatted(.list(type: .and)))"
+                }
+            }
         }
         .background(Color.bgSidebar)
         .onAppear {

@@ -1,58 +1,33 @@
+import Combine
 import SwiftUI
 
-/// Manage custom word replacements and spoken snippets.
-///
-/// A rule rewrites the trigger phrase in the final transcript with the
-/// replacement text — say "my email" and get your address, or fix a term the
-/// model keeps mishearing. Rules run fully offline for every engine.
+/// Preferred words first, then snippets: say a phrase, paste something else.
+/// Everything runs offline on this Mac.
 struct DictionaryView: View {
+    static let recentlyLearnedKey = "recentlyLearnedWords"
+
     @AppStorage(DictationPreferences.preferredWordsKey) private var preferredWords = ""
     @StateObject private var dictionary = DictionaryService.shared
+    @State private var recentlyLearned: [String] = []
     @State private var editorEntry: DictionaryEntry?
     @State private var isPresentingEditor = false
     @State private var entryPendingDeletion: DictionaryEntry?
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
-                header
+            VStack(alignment: .leading, spacing: 24) {
+                Text("Dictionary")
+                    .font(Typography.displayLarge)
+                    .foregroundStyle(Color.textPrimary)
 
-                explainer
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Preferred words")
-                        .font(Typography.labelLarge)
-                        .foregroundStyle(Color.textPrimary)
-                    Text("Names and terms you use, one per line. Whisper models use them to spell these words correctly; other models ignore them.")
-                        .font(Typography.caption)
-                        .foregroundStyle(Color.textMuted)
-                    ThemedTextEditor(text: $preferredWords)
-                        .frame(minHeight: 110, maxHeight: 160)
-                        .accessibilityLabel("Preferred words, one per line")
-                        .accessibilityIdentifier("preferredWords")
-                    Text("Up to 50 terms, 60 characters each. For other models, add a replacement rule below.")
-                        .font(Typography.caption)
-                        .foregroundStyle(Color.textMuted)
-                }
-                .themedCard()
-                .padding(.horizontal, 24)
-
-                if dictionary.entries.isEmpty {
-                    emptyState
-                } else {
-                    VStack(spacing: 12) {
-                        ForEach(dictionary.entries) { entry in
-                            DictionaryRuleCard(
-                                entry: entry,
-                                onToggle: { dictionary.setEnabled($0, for: entry.id) },
-                                onEdit: { present(entry) },
-                                onDelete: { entryPendingDeletion = entry }
-                            )
-                        }
-                    }
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 24)
-                }
+                preferredWordsCard
+                snippetsCard
             }
+            .padding(24)
+        }
+        .onAppear(perform: loadRecentlyLearned)
+        .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification).receive(on: RunLoop.main)) { _ in
+            loadRecentlyLearned()
         }
         .sheet(isPresented: $isPresentingEditor) {
             DictionaryEntryEditor(entry: editorEntry) { result in
@@ -68,7 +43,7 @@ struct DictionaryView: View {
             }
         }
         .alert(
-            "Delete rule?",
+            "Delete snippet?",
             isPresented: Binding(
                 get: { entryPendingDeletion != nil },
                 set: { if !$0 { entryPendingDeletion = nil } }
@@ -85,108 +60,90 @@ struct DictionaryView: View {
         }
     }
 
-    // MARK: - Header
+    // MARK: - Preferred words
 
-    private var header: some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Dictionary")
-                    .font(Typography.displayLarge)
-                    .foregroundStyle(Color.textPrimary)
+    private var preferredWordsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            cardHeader(title: "Preferred words", help: "Names and terms Yapper should spell correctly.")
 
-                if !dictionary.entries.isEmpty {
-                    Text("\(dictionary.entries.count) rule\(dictionary.entries.count == 1 ? "" : "s")")
-                        .font(Typography.bodySmall)
-                        .foregroundStyle(Color.textSecondary)
-                }
-            }
-
-            Spacer()
-
-            Button(action: { present(nil) }) {
-                HStack(spacing: 6) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 12, weight: .semibold))
-                    Text("Add rule")
-                }
-                .font(Typography.labelMedium)
-                .foregroundStyle(Color.btnPrimaryFg)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(Color.btnPrimaryBg)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 24)
-        .padding(.top, 20)
-    }
-
-    // MARK: - Explainer
-
-    private var explainer: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "wand.and.stars")
-                .font(.system(size: 14))
-                .foregroundStyle(Color.accentBlue)
-                .padding(.top, 1)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Turn what you say into the text you want")
-                    .font(Typography.labelLarge)
-                    .foregroundStyle(Color.textPrimary)
-                Text(
-                    "Say a trigger like “my email” and Yapper inserts your real address. Or fix a name the model keeps mishearing. Everything runs offline on your Mac."
-                )
-                .font(Typography.captionSmall)
+            ThemedTextEditor(text: $preferredWords)
+                .frame(minHeight: 110, maxHeight: 160)
+                .accessibilityLabel("Preferred words, one per line")
+                .accessibilityIdentifier("preferredWords")
+            Text("One per line, up to 50.")
+                .font(Typography.caption)
                 .foregroundStyle(Color.textMuted)
-                .fixedSize(horizontal: false, vertical: true)
-            }
 
-            Spacer(minLength: 0)
+            if !recentlyLearned.isEmpty {
+                Divider().padding(.vertical, 4)
+                Text("Recently learned")
+                    .font(Typography.labelSmall)
+                    .foregroundStyle(Color.textSecondary)
+                VStack(spacing: 0) {
+                    ForEach(recentlyLearned.prefix(10), id: \.self) { word in
+                        HStack {
+                            Text(word)
+                                .font(Typography.bodyMedium)
+                                .foregroundStyle(Color.textPrimary)
+                                .lineLimit(1)
+                            Spacer()
+                            Button("Remove") { forget(word) }
+                                .buttonStyle(.stGhost)
+                                .accessibilityLabel("Remove \(word)")
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+                .accessibilityIdentifier("recentlyLearned")
+            }
         }
-        .padding(16)
-        .background(Color.accentBlue.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .padding(.horizontal, 24)
+        .themedCard()
     }
 
-    // MARK: - Empty state
+    // MARK: - Snippets
 
-    private var emptyState: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "character.book.closed")
-                .font(.system(size: 52))
-                .foregroundStyle(Color.textMuted.opacity(0.4))
-
-            VStack(spacing: 8) {
-                Text("No rules yet")
-                    .font(Typography.displaySmall)
-                    .foregroundStyle(Color.textPrimary)
-
-                Text("Add your first rule to replace a spoken phrase with any text.")
-                    .font(Typography.bodyMedium)
-                    .foregroundStyle(Color.textSecondary)
-                    .multilineTextAlignment(.center)
+    private var snippetsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top) {
+                cardHeader(title: "Snippets", help: "Say a phrase, paste something else (say “my email” to paste your address).")
+                Spacer(minLength: 16)
+                Button("Add snippet", systemImage: "plus") { present(nil) }
+                    .buttonStyle(.stSecondary)
+                    .accessibilityIdentifier("addSnippet")
             }
 
-            Button(action: { present(nil) }) {
-                HStack(spacing: 6) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 12, weight: .semibold))
-                    Text("Add rule")
+            if dictionary.entries.isEmpty {
+                Text("No snippets yet.")
+                    .font(Typography.bodySmall)
+                    .foregroundStyle(Color.textMuted)
+                    .padding(.vertical, 8)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(dictionary.entries) { entry in
+                        if entry.id != dictionary.entries.first?.id { Divider() }
+                        DictionaryRuleCard(
+                            entry: entry,
+                            onToggle: { dictionary.setEnabled($0, for: entry.id) },
+                            onEdit: { present(entry) },
+                            onDelete: { entryPendingDeletion = entry }
+                        )
+                    }
                 }
-                .font(Typography.labelMedium)
-                .foregroundStyle(Color.btnPrimaryFg)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 9)
-                .background(Color.btnPrimaryBg)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
             }
-            .buttonStyle(.plain)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 60)
+        .themedCard()
+    }
+
+    private func cardHeader(title: String, help: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(Typography.headlineLarge)
+                .foregroundStyle(Color.textPrimary)
+            Text(help)
+                .font(Typography.bodySmall)
+                .foregroundStyle(Color.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     // MARK: - Helpers
@@ -194,6 +151,20 @@ struct DictionaryView: View {
     private func present(_ entry: DictionaryEntry?) {
         editorEntry = entry
         isPresentingEditor = true
+    }
+
+    private func loadRecentlyLearned() {
+        let words = UserDefaults.standard.stringArray(forKey: Self.recentlyLearnedKey) ?? []
+        if words != recentlyLearned { recentlyLearned = words }
+    }
+
+    /// Forget a learned word everywhere: the recent list and Preferred words.
+    private func forget(_ word: String) {
+        recentlyLearned.removeAll { $0 == word }
+        UserDefaults.standard.set(recentlyLearned, forKey: Self.recentlyLearnedKey)
+        preferredWords = preferredWords.components(separatedBy: .newlines)
+            .filter { $0.trimmingCharacters(in: .whitespaces).caseInsensitiveCompare(word) != .orderedSame }
+            .joined(separator: "\n")
     }
 }
 
@@ -256,14 +227,7 @@ private struct DictionaryRuleCard: View {
                 .toggleStyle(.switch)
                 .controlSize(.small)
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 14)
-        .background(Color.bgCard)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(isHovered ? Color.border : Color.border.opacity(0.5), lineWidth: 1)
-        )
+        .padding(.vertical, 12)
         .contentShape(Rectangle())
         .onTapGesture(perform: onEdit)
         .onHover { hovering in
@@ -331,7 +295,7 @@ private struct DictionaryEntryEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(entry == nil ? "New rule" : "Edit rule")
+            Text(entry == nil ? "New snippet" : "Edit snippet")
                 .font(Typography.displaySmall)
                 .foregroundStyle(Color.textPrimary)
                 .padding(.bottom, 20)
@@ -347,7 +311,7 @@ private struct DictionaryEntryEditor: View {
 
                 field(
                     title: "Replace with",
-                    subtitle: "Any text to insert. Leave empty to remove the phrase."
+                    subtitle: "The text to paste. Leave empty to remove the phrase."
                 ) {
                     TextField(
                         "", text: $replacement, prompt: Text("john.doe@example.com"),
