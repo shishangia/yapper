@@ -5,11 +5,9 @@ struct AIModelsView: View {
     @ObservedObject private var downloadService = ModelDownloadService.shared
     @AppStorage(ModelSelection.defaultsKey) private var selectedModel: String = ModelSelection.none
     @AppStorage("transcriptionLanguage") private var transcriptionLanguage = ModelSelection.defaultLanguage
-    @AppStorage("modelUseCase") private var useCaseRaw: String = AIModel.UseCase.dictation.rawValue
 
     private var capability: DeviceCapability { .current }
-    private var useCase: AIModel.UseCase { AIModel.UseCase(rawValue: useCaseRaw) ?? .dictation }
-    private var recommendedModel: AIModel { AIModel.recommendedModel(for: capability, useCase: useCase) }
+    private var recommendedModel: AIModel { AIModel.recommendedModel(for: capability) }
     private var selectedModelObject: AIModel? {
         let variant = ModelSelection.displayedVariant(selectedModel, language: transcriptionLanguage)
         return AIModel.availableModels.first { $0.variant == variant }
@@ -29,7 +27,6 @@ struct AIModelsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 currentSelection
-                recommendationControls
                 modelList
                 if !unusedFolders.isEmpty { unusedFilesRow }
             }
@@ -82,33 +79,6 @@ struct AIModelsView: View {
             .accessibilityIdentifier("models.conversationModelNote")
         }
         .themedCard(padding: 18)
-    }
-
-    private var recommendationControls: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Model suggestions")
-                .font(Typography.headlineMedium)
-                .foregroundStyle(Color.textPrimary)
-
-            Picker("Recommendation preference", selection: $useCaseRaw) {
-                ForEach(AIModel.UseCase.allCases) { useCase in
-                    Text(useCase.title).tag(useCase.rawValue)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-            .accessibilityIdentifier("models.useCase")
-
-            Text("Suggested: \(recommendedModel.name)")
-                .font(Typography.labelMedium)
-                .foregroundStyle(Color.textPrimary)
-
-            Text("Speed and accuracy bars are relative estimates, not benchmarks or accuracy percentages. Suggestions consider your Mac (\(capability.summary)); changing this preference does not select a model.")
-                .font(Typography.bodySmall)
-                .foregroundStyle(Color.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
     }
 
     private var modelList: some View {

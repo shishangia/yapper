@@ -165,56 +165,21 @@ struct AIModel: Identifiable, Equatable {
         return availableModels.first(where: { $0.variant == variant })?.engine ?? .whisper
     }
 
-    /// What the user primarily wants from transcription — biases the trade-off
-    /// between real-time speed and raw accuracy.
-    enum UseCase: String, CaseIterable, Identifiable {
-        case dictation      // real-time typing; latency matters most
-        case balanced
-        case transcription  // files/meetings; accuracy matters most
-
-        var id: String { rawValue }
-
-        var title: String {
-            switch self {
-            case .dictation: return "Dictation"
-            case .balanced: return "Balanced"
-            case .transcription: return "Transcription"
-            }
-        }
-
-        /// (speed, accuracy) weighting, summing to 1.
-        var weights: (speed: Double, accuracy: Double) {
-            switch self {
-            case .dictation: return (0.6, 0.4)
-            case .balanced: return (0.4, 0.6)
-            case .transcription: return (0.2, 0.8)
-            }
-        }
-    }
-
-    /// Recommends the best-fitting model for this Mac and use case, considering
-    /// RAM, chip performance tier, and the Neural Engine — not just RAM.
-    static func recommendedModel(
-        for capability: DeviceCapability = .current,
-        useCase: UseCase = .dictation
-    ) -> AIModel {
+    /// Recommends the best-fitting model for this Mac, weighing speed and accuracy
+    /// evenly-ish (40/60) and considering RAM, chip tier, and the Neural Engine.
+    static func recommendedModel(for capability: DeviceCapability = .current) -> AIModel {
         let fits = availableModels.filter {
             !$0.isSpecialized && capability.ramGB >= $0.minimumRAMGB
         }
         let pool = fits.isEmpty ? availableModels : fits
         return pool.max {
-            recommendationScore($0, capability: capability, useCase: useCase)
-                < recommendationScore($1, capability: capability, useCase: useCase)
+            recommendationScore($0, capability: capability) < recommendationScore($1, capability: capability)
         } ?? availableModels.last!
     }
 
-    /// 0.0–1.0-ish fitness score; higher is a better match for the machine + use case.
-    static func recommendationScore(
-        _ model: AIModel,
-        capability: DeviceCapability,
-        useCase: UseCase
-    ) -> Double {
-        let (wSpeed, wAccuracy) = useCase.weights
+    /// 0.0–1.0-ish fitness score; higher is a better match for the machine.
+    static func recommendationScore(_ model: AIModel, capability: DeviceCapability) -> Double {
+        let (wSpeed, wAccuracy) = (0.4, 0.6)
         let speedN = model.speed / 10.0
         let accuracyN = model.accuracy / 10.0
 
@@ -235,22 +200,6 @@ struct AIModel: Identifiable, Equatable {
         }
 
         return score
-    }
-
-    /// A short, human explanation of why a model is recommended for this Mac.
-    static func recommendationReason(
-        for model: AIModel,
-        capability: DeviceCapability = .current,
-        useCase: UseCase = .dictation
-    ) -> String {
-        switch useCase {
-        case .dictation:
-            return "A speed-focused suggestion for your \(capability.chipName). Actual speed depends on the recording."
-        case .balanced:
-            return "A balance of estimated speed and accuracy for your \(capability.chipName)."
-        case .transcription:
-            return "An accuracy-focused suggestion within your Mac's \(capability.ramGB) GB memory budget."
-        }
     }
 
     /// Backward-compatible RAM-only recommendation used by older call sites.
