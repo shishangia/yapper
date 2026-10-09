@@ -245,6 +245,7 @@ enum DictationCleanup {
         guard enabled else { return text.trimmingCharacters(in: .whitespacesAndNewlines) }
         var edited = applyScratchThat(in: text)
         edited = edited.replacingOccurrences(of: filler, with: "$1", options: .regularExpression)
+        edited = collapseRepeats(in: edited)
         edited = edited.replacingOccurrences(of: command("new paragraph"),
             with: "\n\n", options: .regularExpression)
         edited = edited.replacingOccurrences(of: command("new line"),
@@ -302,6 +303,29 @@ enum DictationCleanup {
             let kept = output[..<keepEnd].trimmingCharacters(in: .whitespacesAndNewlines)
             let correction = output[command.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
             output = [kept, correction].filter { !$0.isEmpty }.joined(separator: kept.isEmpty ? "" : " ")
+        }
+        return output
+    }
+
+    /// Doubles people say on purpose. Zayats et al. (arXiv:1904.04388) find repeats are ~46% of
+    /// disfluencies and intended repeats ~4%, mostly emphasis like these.
+    private static let intendedDoubles: Set<String> = ["very", "really", "long", "no", "bye", "that", "had"]
+    private static let numberWords: Set<String> = ["zero", "oh", "one", "two", "three", "four", "five", "six", "seven",
+        "eight", "nine", "ten", "eleven", "twelve", "twenty", "thirty", "forty", "fifty", "hundred", "thousand", "million"]
+
+    /// Collapses an immediately repeated word or 2-3 word phrase ("the the", "can you can you").
+    /// Digits never match, and spoken numbers and intended doubles are left alone.
+    private static func collapseRepeats(in text: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern:
+            #"(?i)(?<![\p{L}\p{N}'’])([\p{L}'’]+(?:[ \t]+[\p{L}'’]+){0,2})(?:[ \t]+\1)+(?![\p{L}\p{N}'’])"#)
+        else { return text }
+        var output = text
+        for match in regex.matches(in: text, range: NSRange(text.startIndex..<text.endIndex, in: text)).reversed() {
+            guard let whole = Range(match.range, in: output), let phrase = Range(match.range(at: 1), in: output) else { continue }
+            let words = output[phrase].lowercased().split(whereSeparator: { $0 == " " || $0 == "\t" }).map(String.init)
+            if words.contains(where: numberWords.contains) { continue }
+            if words.count == 1, intendedDoubles.contains(words[0]) { continue }
+            output.replaceSubrange(whole, with: output[phrase])
         }
         return output
     }

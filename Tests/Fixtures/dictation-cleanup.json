@@ -70,5 +70,37 @@
   {
     "input": "hello ગુજરાતી 你好",
     "expected": "Hello ગુજરાતી 你好"
+  },
+  {
+    "input": "the the launch is on Friday",
+    "expected": "The launch is on Friday"
+  },
+  {
+    "input": "can you can you tell me the plan",
+    "expected": "Can you tell me the plan"
+  },
+  {
+    "input": "I I think we should go",
+    "expected": "I think we should go"
+  },
+  {
+    "input": "so I um I think it works",
+    "expected": "So I think it works"
+  },
+  {
+    "input": "it was a very very long long day",
+    "expected": "It was a very very long long day"
+  },
+  {
+    "input": "no no, that that is what I had had in mind, bye bye",
+    "expected": "No no, that that is what I had had in mind, bye bye"
+  },
+  {
+    "input": "call me at four four five or 12 12",
+    "expected": "Call me at four four five or 12 12"
+  },
+  {
+    "input": "the theory then then the end",
+    "expected": "The theory then the end"
   }
 ]

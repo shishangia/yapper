@@ -442,6 +442,13 @@ final class WhisperServiceTests: XCTestCase {
             "Call me")
     }
 
+    func testCleanupCollapsesAccidentalRepeatsCaseInsensitively() {
+        XCTAssertEqual(DictationCleanup.apply(to: "The the launch moved. I I I agree", enabled: true),
+                       "The launch moved. I agree")
+        XCTAssertEqual(DictationCleanup.apply(to: "really really good, one one", enabled: true), "Really really good, one one")
+        XCTAssertEqual(DictationCleanup.apply(to: "the the launch", enabled: false), "the the launch")
+    }
+
     func testCleanupDoesNotGuessAmbiguousFillersOrLists() {
         let text = "i like this, you know number one reason"
         XCTAssertEqual(DictationCleanup.apply(to: text, enabled: true),
