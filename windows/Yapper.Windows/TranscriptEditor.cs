@@ -175,11 +175,23 @@ public sealed class TranscriptEditor : Window
         if (HasNameEdit && nameSpeaker.Length == 0) { status.Text = "Choose a speaker or use Add speaker to save this name."; return false; }
         var editPassage = HasPassageEdits; var editName = HasNameEdit;
         var passage = loadedPassage; var speaker = SelectedSpeaker;
-        return Change(t =>
+        // A hand correction to a passage (e.g. a mis-transcribed name) is worth remembering;
+        // this only fires on an explicit save, never while typing.
+        var learned = editPassage && passage is not null ? PreferredWordLearner.Learn(passage.Text, text.Text) : null;
+        var saved = Change(t =>
         {
             if (editPassage && passage is not null) t = t.Edit(passage.Id, text.Text, speaker.Length == 0 ? null : speaker);
             return editName ? t.Rename(nameSpeaker, name.Text) : t;
         }, preservePassage: false, preserveName: false);
+        if (saved && learned is not null && LearnWord(learned)) status.Text = "Learned " + learned;
+        return saved;
+    }
+    private bool LearnWord(string word)
+    {
+        var updated = string.Join('\n', PreferredVocabulary.Parse(library.Data.Preferences.PreferredWords + "\n" + word));
+        if (updated == library.Data.Preferences.PreferredWords) return false;
+        library.Save(library.Data with { Preferences = library.Data.Preferences with { PreferredWords = updated } });
+        return true;
     }
     private bool ResolveEdits()
     {

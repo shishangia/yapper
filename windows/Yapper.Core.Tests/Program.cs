@@ -111,6 +111,16 @@ var tests = new (string Name, Action Run)[]
         Equal("", DictationText.Process("first idea, sorry, remove that", [], false, true));
         Equal("Keep this. Right words.", DictationText.Process("Keep this. Wrong words. Delete that. Right words.", [], false, true));
     }),
+    ("preferred word learner accepts a small correction and rejects the rest", () =>
+    {
+        Equal("Jaimin", PreferredWordLearner.Learn("the meeting is with jamin tomorrow", "the meeting is with Jaimin tomorrow"));
+        Equal("Jon Smyth", PreferredWordLearner.Learn("contact john smith please", "contact Jon Smyth please"));
+        True(PreferredWordLearner.Learn("He has did it", "He has done it") is null); // grammar-only edit
+        True(PreferredWordLearner.Learn("Hello there", "Hello there") is null); // no change
+        True(PreferredWordLearner.Learn("I think we should go to the park", "Let us visit the museum instead") is null); // whole rewrite
+        True(PreferredWordLearner.Learn("I like banana today", "I like xylophone today") is null); // too dissimilar
+        True(PreferredWordLearner.Learn("see you tomorrow", "see you tomorrow afternoon") is null); // pure insertion
+    }),
     ("cancellation keeps busy ownership and rejects stale finish", () =>
     {
         var gate = new JobGate(); var first = gate.Begin(); gate.Cancel();

@@ -167,6 +167,8 @@ public partial class MainWindow : Window
         RecentList.ItemsSource = library.Data.Recordings.Take(5).ToArray();
         RecentEmpty.Visibility = library.Data.Recordings.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         RulesGrid.ItemsSource = library.Data.Dictionary;
+        // Resync after a learned word updates preferences elsewhere; never clobber an in-progress edit here.
+        if (!PreferredWords.IsKeyboardFocusWithin) PreferredWords.Text = library.Data.Preferences.PreferredWords;
         var words = library.Data.Usage.Sum(x => x.Words);
         var today = DateTime.Today;
         Greeting.Text = DateTime.Now.Hour < 12 ? "Good morning," : DateTime.Now.Hour < 18 ? "Good afternoon," : "Welcome back,";
