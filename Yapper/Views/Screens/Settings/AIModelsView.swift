@@ -15,22 +15,15 @@ struct AIModelsView: View {
         return AIModel.availableModels.first { $0.variant == variant }
     }
 
-    private var engineGroups: [(title: String, subtitle: String, models: [AIModel])] {
-        [
-            ("Hinglish", "Hindi + English · natural Latin-script output",
-             AIModel.availableModels.filter(\.isHinglish)),
-            ("Parakeet", "NVIDIA · on-device speech recognition", visibleModels(for: .parakeet)),
-            ("Whisper", "OpenAI · on-device speech recognition", visibleModels(for: .whisper)),
-        ]
+    /// Hinglish first, then the general models in catalog order.
+    private var models: [AIModel] {
+        AIModel.availableModels.filter(\.isHinglish) + AIModel.availableModels.filter { !$0.isHinglish }
     }
 
-    private func visibleModels(for engine: TranscriptionEngineKind) -> [AIModel] {
-        AIModel.models(for: engine).filter { model in
-            !model.isSpecialized
-                && (!model.isLegacy || model.variant == selectedModel
-                    || ModelStorage.transcriptionModelReady(model.variant))
-        }
-    }
+    @State private var unusedFolders: [URL] = []
+    @State private var unusedBytes: Int64 = 0
+    @State private var isRemovingUnused = false
+    @State private var confirmingUnusedRemoval = false
 
     var body: some View {
         ScrollView {
@@ -38,6 +31,7 @@ struct AIModelsView: View {
                 currentSelection
                 recommendationControls
                 modelList
+                if !unusedFolders.isEmpty { unusedFilesRow }
             }
             .padding(24)
         }
@@ -45,6 +39,7 @@ struct AIModelsView: View {
         .accessibilityIdentifier("aiModels")
         .task {
             await downloadService.refreshDownloadedModels()
+            await findUnusedFiles()
         }
     }
 
@@ -116,27 +111,59 @@ struct AIModelsView: View {
     }
 
     private var modelList: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            ForEach(engineGroups, id: \.title) { group in
-                VStack(alignment: .leading, spacing: 10) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(group.title)
-                            .font(Typography.sectionTitle)
-                            .foregroundStyle(Color.textPrimary)
-                        Text(group.subtitle)
-                            .font(Typography.bodySmall)
-                            .foregroundStyle(Color.textSecondary)
-                    }
-
-                    ForEach(group.models) { model in
-                        ModelRow(
-                            model: model,
-                            selectedModel: $selectedModel,
-                            isRecommended: model.variant == recommendedModel.variant
-                        )
-                    }
-                }
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(models) { model in
+                ModelRow(
+                    model: model,
+                    selectedModel: $selectedModel,
+                    isRecommended: model.variant == recommendedModel.variant
+                )
             }
         }
+    }
+
+    private var unusedFilesRow: some View {
+        HStack(alignment: .center, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Remove unused model files")
+                    .font(Typography.labelLarge)
+                    .foregroundStyle(Color.textPrimary)
+                Text("\(ByteCountFormatter.string(fromByteCount: unusedBytes, countStyle: .file)) from models Yapper no longer offers.")
+                    .font(Typography.caption)
+                    .foregroundStyle(Color.textSecondary)
+            }
+            Spacer(minLength: 12)
+            Button(isRemovingUnused ? "Removing…" : "Remove") { confirmingUnusedRemoval = true }
+                .buttonStyle(.stSecondary)
+                .disabled(isRemovingUnused || downloadService.isDownloading.values.contains(true))
+                .accessibilityIdentifier("models.removeUnused")
+        }
+        .themedCard(padding: 16)
+        .confirmationDialog("Remove unused model files?", isPresented: $confirmingUnusedRemoval) {
+            Button("Remove files", role: .destructive) { Task { await removeUnusedFiles() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This frees \(ByteCountFormatter.string(fromByteCount: unusedBytes, countStyle: .file)). Your recordings, transcripts, and current models stay.")
+        }
+    }
+
+    private func findUnusedFiles() async {
+        let (folders, bytes) = await Task.detached(priority: .utility) {
+            let folders = AIModel.unusedModelFolders()
+            return (folders, AIModel.allocatedSize(of: folders))
+        }.value
+        unusedFolders = folders
+        unusedBytes = bytes
+    }
+
+    private func removeUnusedFiles() async {
+        isRemovingUnused = true
+        let folders = unusedFolders
+        await Task.detached(priority: .userInitiated) {
+            for folder in folders { try? FileManager.default.removeItem(at: folder) }
+        }.value
+        await downloadService.refreshDownloadedModels()
+        await findUnusedFiles()
+        isRemovingUnused = false
     }
 }

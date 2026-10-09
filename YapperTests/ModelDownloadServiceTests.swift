@@ -108,7 +108,7 @@ final class ModelDownloadServiceTests: XCTestCase {
 
     @MainActor
     func testRefreshPreservesProgressUntilSupportFilesFinish() async throws {
-        let variant = "openai_whisper-large-v3_turbo"
+        let variant = "openai_whisper-large-v3-v20240930_turbo"
         var ready = false
         var resumeTokenizer: CheckedContinuation<Void, Never>?
         let started = expectation(description: "Tokenizer started")
@@ -129,7 +129,7 @@ final class ModelDownloadServiceTests: XCTestCase {
 
     @MainActor
     func testCanceledJobRetainsOwnershipAndRejectsLateProgress() async throws {
-        let variant = "openai_whisper-large-v3_turbo"
+        let variant = "openai_whisper-large-v3-v20240930_turbo"
         var ready = false
         var resumes: [CheckedContinuation<Void, Never>] = []
         var reports: [@Sendable (Double) -> Void] = []
@@ -168,7 +168,7 @@ final class ModelDownloadServiceTests: XCTestCase {
     @MainActor
     func testSharedTokenizerSurvivesOneCanceledDownload() async throws {
         let large = "openai_whisper-large-v3"
-        let turbo = "openai_whisper-large-v3_turbo"
+        let turbo = "openai_whisper-large-v3-v20240930_turbo"
         var ready = false
         var tokenizerCalls = 0
         var resume: CheckedContinuation<Void, Never>?
@@ -196,7 +196,7 @@ final class ModelDownloadServiceTests: XCTestCase {
 
     @MainActor
     func testJoinedDownloadPropagatesFailure() async {
-        let variant = "openai_whisper-large-v3_turbo"
+        let variant = "openai_whisper-large-v3-v20240930_turbo"
         let started = expectation(description: "Download started")
         var resume: CheckedContinuation<Void, Never>?
         let service = ModelDownloadService(downloadWeights: { _, _ in

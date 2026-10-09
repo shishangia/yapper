@@ -578,7 +578,7 @@ struct MiniRecorderView: View {
 
     @ViewBuilder
     private var modelSelectionMenu: some View {
-        ForEach(AIModel.availableModels.filter { !$0.isLegacy || $0.variant == selectedModel }) { model in
+        ForEach(AIModel.availableModels) { model in
             Button {
                 if model.isHinglish {
                     transcriptionLanguage = ModelSelection.defaultLanguage

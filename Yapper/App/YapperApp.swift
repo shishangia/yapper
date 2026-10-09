@@ -18,6 +18,7 @@ enum YapperLauncher {
         if AppEnvironment.isRunningTests {
             NSApplication.shared.run()
         } else {
+            AIModel.migrateRemovedSelection()
             ModelSelection.registerDefaults()
             YapperApp.main()
         }
