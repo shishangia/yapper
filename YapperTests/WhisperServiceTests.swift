@@ -449,6 +449,12 @@ final class WhisperServiceTests: XCTestCase {
         XCTAssertEqual(DictationCleanup.apply(to: "the the launch", enabled: false), "the the launch")
     }
 
+    func testSpokenAtSignAndRemoveThatAliases() {
+        XCTAssertEqual(DictationCleanup.apply(to: "at the rate sam please review", enabled: true), "@sam please review")
+        XCTAssertEqual(DictationCleanup.apply(to: "first idea, sorry remove that, second idea", enabled: true), "Second idea")
+        XCTAssertEqual(DictationCleanup.apply(to: "wrong idea, delete that", enabled: true), "")
+    }
+
     func testCleanupDoesNotGuessAmbiguousFillersOrLists() {
         let text = "i like this, you know number one reason"
         XCTAssertEqual(DictationCleanup.apply(to: text, enabled: true),

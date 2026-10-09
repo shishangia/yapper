@@ -246,6 +246,7 @@ enum DictationCleanup {
         var edited = applyScratchThat(in: text)
         edited = edited.replacingOccurrences(of: filler, with: "$1", options: .regularExpression)
         edited = collapseRepeats(in: edited)
+        edited = applyAtSign(in: edited)
         edited = edited.replacingOccurrences(of: command("new paragraph"),
             with: "\n\n", options: .regularExpression)
         edited = edited.replacingOccurrences(of: command("new line"),
@@ -286,7 +287,7 @@ enum DictationCleanup {
 
     private static func applyScratchThat(in text: String) -> String {
         guard let regex = try? NSRegularExpression(
-            pattern: command("(?:scratch that|scratch it)") + #"[\s,:;-]*"#) else { return text }
+            pattern: command(#"(?:scratch that|scratch it|delete that|sorry,?[ \t]+remove that)"#) + #"[\s,:;-]*"#) else { return text }
         var output = text
         while let match = regex.firstMatch(in: output, range: NSRange(output.startIndex..<output.endIndex, in: output)),
               let command = Range(match.range, in: output) {
@@ -328,6 +329,15 @@ enum DictationCleanup {
             output.replaceSubrange(whole, with: output[phrase])
         }
         return output
+    }
+
+    /// Indian-English "at the rate" (and "at sign") means "@". It attaches to the previous word
+    /// for an email domain ("john at the rate gmail.com"), otherwise it starts a handle.
+    /// Prose like "at the rate of" or "at the rate we're going" is left alone.
+    private static func applyAtSign(in text: String) -> String {
+        text.replacingOccurrences(
+            of: #"(?i)(?:(?<=[\p{L}\p{N}._-])[ \t]+(?:at the rate|at sign)[ \t]+(?=[\p{L}\p{N}_-]+\.[\p{L}])|(?<![\p{L}\p{N}])(?:at the rate|at sign)[ \t]+(?!(?:of|we|we're|they|they're|you|you're|i|i'm|he|she|it|it's|this|that|which|things|at|in)\b)(?=[\p{L}\p{N}_]))"#,
+            with: "@", options: .regularExpression)
     }
 
     private static func formatNumberedList(in text: String) -> String {
