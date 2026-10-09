@@ -280,6 +280,18 @@ final class WhisperServiceTests: XCTestCase {
         XCTAssertEqual(manager.currentModelVariant, turbo)
     }
 
+    func testDictationTrimsLongPausesButKeepsShortOnesAndContext() {
+        let rate = 16000
+        func tone(_ seconds: Double) -> [Float] { (0..<Int(seconds * Double(rate))).map { 0.3 * sin(Float($0) * 0.1) } }
+        func hush(_ seconds: Double) -> [Float] { (0..<Int(seconds * Double(rate))).map { 0.0005 * sin(Float($0)) } }
+        let audio = hush(3) + tone(1) + hush(5) + tone(1) + hush(1) + tone(1) + hush(4)
+        let trimmed = WhisperService.trimmingLongSilences(audio)
+        // Each long pause keeps 0.3 s per side; the 1 s pause stays whole.
+        XCTAssertEqual(Double(trimmed.count) / Double(rate), 0.6 + 1 + 0.6 + 1 + 1 + 1 + 0.6, accuracy: 0.05)
+        XCTAssertEqual(WhisperService.trimmingLongSilences(hush(5)), hush(5), "audio with no speech passes through")
+        XCTAssertEqual(WhisperService.trimmingLongSilences(tone(2)), tone(2))
+    }
+
     func testDictationPunctuationIsConservativeAndOptional() {
         for (original, expected) in ["hello.": "hello", "42.": "42", "3.14.": "3.14",
             "me@example.com.": "me@example.com", "https://example.com/path.": "https://example.com/path",
