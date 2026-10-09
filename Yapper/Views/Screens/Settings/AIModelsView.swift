@@ -96,7 +96,8 @@ struct AIModelsView: View {
                 }
             }
             .pickerStyle(.segmented)
-            .frame(maxWidth: 420)
+            .labelsHidden()
+            .fixedSize()
             .accessibilityIdentifier("models.useCase")
 
             Text("Suggested: \(recommendedModel.name)")

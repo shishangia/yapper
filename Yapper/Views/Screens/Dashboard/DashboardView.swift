@@ -203,6 +203,12 @@ struct ActivityChartCard: View {
 
             Spacer(minLength: 0)
 
+            if mostActiveDay == nil {
+                Text("Nothing dictated this week yet.")
+                    .font(Typography.bodySmall)
+                    .foregroundStyle(Color.textMuted)
+            }
+
             HStack(alignment: .bottom, spacing: 12) {
                 let maxWords = max(weeklyData.map(\.words).max() ?? 1, 1)
 

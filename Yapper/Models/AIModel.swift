@@ -54,16 +54,6 @@ struct AIModel: Identifiable, Equatable {
     // inputs only; model choice still requires an explicit user action.
     static let availableModels: [AIModel] = [
         AIModel(
-            name: "Whisper Large v3",
-            variant: "openai_whisper-large-v3",
-            details: "Full multilingual Whisper model for detailed transcription.",
-            size: "~3 GB",
-            speed: 4.0,
-            accuracy: 9.5,
-            expectedSizeBytes: 2_800_000_000,
-            minimumRAMGB: 16
-        ),
-        AIModel(
             name: "Whisper Large v3 Turbo",
             variant: "openai_whisper-large-v3-v20240930_turbo",
             details: "OpenAI's four-layer Turbo model for faster multilingual dictation and conversations.",
@@ -72,6 +62,16 @@ struct AIModel: Identifiable, Equatable {
             accuracy: 9.5,
             expectedSizeBytes: 1_500_000_000,
             minimumRAMGB: 8
+        ),
+        AIModel(
+            name: "Whisper Large v3",
+            variant: "openai_whisper-large-v3",
+            details: "Full multilingual Whisper model for detailed transcription.",
+            size: "~3 GB",
+            speed: 4.0,
+            accuracy: 9.5,
+            expectedSizeBytes: 2_800_000_000,
+            minimumRAMGB: 16
         ),
         AIModel(
             name: "Whisper Hinglish Turbo",
