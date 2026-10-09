@@ -1,11 +1,5 @@
 import SwiftUI
 
-extension Notification.Name {
-    /// Posted when Yapper adds words to Preferred words on its own.
-    /// userInfo: "words": [String], "full": Bool.
-    static let yapperLearnedWords = Notification.Name("yapperLearnedWords")
-}
-
 /// A short, quiet confirmation pinned to the bottom of a screen.
 struct Toast: View {
     let message: String
