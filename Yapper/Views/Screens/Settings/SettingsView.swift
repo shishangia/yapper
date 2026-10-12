@@ -103,8 +103,12 @@ struct GeneralSettingsTab: View {
         recentLanguagesString.split(separator: ",").map(String.init).filter { !$0.isEmpty }
     }
 
+    private var recentLanguages: [(code: String, name: String)] {
+        recentLanguageCodes.compactMap { code in Self.whisperLanguages.first { $0.code == code } }
+    }
+
     private func updateRecentLanguages(code: String) {
-        guard code != "auto" else { return }
+        guard Self.whisperLanguages.contains(where: { $0.code == code }) else { return }
         var recents = recentLanguageCodes.filter { $0 != code }
         recents.insert(code, at: 0)
         recentLanguagesString = recents.prefix(5).joined(separator: ",")
@@ -144,27 +148,14 @@ struct GeneralSettingsTab: View {
                                 .font(Typography.bodyMedium)
                                 .foregroundStyle(Color.textPrimary)
                             Spacer()
-                            Menu {
+                            Picker("Primary hotkey", selection: $selectedHotkey) {
                                 ForEach(HotkeyOption.allCases) { option in
-                                    Button(option.displayName) {
-                                        selectedHotkey = option
-                                    }
+                                    Text(option.displayName).tag(option)
                                 }
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Text(selectedHotkey.displayName)
-                                        .font(Typography.bodySmall)
-                                        .foregroundStyle(Color.textPrimary)
-                                    Image(systemName: "chevron.up.chevron.down")
-                                        .font(.system(size: 9))
-                                        .foregroundStyle(Color.textPrimary)
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 7)
-                                .background(Color.bgHover)
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
                             }
-                            .menuStyle(.borderlessButton)
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .fixedSize()
                         }
 
                         VStack(alignment: .leading, spacing: 6) {
@@ -251,42 +242,23 @@ struct GeneralSettingsTab: View {
                             .font(Typography.bodyMedium)
                             .foregroundStyle(Color.textPrimary)
                         Spacer()
-                        Menu {
-                            Button("Hinglish (Latin script)") { transcriptionLanguage = "hinglish" }
-                            Button("Auto-detect spoken language") { transcriptionLanguage = "auto" }
-                            if !recentLanguageCodes.isEmpty {
+                        // Recent languages sit above the full list; each tag appears once.
+                        Picker("Speech language", selection: $transcriptionLanguage) {
+                            Text(displayName(for: "hinglish")).tag("hinglish")
+                            Text(displayName(for: "auto")).tag("auto")
+                            if !recentLanguages.isEmpty {
                                 Divider()
-                                ForEach(recentLanguageCodes, id: \.self) { code in
-                                    if let lang = Self.whisperLanguages.first(where: { $0.code == code }) {
-                                        Button(lang.name) {
-                                            transcriptionLanguage = code
-                                            updateRecentLanguages(code: code)
-                                        }
-                                    }
-                                }
+                                ForEach(recentLanguages, id: \.code) { Text($0.name).tag($0.code) }
                             }
                             Divider()
-                            ForEach(Self.whisperLanguages, id: \.code) { lang in
-                                Button(lang.name) {
-                                    transcriptionLanguage = lang.code
-                                    updateRecentLanguages(code: lang.code)
-                                }
+                            ForEach(Self.whisperLanguages.filter { !recentLanguageCodes.contains($0.code) }, id: \.code) {
+                                Text($0.name).tag($0.code)
                             }
-                        } label: {
-                            HStack(spacing: 6) {
-                                Text(displayName(for: transcriptionLanguage))
-                                    .font(Typography.bodySmall)
-                                    .foregroundStyle(Color.textPrimary)
-                                Image(systemName: "chevron.up.chevron.down")
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(Color.textPrimary)
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(Color.bgHover)
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
                         }
-                        .menuStyle(.borderlessButton)
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .fixedSize()
+                        .onChange(of: transcriptionLanguage) { updateRecentLanguages(code: transcriptionLanguage) }
                     }
 
                     Text("Hinglish uses a dedicated local model to write Hindi and English in Latin script. Other choices are spoken-language hints and do not translate.")
