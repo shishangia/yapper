@@ -162,23 +162,13 @@ struct ModelRow: View {
     }
 
     private var loadingIndicator: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(spacing: 8) {
             ProgressView()
                 .controlSize(.small)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(transcription.isLoading ? "Preparing selected model…" : "Waiting to prepare selected model…")
-                    .font(Typography.bodySmall)
-                    .foregroundStyle(Color.textSecondary)
-                if let start = transcription.warmupStartedAt {
-                    TimelineView(.periodic(from: start, by: 1)) { context in
-                        Text("\(max(0, Int(context.date.timeIntervalSince(start)))) seconds elapsed")
-                            .font(Typography.caption)
-                            .monospacedDigit()
-                            .foregroundStyle(Color.textMuted)
-                    }
-                }
-            }
+            Text(transcription.isLoading ? "Preparing…" : "Waiting to prepare…")
+                .font(Typography.caption)
+                .foregroundStyle(Color.textSecondary)
         }
         .accessibilityElement(children: .combine)
     }
