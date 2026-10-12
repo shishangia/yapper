@@ -270,8 +270,8 @@ final class YapperUITests: XCTestCase {
         let history = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "History")).firstMatch
         XCTAssertTrue(history.waitForExistence(timeout: 10))
         history.click()
-        // A collapsed history card exposes its transcript as the button's label, not StaticText.
-        let savedConversation = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "\(speakerName):")).firstMatch
+        // History cards have short labels; the newest card is the imported conversation.
+        let savedConversation = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "history.item.")).firstMatch
         XCTAssertTrue(savedConversation.waitForExistence(timeout: 5))
         savedConversation.click()
         let savedSpeaker = app.buttons.matching(NSPredicate(format: "label == %@", "Rename \(speakerName)")).firstMatch

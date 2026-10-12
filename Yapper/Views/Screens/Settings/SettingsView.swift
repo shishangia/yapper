@@ -193,6 +193,7 @@ struct GeneralSettingsTab: View {
                             Spacer()
                             Toggle("", isOn: $showMenuBarIcon)
                                 .labelsHidden()
+                                .accessibilityLabel("Show menu bar icon")
                                 .toggleStyle(.switch)
                         }
 
@@ -204,6 +205,7 @@ struct GeneralSettingsTab: View {
                                 Spacer()
                                 Toggle("", isOn: $alwaysShowRecorderPill)
                                     .labelsHidden()
+                                    .accessibilityLabel("Always show recorder pill")
                                     .toggleStyle(.switch)
                                     .onChange(of: alwaysShowRecorderPill) {
                                         NotificationCenter.default.post(
@@ -280,6 +282,7 @@ struct GeneralSettingsTab: View {
                             Spacer()
                             Toggle("", isOn: $autoUpdate)
                                 .labelsHidden()
+                                .accessibilityLabel("Automatically check for updates")
                                 .toggleStyle(.switch)
                                 .disabled(!AppEnvironment.updatesEnabled)
                         }
@@ -390,23 +393,28 @@ struct AudioSettingsTab: View {
                             // Automatic follows the system input, except that an open MacBook
                             // keeps its built-in mic when AirPods would drop to call quality.
                             // Only the device in use is marked Active; Automatic names it instead.
-                            DeviceRow(
-                                name: "Automatic (recommended)",
-                                subtitle: audioRecorder.isAutomaticSelection ? currentDeviceName.map { "Using \($0)" } : nil,
-                                isActive: false,
-                                isSelected: audioRecorder.isAutomaticSelection
-                            )
-                            .onTapGesture { audioRecorder.useAutomaticInput() }
-                            ForEach(audioRecorder.availableDevices, id: \.uniqueID) { device in
+                            Button { audioRecorder.useAutomaticInput() } label: {
                                 DeviceRow(
-                                    name: device.localizedName,
-                                    isActive: audioRecorder.selectedDeviceId == device.uniqueID,
-                                    isSelected: !audioRecorder.isAutomaticSelection
-                                        && audioRecorder.selectedDeviceId == device.uniqueID
+                                    name: "Automatic (recommended)",
+                                    subtitle: audioRecorder.isAutomaticSelection ? currentDeviceName.map { "Using \($0)" } : nil,
+                                    isActive: false,
+                                    isSelected: audioRecorder.isAutomaticSelection
                                 )
-                                .onTapGesture {
-                                    audioRecorder.selectedDeviceId = device.uniqueID
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityAddTraits(audioRecorder.isAutomaticSelection ? .isSelected : [])
+                            ForEach(audioRecorder.availableDevices, id: \.uniqueID) { device in
+                                Button { audioRecorder.selectedDeviceId = device.uniqueID } label: {
+                                    DeviceRow(
+                                        name: device.localizedName,
+                                        isActive: audioRecorder.selectedDeviceId == device.uniqueID,
+                                        isSelected: !audioRecorder.isAutomaticSelection
+                                            && audioRecorder.selectedDeviceId == device.uniqueID
+                                    )
                                 }
+                                .buttonStyle(.plain)
+                                .accessibilityAddTraits(!audioRecorder.isAutomaticSelection
+                                    && audioRecorder.selectedDeviceId == device.uniqueID ? .isSelected : [])
                             }
                         }
                     }
@@ -565,6 +573,7 @@ struct ToggleRow: View {
             Spacer()
             Toggle("", isOn: $isOn)
                 .labelsHidden()
+                .accessibilityLabel(title)
                 .toggleStyle(.switch)
         }
     }
@@ -599,6 +608,7 @@ struct RadioButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

@@ -284,6 +284,9 @@ struct HistoryCard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("\(item.date.formatted(date: .abbreviated, time: .shortened)), \(wordCount) words")
+            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+            .accessibilityIdentifier("history.item.\(item.id)")
             
             // Expanded content
             if isExpanded {

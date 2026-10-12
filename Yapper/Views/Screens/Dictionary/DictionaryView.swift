@@ -228,6 +228,7 @@ private struct DictionaryRuleCard: View {
 
             Toggle("", isOn: Binding(get: { entry.isEnabled }, set: onToggle))
                 .labelsHidden()
+                .accessibilityLabel(entry.trimmedTrigger)
                 .toggleStyle(.switch)
                 .controlSize(.small)
         }
