@@ -301,13 +301,15 @@ struct ConversationTranscriptView: View {
 
     private func readingText(_ block: ConversationReadingBlock, markUncertainty: Bool) -> AttributedString {
         block.segments.reduce(into: AttributedString()) { output, segment in
-            // Recognized words carry a leading space; a block starts at its first word.
-            var text = AttributedString(output.characters.isEmpty
-                ? String(segment.text.drop(while: \.isWhitespace)) : segment.text)
+            // Recognized words carry a leading space; a block starts at its first word,
+            // and only the words themselves are underlined.
+            let words = output.characters.isEmpty ? Substring(segment.text.drop(while: \.isWhitespace)) : Substring(segment.text)
+            let space = words.prefix(while: \.isWhitespace)
+            var text = AttributedString(String(words.dropFirst(space.count)))
             if markUncertainty && segment.speakerID == nil {
                 text.underlineStyle = .single
             }
-            output += text
+            output += AttributedString(String(space)) + text
         }
     }
 
