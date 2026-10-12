@@ -9,7 +9,7 @@ struct MiniRecorderView: View {
     let job: RecorderJob
     private var isListening: Bool { job.isBusy && job.phase == .recording }
     private var isProcessing: Bool { job.isBusy && job.phase != .recording }
-    @State private var statusMessage = "Transcribing..."
+    @State private var statusMessage = "Transcribing…"
     var onCommit: ((String, RecorderJob.Snapshot) -> Void)?
     var onCancel: (() -> Void)?
 
@@ -311,7 +311,7 @@ struct MiniRecorderView: View {
             ProgressView()
                 .controlSize(.small)
                 .tint(Color.accentPrimary)
-            Text("Warming up model...")
+            Text("Warming up model…")
                 .font(Typography.pillLabel)
                 .foregroundColor(Color.textPrimary)
         }
@@ -405,8 +405,15 @@ struct MiniRecorderView: View {
                 HStack(spacing: 10) {
                     Text(job.pasteFeedback?.message ?? "").font(Typography.pillLabel)
                     if job.pasteFeedback == .copiedPermissionMissing {
-                        Button("Settings") { ClipboardService.shared.openAccessibilitySettings() }
-                            .buttonStyle(.borderless)
+                        Button { ClipboardService.shared.openAccessibilitySettings() } label: {
+                            Text("Settings")
+                                .font(Typography.pillControl)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Capsule().fill(Color.bgHover))
+                                .contentShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 .padding(.horizontal, 12)
@@ -625,7 +632,7 @@ struct MiniRecorderView: View {
             return
         }
         guard job.transition(snapshot.id, from: .recording, to: .switchingInput) else { return }
-        statusMessage = "Switching input..."
+        statusMessage = "Switching input…"
         Task {
             _ = await audioRecorder.stopRecording(discardOutput: true)
             guard job.canCommit(snapshot.id) else { finish(snapshot); return }
@@ -643,7 +650,7 @@ struct MiniRecorderView: View {
             return
         }
         guard job.transition(snapshot.id, from: .recording, to: .stopping) else { return }
-        statusMessage = "Finishing recording..."
+        statusMessage = "Finishing recording…"
         Task {
             guard let url = await audioRecorder.stopRecording() else { finish(snapshot); return }
             guard job.transition(snapshot.id, from: .stopping, to: .processing) else { return }
@@ -684,7 +691,7 @@ struct MiniRecorderView: View {
 
     private func processRecording(url: URL, snapshot: RecorderJob.Snapshot) async {
         do {
-            if job.isPresented { statusMessage = "Transcribing..." }
+            if job.isPresented { statusMessage = "Transcribing…" }
             let output = try await transcription.transcribeDetailed(audioFile: url, variant: snapshot.model, language: snapshot.language)
             let text = DictationPunctuation.apply(to: output.text, enabled: true)
             guard !text.isEmpty else { showError("No speech detected", for: snapshot); return }
