@@ -50,35 +50,12 @@ struct ConversationTranscriptView: View {
                             if !historyService.undoSingleSpeaker(itemID: itemID) { error = "This correction can no longer be undone." }
                         }
                         .buttonStyle(.stSecondary).accessibilityIdentifier("undoSingleSpeaker")
-                    } else if !conversation.segments.isEmpty && (conversation.unassignedCount > 0 || conversation.speakerIDs.count > 1) {
-                        Button("One speaker…") {
-                            singleSpeakerID = conversation.speakerIDs.first ?? "1"
-                            error = nil
-                            confirmingSingleSpeaker = true
-                        }
-                        .buttonStyle(.stSecondary).accessibilityIdentifier("confirmSingleSpeaker")
                     }
                     if conversation.unassignedCount == 0 {
                         Button(reviewing ? "Reading view" : "Edit turns") { reviewing.toggle() }
                             .buttonStyle(.stSecondary).accessibilityIdentifier("reviewSpeakers")
                     }
-                    Button("Add speaker") {
-                        speakerName = ""
-                        error = nil
-                        addingSpeaker = true
-                    }
-                    .buttonStyle(.stSecondary)
-                    .accessibilityIdentifier("addSpeaker")
-                    if conversation.speakerIDs.count > 1 {
-                        Button("Merge speakers") {
-                            mergeSource = conversation.speakerIDs[0]
-                            mergeTarget = conversation.speakerIDs[1]
-                            error = nil
-                            merging = true
-                        }
-                        .buttonStyle(.stSecondary)
-                        .accessibilityIdentifier("mergeSpeakers")
-                    }
+                    speakersMenu(conversation)
                 }
                 if !reviewing {
                     ForEach(conversation.displayedBlocks) { block in
@@ -282,6 +259,45 @@ struct ConversationTranscriptView: View {
             }
             .padding(24).frame(width: 420)
         }
+    }
+
+    private func speakersMenu(_ conversation: ConversationTranscript) -> some View {
+        Menu {
+            if conversation.singleSpeakerUndo == nil && !conversation.segments.isEmpty
+                && (conversation.unassignedCount > 0 || conversation.speakerIDs.count > 1) {
+                Button("One speaker…") {
+                    singleSpeakerID = conversation.speakerIDs.first ?? "1"
+                    error = nil
+                    confirmingSingleSpeaker = true
+                }
+                .accessibilityIdentifier("confirmSingleSpeaker")
+            }
+            Button("Add speaker…") {
+                speakerName = ""
+                error = nil
+                addingSpeaker = true
+            }
+            .accessibilityIdentifier("addSpeaker")
+            if conversation.speakerIDs.count > 1 {
+                Button("Merge speakers…") {
+                    mergeSource = conversation.speakerIDs[0]
+                    mergeTarget = conversation.speakerIDs[1]
+                    error = nil
+                    merging = true
+                }
+                .accessibilityIdentifier("mergeSpeakers")
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text("Speakers")
+                Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
+            }
+            .stSecondarySurface()
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .accessibilityIdentifier("speakersMenu")
     }
 
     private func readingText(_ block: ConversationReadingBlock, markUncertainty: Bool) -> AttributedString {

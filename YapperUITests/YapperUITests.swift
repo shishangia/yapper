@@ -199,6 +199,11 @@ final class YapperUITests: XCTestCase {
         app.buttons["sidebar.settings"].click()
         app.buttons["returnToTranscription"].click()
         let copy = app.buttons["copyConversation"]
+        // One speaker, Add speaker and Merge speakers live in the Speakers menu.
+        func oneSpeakerItem() -> XCUIElement {
+            app.menuButtons["speakersMenu"].firstMatch.click()
+            return app.menuItems["confirmSingleSpeaker"].firstMatch
+        }
         XCTAssertTrue(copy.waitForExistence(timeout: 300))
         let screenshot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
         screenshot.name = "Conversation transcript"
@@ -249,11 +254,11 @@ final class YapperUITests: XCTestCase {
         copy.click()
         XCTAssertTrue(pasteboard.string(forType: .string)?.contains("[00:") == true)
         timestampToggle.click()
-        app.buttons["confirmSingleSpeaker"].click()
+        oneSpeakerItem().click()
         XCTAssertTrue(app.buttons["applySingleSpeaker"].waitForExistence(timeout: 5))
         app.buttons["Cancel"].click()
         XCTAssertFalse(app.buttons["undoSingleSpeaker"].exists)
-        app.buttons["confirmSingleSpeaker"].click()
+        oneSpeakerItem().click()
         app.buttons["applySingleSpeaker"].click()
         XCTAssertTrue(app.buttons["undoSingleSpeaker"].waitForExistence(timeout: 5))
         copy.click()
@@ -274,7 +279,9 @@ final class YapperUITests: XCTestCase {
         XCTAssertEqual(app.switches["showTranscriptTimestamps"].value as? NSNumber, 0)
         XCTAssertTrue(app.buttons["undoSingleSpeaker"].exists)
         app.buttons["undoSingleSpeaker"].click()
-        XCTAssertTrue(app.buttons["confirmSingleSpeaker"].waitForExistence(timeout: 5))
+        let restoredOneSpeaker = oneSpeakerItem()
+        XCTAssertTrue(restoredOneSpeaker.waitForExistence(timeout: 5))
+        app.typeKey(.escape, modifierFlags: [])
         capture(app.windows.firstMatch, name: "Readable speaker review after undo")
         app.buttons["reviewSpeakers"].click()
         XCTAssertTrue(app.staticTexts[corrected].waitForExistence(timeout: 5))
