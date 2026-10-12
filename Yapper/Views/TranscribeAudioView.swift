@@ -12,25 +12,26 @@ struct TranscribeAudioView: View {
 
     private var result: HistoryItem? { history.items.first { $0.id == session.resultID } }
 
+    private var missingModelReason: String {
+        if session.selectedModel.isEmpty { return "Choose a transcription model in Settings to import or record." }
+        if !LocalConversationProcessor.transcriptionModelsReady(variant: session.selectedModel) {
+            return "\(session.modelName) is not downloaded yet."
+        }
+        return "Speaker detection needs its own model, which is not downloaded yet."
+    }
+
     var body: some View {
         @Bindable var session = session
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text("Transcribe audio").font(Typography.displayLarge)
-                    Text("Conversations, in your own words.")
-                        .font(Typography.bodyLarge).foregroundStyle(Color.textSecondary)
+                    if !session.selectedModel.isEmpty {
+                        Text("Runs on this Mac with \(session.modelName).")
+                            .font(Typography.bodySmall).foregroundStyle(Color.textSecondary)
+                    }
                 }
                 VStack(alignment: .leading, spacing: 20) {
-                    HStack(alignment: .top, spacing: 12) {
-                        Image(systemName: "waveform").font(.title2).foregroundStyle(Color.accentPrimary)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Local conversation transcription").font(Typography.headlineMedium)
-                            Text("\(session.modelName) · on your Mac · no dictionary replacements")
-                                .font(Typography.bodySmall).foregroundStyle(Color.textSecondary)
-                        }
-                    }
-                    Divider()
                     Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 16) {
                         GridRow {
                             Text("Language").foregroundStyle(Color.textSecondary)
@@ -43,14 +44,16 @@ struct TranscribeAudioView: View {
                             .onChange(of: session.language) { session.selectLanguage(session.language) }
                         }
                         GridRow {
-                            Text("Speaker labels").foregroundStyle(Color.textSecondary)
+                            Text("Detect speakers").foregroundStyle(Color.textSecondary)
                             Toggle("Detect speakers", isOn: $session.detectSpeakers)
+                                .labelsHidden()
                                 .accessibilityIdentifier("detectSpeakers")
                                 .toggleStyle(.switch)
                         }
                         GridRow {
-                            Text("Timestamps").foregroundStyle(Color.textSecondary)
-                            Toggle("Include in transcript", isOn: $session.includeTimestamps)
+                            Text("Include timestamps").foregroundStyle(Color.textSecondary)
+                            Toggle("Include timestamps", isOn: $session.includeTimestamps)
+                                .labelsHidden()
                                 .accessibilityIdentifier("includeTimestamps")
                                 .toggleStyle(.switch)
                         }
@@ -63,6 +66,12 @@ struct TranscribeAudioView: View {
                         ConversationStatusView()
                     }
                     if !session.isBusy {
+                        if !session.modelsReady {
+                            Label(missingModelReason, systemImage: "info.circle")
+                                .font(Typography.bodySmall).foregroundStyle(Color.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityIdentifier("conversationModelMissing")
+                        }
                         HStack(spacing: 12) {
                             if session.modelsReady {
                                 Button("Import audio or video", systemImage: "square.and.arrow.down") { showImporter = true }
@@ -75,6 +84,8 @@ struct TranscribeAudioView: View {
                             } else {
                                 Button("Download required models", systemImage: "arrow.down.circle", action: session.downloadModels)
                                     .buttonStyle(.stPrimary)
+                                Button("Open Models", action: showModels)
+                                    .buttonStyle(.stSecondary)
                             }
                         }
                     }
