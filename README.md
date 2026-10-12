@@ -16,7 +16,7 @@ Both apps check GitHub for updates and ask before installing one.
 
 ## What it does
 
-- Hold or toggle a shortcut to dictate into any app. A small overlay shows the recording time while you speak, plus a live draft on Windows.
+- Hold or toggle a shortcut to dictate into any app. A small overlay shows the recording time while you speak.
 - Cleans up what you said: filler sounds, accidental repeats, capitalization, and spoken commands such as "new paragraph", "bullet point", "scratch that" and "at the rate" for "@". On macOS 26 with Apple Intelligence turned on, an optional on-device pass tidies the text further, and the original is always kept in History.
 - Learns your names. Fix a misheard word right after Yapper pastes it (Mac) or in History, and it goes into your preferred words.
 - Transcribes audio files and microphone conversations, with optional speaker labels for up to eight people and timestamped turns you can edit. The Mac app also reads WhatsApp `.opus` voice notes.
