@@ -118,7 +118,7 @@ final class ConversationSession {
                 return
             }
             if recorder == nil {
-                recorder = AudioRecordingService(generatesChunks: false)
+                recorder = AudioRecordingService()
                 recorderObservation = recorder?.$isRecording.dropFirst()
                     .receive(on: DispatchQueue.main)
                     .sink { [weak self] recording in

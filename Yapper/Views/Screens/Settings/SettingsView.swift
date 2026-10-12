@@ -25,8 +25,8 @@ struct SettingsView: View {
                     Spacer()
                 }
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 24)
+            .padding(.horizontal, PageLayout.padding)
+            .padding(.top, PageLayout.padding)
             .padding(.bottom, 16)
 
             // Tab content
@@ -103,8 +103,12 @@ struct GeneralSettingsTab: View {
         recentLanguagesString.split(separator: ",").map(String.init).filter { !$0.isEmpty }
     }
 
+    private var recentLanguages: [(code: String, name: String)] {
+        recentLanguageCodes.compactMap { code in Self.whisperLanguages.first { $0.code == code } }
+    }
+
     private func updateRecentLanguages(code: String) {
-        guard code != "auto" else { return }
+        guard Self.whisperLanguages.contains(where: { $0.code == code }) else { return }
         var recents = recentLanguageCodes.filter { $0 != code }
         recents.insert(code, at: 0)
         recentLanguagesString = recents.prefix(5).joined(separator: ",")
@@ -117,9 +121,7 @@ struct GeneralSettingsTab: View {
             VStack(spacing: 16) {
                 // Appearance
                 SettingsSection {
-                    SettingsSectionHeader(
-                        icon: "paintpalette", title: "Appearance",
-                        subtitle: "Choose your preferred theme")
+                    SettingsSectionHeader(icon: "paintpalette", title: "Appearance")
 
                     HStack(spacing: 20) {
                         ForEach(AppTheme.allCases) { theme in
@@ -134,9 +136,7 @@ struct GeneralSettingsTab: View {
 
                 // Shortcuts
                 SettingsSection {
-                    SettingsSectionHeader(
-                        icon: "command", title: "Shortcuts", subtitle: "Configure recording hotkeys"
-                    )
+                    SettingsSectionHeader(icon: "command", title: "Shortcuts")
 
                     VStack(spacing: 16) {
                         HStack {
@@ -144,27 +144,14 @@ struct GeneralSettingsTab: View {
                                 .font(Typography.bodyMedium)
                                 .foregroundStyle(Color.textPrimary)
                             Spacer()
-                            Menu {
+                            Picker("Primary hotkey", selection: $selectedHotkey) {
                                 ForEach(HotkeyOption.allCases) { option in
-                                    Button(option.displayName) {
-                                        selectedHotkey = option
-                                    }
+                                    Text(option.displayName).tag(option)
                                 }
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Text(selectedHotkey.displayName)
-                                        .font(Typography.bodySmall)
-                                        .foregroundStyle(Color.textPrimary)
-                                    Image(systemName: "chevron.up.chevron.down")
-                                        .font(.system(size: 9))
-                                        .foregroundStyle(Color.textPrimary)
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 7)
-                                .background(Color.bgHover)
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
                             }
-                            .menuStyle(.borderlessButton)
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .fixedSize()
                         }
 
                         VStack(alignment: .leading, spacing: 6) {
@@ -194,11 +181,9 @@ struct GeneralSettingsTab: View {
                     }
                 }
 
-                // General Behavior
+                // Menu bar and recorder
                 SettingsSection {
-                    SettingsSectionHeader(
-                        icon: "macwindow", title: "General", subtitle: "App behavior settings"
-                    )
+                    SettingsSectionHeader(icon: "menubar.rectangle", title: "Menu bar and recorder")
 
                     VStack(spacing: 16) {
                         HStack {
@@ -208,6 +193,7 @@ struct GeneralSettingsTab: View {
                             Spacer()
                             Toggle("", isOn: $showMenuBarIcon)
                                 .labelsHidden()
+                                .accessibilityLabel("Show menu bar icon")
                                 .toggleStyle(.switch)
                         }
 
@@ -219,6 +205,7 @@ struct GeneralSettingsTab: View {
                                 Spacer()
                                 Toggle("", isOn: $alwaysShowRecorderPill)
                                     .labelsHidden()
+                                    .accessibilityLabel("Always show recorder pill")
                                     .toggleStyle(.switch)
                                     .onChange(of: alwaysShowRecorderPill) {
                                         NotificationCenter.default.post(
@@ -251,42 +238,23 @@ struct GeneralSettingsTab: View {
                             .font(Typography.bodyMedium)
                             .foregroundStyle(Color.textPrimary)
                         Spacer()
-                        Menu {
-                            Button("Hinglish (Latin script)") { transcriptionLanguage = "hinglish" }
-                            Button("Auto-detect spoken language") { transcriptionLanguage = "auto" }
-                            if !recentLanguageCodes.isEmpty {
+                        // Recent languages sit above the full list; each tag appears once.
+                        Picker("Speech language", selection: $transcriptionLanguage) {
+                            Text(ModelSelection.languageName(for: "hinglish")).tag("hinglish")
+                            Text(ModelSelection.languageName(for: "auto")).tag("auto")
+                            if !recentLanguages.isEmpty {
                                 Divider()
-                                ForEach(recentLanguageCodes, id: \.self) { code in
-                                    if let lang = Self.whisperLanguages.first(where: { $0.code == code }) {
-                                        Button(lang.name) {
-                                            transcriptionLanguage = code
-                                            updateRecentLanguages(code: code)
-                                        }
-                                    }
-                                }
+                                ForEach(recentLanguages, id: \.code) { Text($0.name).tag($0.code) }
                             }
                             Divider()
-                            ForEach(Self.whisperLanguages, id: \.code) { lang in
-                                Button(lang.name) {
-                                    transcriptionLanguage = lang.code
-                                    updateRecentLanguages(code: lang.code)
-                                }
+                            ForEach(Self.whisperLanguages.filter { !recentLanguageCodes.contains($0.code) }, id: \.code) {
+                                Text($0.name).tag($0.code)
                             }
-                        } label: {
-                            HStack(spacing: 6) {
-                                Text(displayName(for: transcriptionLanguage))
-                                    .font(Typography.bodySmall)
-                                    .foregroundStyle(Color.textPrimary)
-                                Image(systemName: "chevron.up.chevron.down")
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(Color.textPrimary)
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(Color.bgHover)
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
                         }
-                        .menuStyle(.borderlessButton)
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .fixedSize()
+                        .onChange(of: transcriptionLanguage) { updateRecentLanguages(code: transcriptionLanguage) }
                     }
 
                     Text("Hinglish uses a dedicated local model to write Hindi and English in Latin script. Other choices are spoken-language hints and do not translate.")
@@ -294,7 +262,7 @@ struct GeneralSettingsTab: View {
                         .foregroundStyle(Color.textMuted)
                         .padding(.top, 4)
 
-                    Text("If this does not match the language you actually speak, the result can be inaccurate or even come back in the wrong language. Auto-detect is the safest default.")
+                    Text("If this does not match the language you actually speak, the result can be inaccurate or even come back in the wrong language. When unsure, choose Detect automatically.")
                         .font(Typography.captionSmall)
                         .foregroundStyle(Color.textMuted)
                         .padding(.top, 4)
@@ -314,6 +282,7 @@ struct GeneralSettingsTab: View {
                             Spacer()
                             Toggle("", isOn: $autoUpdate)
                                 .labelsHidden()
+                                .accessibilityLabel("Automatically check for updates")
                                 .toggleStyle(.switch)
                                 .disabled(!AppEnvironment.updatesEnabled)
                         }
@@ -334,7 +303,7 @@ struct GeneralSettingsTab: View {
                                 }
                                 Text(
                                     updateService.isCheckingForUpdates
-                                        ? "Checking..." : "Check for Updates"
+                                        ? "Checking…" : "Check for updates"
                                 )
                                 .font(Typography.labelMedium)
                             }
@@ -350,7 +319,7 @@ struct GeneralSettingsTab: View {
                             Text(updateService.checkStatus).font(Typography.bodySmall).foregroundStyle(Color.textSecondary)
                         }
                         if let update = updateService.availableUpdate {
-                            Button("Download and Install \(update.version)") { updateService.installUpdate(url: update.downloadURL) }
+                            Button("Download and install \(update.version)") { updateService.installUpdate(url: update.downloadURL) }
                                 .buttonStyle(.stSecondary)
                                 .disabled(updateService.isInstalling)
                         }
@@ -365,14 +334,8 @@ struct GeneralSettingsTab: View {
                 }
 
             }
-            .padding(24)
+            .padding(PageLayout.padding)
         }
-    }
-
-    private func displayName(for code: String) -> String {
-        if code == "hinglish" { return "Hinglish (Latin script)" }
-        if code == "auto" { return "Auto-detect" }
-        return Self.whisperLanguages.first(where: { $0.code == code })?.name ?? code
     }
 
     // All languages supported by Whisper, sorted alphabetically
@@ -410,12 +373,15 @@ struct GeneralSettingsTab: View {
 struct AudioSettingsTab: View {
     @StateObject private var audioRecorder = AudioRecordingService.shared
 
+    private var currentDeviceName: String? {
+        audioRecorder.availableDevices.first { $0.uniqueID == audioRecorder.selectedDeviceId }?.localizedName
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
                 SettingsSection {
-                    SettingsSectionHeader(
-                        icon: "mic", title: "Input device", subtitle: "Select your microphone")
+                    SettingsSectionHeader(icon: "mic", title: "Input device")
 
                     VStack(spacing: 12) {
                         if audioRecorder.availableDevices.isEmpty {
@@ -426,22 +392,29 @@ struct AudioSettingsTab: View {
                         } else {
                             // Automatic follows the system input, except that an open MacBook
                             // keeps its built-in mic when AirPods would drop to call quality.
-                            DeviceRow(
-                                name: "Automatic (recommended)",
-                                isActive: audioRecorder.isAutomaticSelection,
-                                isSelected: audioRecorder.isAutomaticSelection
-                            )
-                            .onTapGesture { audioRecorder.useAutomaticInput() }
-                            ForEach(audioRecorder.availableDevices, id: \.uniqueID) { device in
+                            // Only the device in use is marked Active; Automatic names it instead.
+                            Button { audioRecorder.useAutomaticInput() } label: {
                                 DeviceRow(
-                                    name: device.localizedName,
-                                    isActive: audioRecorder.selectedDeviceId == device.uniqueID,
-                                    isSelected: !audioRecorder.isAutomaticSelection
-                                        && audioRecorder.selectedDeviceId == device.uniqueID
+                                    name: "Automatic (recommended)",
+                                    subtitle: audioRecorder.isAutomaticSelection ? currentDeviceName.map { "Using \($0)" } : nil,
+                                    isActive: false,
+                                    isSelected: audioRecorder.isAutomaticSelection
                                 )
-                                .onTapGesture {
-                                    audioRecorder.selectedDeviceId = device.uniqueID
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityAddTraits(audioRecorder.isAutomaticSelection ? .isSelected : [])
+                            ForEach(audioRecorder.availableDevices, id: \.uniqueID) { device in
+                                Button { audioRecorder.selectedDeviceId = device.uniqueID } label: {
+                                    DeviceRow(
+                                        name: device.localizedName,
+                                        isActive: audioRecorder.selectedDeviceId == device.uniqueID,
+                                        isSelected: !audioRecorder.isAutomaticSelection
+                                            && audioRecorder.selectedDeviceId == device.uniqueID
+                                    )
                                 }
+                                .buttonStyle(.plain)
+                                .accessibilityAddTraits(!audioRecorder.isAutomaticSelection
+                                    && audioRecorder.selectedDeviceId == device.uniqueID ? .isSelected : [])
                             }
                         }
                     }
@@ -463,7 +436,7 @@ struct AudioSettingsTab: View {
                     .padding(.top, 8)
                 }
             }
-            .padding(24)
+            .padding(PageLayout.padding)
         }
         .onAppear {
             audioRecorder.fetchAvailableDevices()
@@ -482,9 +455,7 @@ struct PermissionsSettingsTab: View {
         ScrollView {
             VStack(spacing: 16) {
                 SettingsSection {
-                    SettingsSectionHeader(
-                        icon: "shield", title: "App permissions",
-                        subtitle: "Required for full functionality")
+                    SettingsSectionHeader(icon: "shield", title: "App permissions")
 
                     VStack(spacing: 10) {
                         SettingsPermissionItem(
@@ -515,7 +486,7 @@ struct PermissionsSettingsTab: View {
                     }
                 }
             }
-            .padding(24)
+            .padding(PageLayout.padding)
         }
         .onAppear {
             checkPermissions()
@@ -550,7 +521,7 @@ struct PermissionsSettingsTab: View {
 struct SettingsSectionHeader: View {
     let icon: String
     let title: String
-    let subtitle: String
+    var subtitle: String? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -562,9 +533,11 @@ struct SettingsSectionHeader: View {
                 Text(title)
                     .font(Typography.labelLarge)
                     .foregroundStyle(Color.textPrimary)
-                Text(subtitle)
-                    .font(Typography.captionSmall)
-                    .foregroundStyle(Color.textMuted)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(Typography.captionSmall)
+                        .foregroundStyle(Color.textMuted)
+                }
             }
 
             Spacer()
@@ -600,6 +573,7 @@ struct ToggleRow: View {
             Spacer()
             Toggle("", isOn: $isOn)
                 .labelsHidden()
+                .accessibilityLabel(title)
                 .toggleStyle(.switch)
         }
     }
@@ -634,6 +608,7 @@ struct RadioButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

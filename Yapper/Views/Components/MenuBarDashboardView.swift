@@ -25,21 +25,21 @@ struct MenuBarDashboardView: View {
                     Text("A little less typing.").font(Typography.caption).foregroundStyle(Color.textSecondary)
                 }
                 Spacer()
-                Button("Open", action: openDashboard)
+                Button("Open Yapper", action: openDashboard)
                     .buttonStyle(.stSecondary).accessibilityIdentifier("menu.open")
             }
             HStack(spacing: 0) {
                 statistic("Today", value: history.transcriptionCount(since: Calendar.current.startOfDay(for: Date())), tint: .candyBlush)
                 statistic("Total", value: history.transcriptionCount(), tint: .candyLilac)
                 statistic("Words", value: history.totalWordCount(), tint: .candyCloud)
-                statistic("Saved min", value: history.totalWordCount() / 40, tint: .candyBlue)
+                statistic("Minutes saved", value: history.totalWordCount() / 40, tint: .candyBlue)
             }
             .padding(.vertical, 12)
             .background(Color.bgCard, in: RoundedRectangle(cornerRadius: 14))
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text("Recent words").font(Typography.headlineMedium)
+                    Text("Recent transcriptions").font(Typography.headlineMedium)
                     Spacer()
                     Text("Click to copy").font(Typography.captionSmall).foregroundStyle(Color.textSecondary)
                 }
@@ -63,7 +63,6 @@ struct MenuBarDashboardView: View {
             HStack {
                 Text("Shivam").font(Typography.labelSmall).foregroundStyle(Color.textSecondary)
                 Spacer()
-                Button("Open dashboard", action: openDashboard).buttonStyle(.stGhost)
                 Button("Quit", action: quit).buttonStyle(.stGhost).accessibilityIdentifier("menu.quit")
             }
         }
@@ -88,22 +87,31 @@ struct MenuBarDashboardView: View {
 private struct MenuBarTranscriptRow: View {
     let item: HistoryItem
     @State private var hovered = false
+    @State private var showCopySuccess = false
 
     var body: some View {
         Button {
             ClipboardService.shared.copy(text: item.displayText)
+            withAnimation { showCopySuccess = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                withAnimation { showCopySuccess = false }
+            }
         } label: {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "text.bubble").foregroundStyle(Color.accentPrimary)
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(item.displayText.isEmpty ? "Empty transcription" : item.displayText)
+                    Text(item.previewText.isEmpty ? "Empty transcription" : item.previewText)
                         .font(Typography.bodySmall).lineLimit(2)
                         .multilineTextAlignment(.leading)
                     HStack {
-                        Text(item.date, style: .relative)
+                        Text(item.date, format: .relative(presentation: .named))
                         Spacer()
-                        Text("\(item.transcript.split(whereSeparator: \.isWhitespace).count) words")
-                        Image(systemName: "doc.on.doc")
+                        if showCopySuccess {
+                            Label("Copied", systemImage: "checkmark").foregroundStyle(Color.accentSuccess)
+                        } else {
+                            Text("\(item.transcript.split(whereSeparator: \.isWhitespace).count) words")
+                            Image(systemName: "doc.on.doc")
+                        }
                     }
                     .font(Typography.captionSmall).foregroundStyle(Color.textSecondary)
                 }

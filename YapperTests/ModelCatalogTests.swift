@@ -43,4 +43,11 @@ final class ModelCatalogTests: XCTestCase {
         XCTAssertEqual(unused, ["openai_whisper-large-v3_turbo", "whisper-tiny",
             AsrModels.defaultCacheDirectory(for: .v2).lastPathComponent])
     }
+
+    func testLanguageNamesAreSharedAcrossScreens() {
+        XCTAssertEqual(ModelSelection.languageName(for: "auto"), "Detect automatically")
+        XCTAssertEqual(ModelSelection.languageName(for: "hinglish"), "Hinglish (Latin script)")
+        XCTAssertEqual(ModelSelection.languageName(for: "gu"), "Gujarati")
+        XCTAssertEqual(ModelSelection.languageName(for: "xx"), "xx")
+    }
 }

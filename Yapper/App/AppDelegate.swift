@@ -30,6 +30,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if ProcessInfo.processInfo.environment["YAPPER_RECORDER_PREVIEW"] == "permission-feedback" {
                 miniRecorderController?.job.showPasteFeedback(.copiedPermissionMissing)
             }
+            if ProcessInfo.processInfo.environment["YAPPER_RECORDER_PREVIEW"] == "recording" {
+                // A full sample window so recorder screenshots show the waveform's real extent.
+                AudioRecordingService.shared.liveWaveSamples = (0..<48).map { 0.2 + 0.25 * abs(sin(Float($0) * 0.6)) }
+            }
             if ProcessInfo.processInfo.environment["YAPPER_RECORDER_PREVIEW"] == "cancelable" {
                 let controller = miniRecorderController
                 if let snapshot = controller?.job.begin(model: "", language: "auto", targetPID: nil) {

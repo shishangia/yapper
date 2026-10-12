@@ -50,35 +50,12 @@ struct ConversationTranscriptView: View {
                             if !historyService.undoSingleSpeaker(itemID: itemID) { error = "This correction can no longer be undone." }
                         }
                         .buttonStyle(.stSecondary).accessibilityIdentifier("undoSingleSpeaker")
-                    } else if !conversation.segments.isEmpty && (conversation.unassignedCount > 0 || conversation.speakerIDs.count > 1) {
-                        Button("One speaker…") {
-                            singleSpeakerID = conversation.speakerIDs.first ?? "1"
-                            error = nil
-                            confirmingSingleSpeaker = true
-                        }
-                        .buttonStyle(.stSecondary).accessibilityIdentifier("confirmSingleSpeaker")
                     }
                     if conversation.unassignedCount == 0 {
                         Button(reviewing ? "Reading view" : "Edit turns") { reviewing.toggle() }
                             .buttonStyle(.stSecondary).accessibilityIdentifier("reviewSpeakers")
                     }
-                    Button("Add speaker") {
-                        speakerName = ""
-                        error = nil
-                        addingSpeaker = true
-                    }
-                    .buttonStyle(.stSecondary)
-                    .accessibilityIdentifier("addSpeaker")
-                    if conversation.speakerIDs.count > 1 {
-                        Button("Merge speakers") {
-                            mergeSource = conversation.speakerIDs[0]
-                            mergeTarget = conversation.speakerIDs[1]
-                            error = nil
-                            merging = true
-                        }
-                        .buttonStyle(.stSecondary)
-                        .accessibilityIdentifier("mergeSpeakers")
-                    }
+                    speakersMenu(conversation)
                 }
                 if !reviewing {
                     ForEach(conversation.displayedBlocks) { block in
@@ -284,13 +261,55 @@ struct ConversationTranscriptView: View {
         }
     }
 
+    private func speakersMenu(_ conversation: ConversationTranscript) -> some View {
+        Menu {
+            if conversation.singleSpeakerUndo == nil && !conversation.segments.isEmpty
+                && (conversation.unassignedCount > 0 || conversation.speakerIDs.count > 1) {
+                Button("One speaker…") {
+                    singleSpeakerID = conversation.speakerIDs.first ?? "1"
+                    error = nil
+                    confirmingSingleSpeaker = true
+                }
+                .accessibilityIdentifier("confirmSingleSpeaker")
+            }
+            Button("Add speaker…") {
+                speakerName = ""
+                error = nil
+                addingSpeaker = true
+            }
+            .accessibilityIdentifier("addSpeaker")
+            if conversation.speakerIDs.count > 1 {
+                Button("Merge speakers…") {
+                    mergeSource = conversation.speakerIDs[0]
+                    mergeTarget = conversation.speakerIDs[1]
+                    error = nil
+                    merging = true
+                }
+                .accessibilityIdentifier("mergeSpeakers")
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text("Speakers")
+                Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
+            }
+        }
+        .menuStyle(.button)
+        .buttonStyle(.stSecondary)
+        .fixedSize()
+        .accessibilityIdentifier("speakersMenu")
+    }
+
     private func readingText(_ block: ConversationReadingBlock, markUncertainty: Bool) -> AttributedString {
         block.segments.reduce(into: AttributedString()) { output, segment in
-            var text = AttributedString(segment.text)
+            // Recognized words carry a leading space; a block starts at its first word,
+            // and only the words themselves are underlined.
+            let words = output.characters.isEmpty ? Substring(segment.text.drop(while: \.isWhitespace)) : Substring(segment.text)
+            let space = words.prefix(while: \.isWhitespace)
+            var text = AttributedString(String(words.dropFirst(space.count)))
             if markUncertainty && segment.speakerID == nil {
                 text.underlineStyle = .single
             }
-            output += text
+            output += AttributedString(String(space)) + text
         }
     }
 

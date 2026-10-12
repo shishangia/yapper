@@ -49,8 +49,8 @@ struct HistoryView: View {
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 20)
+                .padding(.horizontal, PageLayout.padding)
+                .padding(.top, PageLayout.padding)
             
                 
                 if historyService.items.isEmpty {
@@ -105,8 +105,8 @@ struct HistoryView: View {
                             )
                         }
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 24)
+                    .padding(.horizontal, PageLayout.padding)
+                    .padding(.bottom, PageLayout.padding)
                 }
             }
         }
@@ -228,12 +228,14 @@ struct HistoryCard: View {
                     
                     // Content
                     VStack(alignment: .leading, spacing: 8) {
-                        // Transcript preview
-                        Text(item.displayText)
-                            .font(Typography.bodyMedium)
-                            .foregroundStyle(Color.textPrimary)
-                            .lineLimit(2)
-                            .lineSpacing(4)
+                        // Transcript preview; the expanded card shows the full text below.
+                        if !isExpanded {
+                            Text(item.previewText)
+                                .font(Typography.bodyMedium)
+                                .foregroundStyle(Color.textPrimary)
+                                .lineLimit(2)
+                                .lineSpacing(4)
+                        }
                         
                         // Metadata
                         HStack(spacing: 12) {
@@ -282,6 +284,9 @@ struct HistoryCard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("\(item.date.formatted(date: .abbreviated, time: .shortened)), \(wordCount) words")
+            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+            .accessibilityIdentifier("history.item.\(item.id)")
             
             // Expanded content
             if isExpanded {
@@ -304,106 +309,44 @@ struct HistoryCard: View {
                         // Actions row
                         RawDictationView(item: item)
                         HStack(spacing: 12) {
-                            Button(action: onCopy) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "doc.on.doc")
-                                        .font(.system(size: 12))
-                                    Text("Copy")
-                                        .font(Typography.labelMedium)
-                                }
-                                .foregroundStyle(Color.textSecondary)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 8)
-                                .background(Color.bgHover)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                            }
-                            .buttonStyle(.plain)
+                            Button("Copy", systemImage: "doc.on.doc", action: onCopy)
+                                .buttonStyle(.stSecondary)
 
                             if let original = RawDictationView.original(for: item) {
-                                Button {
-                                    onCopyOriginal(original)
-                                } label: {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "doc.on.doc")
-                                            .font(.system(size: 12))
-                                        Text("Copy original")
-                                            .font(Typography.labelMedium)
-                                    }
-                                    .foregroundStyle(Color.textSecondary)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 8)
-                                    .background(Color.bgHover)
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                                }
-                                .buttonStyle(.plain)
+                                Button("Copy original", systemImage: "doc.on.doc") { onCopyOriginal(original) }
+                                    .buttonStyle(.stSecondary)
                             }
 
-                            Button(role: .destructive, action: onDelete) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "trash")
-                                        .font(.system(size: 12))
-                                    Text("Delete")
-                                        .font(Typography.labelMedium)
-                                }
-                                .foregroundStyle(Color.textSecondary)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 8)
-                                .background(Color.bgHover)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                            }
-                            .buttonStyle(.plain)
-                            
                             if let audioURL = item.audioFileURL, audioFileExists {
-                                Button(action: {
+                                Button(audioPlayer.isPlaying ? "Pause" : "Play audio",
+                                       systemImage: audioPlayer.isPlaying ? "pause.fill" : "play.fill") {
                                     if audioPlayer.isPlaying {
                                         audioPlayer.pause()
                                     } else {
                                         audioPlayer.play()
                                     }
-                                }) {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
-                                            .font(.system(size: 12))
-                                        Text(audioPlayer.isPlaying ? "Pause" : "Play audio")
-                                            .font(Typography.labelMedium)
-                                    }
-                                    .foregroundStyle(Color.textSecondary)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 8)
-                                    .background(Color.bgHover)
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
                                 }
-                                .buttonStyle(.plain)
-                                
-                                Button(action: {
+                                .buttonStyle(.stSecondary)
+
+                                Button("Show in Finder", systemImage: "folder") {
                                     NSWorkspace.shared.activateFileViewerSelecting([audioURL])
-                                }) {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "folder")
-                                            .font(.system(size: 12))
-                                        Text("Show in Finder")
-                                            .font(Typography.labelMedium)
-                                    }
-                                    .foregroundStyle(Color.textSecondary)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 8)
-                                    .background(Color.bgHover)
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(.stSecondary)
                             } else if item.audioFileURL != nil {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "exclamationmark.triangle")
-                                        .font(.system(size: 12))
-                                    Text("Audio file missing")
-                                        .font(Typography.labelMedium)
-                                }
-                                .foregroundStyle(Color.textMuted)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 8)
-                                .background(Color.bgHover.opacity(0.8))
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                Label("Audio file missing", systemImage: "exclamationmark.triangle")
+                                    .font(Typography.labelMedium)
+                                    .foregroundStyle(Color.textMuted)
                             }
+
+                            Spacer(minLength: 0)
+
+                            Button(role: .destructive, action: onDelete) {
+                                Image(systemName: "trash")
+                                    .frame(width: 16, height: 18)
+                            }
+                            .buttonStyle(.stGhost)
+                            .help("Delete transcript")
+                            .accessibilityLabel("Delete transcript")
                         }
                         
                         // Audio waveform (if available)

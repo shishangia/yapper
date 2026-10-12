@@ -7,11 +7,9 @@ struct MiniRecorderView: View {
     @ObservedObject private var audioRecorder = AudioRecordingService.shared
     private var transcription: TranscriptionManager { TranscriptionManager.shared }
     let job: RecorderJob
-    @State private var preview = LiveDictationPreview()
-    @AppStorage(DictationPreferences.previewKey) private var livePreview = true
     private var isListening: Bool { job.isBusy && job.phase == .recording }
     private var isProcessing: Bool { job.isBusy && job.phase != .recording }
-    @State private var statusMessage = "Transcribing..."
+    @State private var statusMessage = "Transcribing…"
     var onCommit: ((String, RecorderJob.Snapshot) -> Void)?
     var onCancel: (() -> Void)?
 
@@ -55,16 +53,16 @@ struct MiniRecorderView: View {
 
     private var currentLanguageLabel: String {
         if transcriptionLanguage == "auto" { return "Auto" }
-        return spokenLanguageDisplayName(for: transcriptionLanguage)
+        return ModelSelection.languageName(for: transcriptionLanguage)
     }
 
     private var spokenLanguageHelpText: String {
         if transcriptionLanguage == "auto" {
-            return "Spoken language hint: Auto-detect. Yapper will try to detect the language you are speaking."
+            return "Yapper detects the spoken language automatically."
         }
 
         return
-            "Spoken language hint: \(spokenLanguageDisplayName(for: transcriptionLanguage)). If this does not match the language you actually speak, the result may be inaccurate or come back in the wrong language."
+            "Spoken language hint: \(ModelSelection.languageName(for: transcriptionLanguage)). If this does not match the language you actually speak, the result may be inaccurate or come back in the wrong language."
     }
 
     private var currentInputDeviceName: String {
@@ -138,13 +136,13 @@ struct MiniRecorderView: View {
 
     private var languageControl: some View {
         Menu {
-            Button("Hinglish · Latin script") { setLanguage("hinglish") }
-            Button("Auto-detect") { setLanguage("auto") }
+            Button(ModelSelection.languageName(for: "hinglish")) { setLanguage("hinglish") }
+            Button(ModelSelection.languageName(for: "auto")) { setLanguage("auto") }
             if !quickLanguageCodes.isEmpty {
                 Divider()
                 ForEach(quickLanguageCodes, id: \.self) { code in
                     if code == "hinglish" {
-                        Button("Hinglish · Latin script") { setLanguage(code) }
+                        Button(ModelSelection.languageName(for: code)) { setLanguage(code) }
                     } else if let lang = GeneralSettingsTab.whisperLanguages.first(where: { $0.code == code }) {
                         Button(lang.name) { setLanguage(code) }
                     }
@@ -281,23 +279,15 @@ struct MiniRecorderView: View {
         case .warming: return 200
         case .processing: return statusMessage.count > 28 ? 490 : 210  // long notices use the feedback width
         case .feedback: return 490
-        case .recording: return livePreview ? 480 : expanded ? 460 : 250
+        case .recording: return expanded ? 460 : 250
         }
     }
 
     private var pillHeight: CGFloat {
-        displayPhase == .idle ? 24 : displayPhase == .recording && livePreview ? 128 : 44
+        displayPhase == .idle ? 24 : 44
     }
 
-    private var pillCornerRadius: CGFloat { min(24, pillHeight / 2) }
-
-    private var draftText: String {
-        #if DEBUG
-        if ProcessInfo.processInfo.environment["YAPPER_RECORDER_PREVIEW"] == "recording",
-           let sample = ProcessInfo.processInfo.environment["YAPPER_PREVIEW_TEXT"] { return sample }
-        #endif
-        return preview.text.isEmpty ? "Listening… Draft text appears as you speak." : preview.text
-    }
+    private var pillCornerRadius: CGFloat { pillHeight / 2 }
 
     // MARK: - Phase content
 
@@ -321,7 +311,7 @@ struct MiniRecorderView: View {
             ProgressView()
                 .controlSize(.small)
                 .tint(Color.accentPrimary)
-            Text("Warming up model...")
+            Text("Warming up model…")
                 .font(Typography.pillLabel)
                 .foregroundColor(Color.textPrimary)
         }
@@ -415,33 +405,23 @@ struct MiniRecorderView: View {
                 HStack(spacing: 10) {
                     Text(job.pasteFeedback?.message ?? "").font(Typography.pillLabel)
                     if job.pasteFeedback == .copiedPermissionMissing {
-                        Button("Settings") { ClipboardService.shared.openAccessibilitySettings() }
-                            .buttonStyle(.borderless)
+                        Button { ClipboardService.shared.openAccessibilitySettings() } label: {
+                            Text("Settings")
+                                .font(Typography.pillControl)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Capsule().fill(Color.btnSecondaryBg))
+                                .overlay(Capsule().strokeBorder(Color.border, lineWidth: 1))
+                                .contentShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 .padding(.horizontal, 12)
                 .foregroundStyle(Color.textPrimary)
                 .accessibilityIdentifier("pasteFeedback")
             case .recording:
-                VStack(alignment: .leading, spacing: 6) {
-                    recordingContent.frame(height: livePreview ? 28 : 36)
-                    if livePreview {
-                        ScrollViewReader { proxy in
-                            ScrollView(.vertical) {
-                                Text(draftText)
-                                    .font(Typography.bodyMedium).foregroundStyle(Color.textPrimary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .accessibilityIdentifier("liveDraftText")
-                                    .id("draftText")
-                            }
-                            .scrollIndicators(.hidden)
-                            .onAppear { proxy.scrollTo("draftText", anchor: .bottom) }
-                            .onChange(of: draftText) { proxy.scrollTo("draftText", anchor: .bottom) }
-                        }.frame(height: 48).allowsHitTesting(false)
-                        Text("Live draft · final text may change").font(Typography.caption).foregroundStyle(Color.textSecondary)
-                    }
-                }.padding(livePreview ? 12 : 0)
+                recordingContent
             case .idle:
                 idleContent
             }
@@ -458,7 +438,6 @@ struct MiniRecorderView: View {
             y: displayPhase == .idle ? 3 : 5)
         .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.92), value: displayPhase)
         .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.92), value: expanded)
-        .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.92), value: livePreview)
         .onHover { hovering in
             guard displayPhase == .recording else { return }
             expanded = hovering
@@ -479,10 +458,6 @@ struct MiniRecorderView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .preferredColorScheme(appTheme.colorScheme)
-        .onReceive(audioRecorder.chunkPublisher.receive(on: DispatchQueue.main)) { chunk in
-            guard livePreview, isListening, let snapshot = job.snapshot, preview.captureID == chunk.sessionID else { try? FileManager.default.removeItem(at: chunk.url); return }
-            preview.accept(chunk.url, snapshot: snapshot)
-        }
         .onReceive(NotificationCenter.default.publisher(for: .recordingStartRequested)) { _ in
             startRecording()
         }
@@ -511,7 +486,6 @@ struct MiniRecorderView: View {
             }
         }
         .onDisappear {
-            preview.stop()
             if let globalEscapeMonitor = globalEscapeMonitor {
                 NSEvent.removeMonitor(globalEscapeMonitor)
             }
@@ -613,7 +587,6 @@ struct MiniRecorderView: View {
 
     private func cancelRecording() {
         guard let snapshot = job.snapshot else { return }
-        preview.stop()
         let wasRecording = isListening
         job.cancel()
         onCancel?()
@@ -649,8 +622,7 @@ struct MiniRecorderView: View {
             guard job.canCommit(snapshot.id) else { finish(snapshot); return }
             guard authorized else { showError("Allow microphone access in System Settings", for: snapshot); return }
             guard job.transition(snapshot.id, from: .preparing, to: .recording) else { return }
-            let captureID = preview.begin(snapshot.id)
-            audioRecorder.startRecording(previewSession: captureID)
+            audioRecorder.startRecording()
         }
     }
 
@@ -661,15 +633,13 @@ struct MiniRecorderView: View {
             return
         }
         guard job.transition(snapshot.id, from: .recording, to: .switchingInput) else { return }
-        preview.stop()
-        statusMessage = "Switching input..."
+        statusMessage = "Switching input…"
         Task {
             _ = await audioRecorder.stopRecording(discardOutput: true)
             guard job.canCommit(snapshot.id) else { finish(snapshot); return }
             audioRecorder.selectedDeviceId = deviceId
             guard job.transition(snapshot.id, from: .switchingInput, to: .recording) else { return }
-            let captureID = preview.begin(snapshot.id)
-            audioRecorder.startRecording(previewSession: captureID)
+            audioRecorder.startRecording()
         }
     }
 
@@ -681,8 +651,7 @@ struct MiniRecorderView: View {
             return
         }
         guard job.transition(snapshot.id, from: .recording, to: .stopping) else { return }
-        preview.stop()
-        statusMessage = "Finishing recording..."
+        statusMessage = "Finishing recording…"
         Task {
             guard let url = await audioRecorder.stopRecording() else { finish(snapshot); return }
             guard job.transition(snapshot.id, from: .stopping, to: .processing) else { return }
@@ -703,7 +672,6 @@ struct MiniRecorderView: View {
         guard job.snapshot?.id == snapshot.id else { return }
         transcription.endRecording(snapshot.id)
         job.finish(snapshot.id)
-        preview.stop()
         onCancel?()
     }
 
@@ -724,7 +692,7 @@ struct MiniRecorderView: View {
 
     private func processRecording(url: URL, snapshot: RecorderJob.Snapshot) async {
         do {
-            if job.isPresented { statusMessage = "Transcribing..." }
+            if job.isPresented { statusMessage = "Transcribing…" }
             let output = try await transcription.transcribeDetailed(audioFile: url, variant: snapshot.model, language: snapshot.language)
             let text = DictationPunctuation.apply(to: output.text, enabled: true)
             guard !text.isEmpty else { showError("No speech detected", for: snapshot); return }
@@ -751,12 +719,6 @@ struct MiniRecorderView: View {
         } catch {
             return 0
         }
-    }
-
-    private func spokenLanguageDisplayName(for code: String) -> String {
-        if code == "hinglish" { return "Hinglish (Latin script)" }
-        if code == "auto" { return "Auto-detect" }
-        return GeneralSettingsTab.whisperLanguages.first(where: { $0.code == code })?.name ?? code
     }
 }
 

@@ -35,11 +35,6 @@ public partial class MainWindow : Window
     private WindowsUpdate? availableUpdate;
     private bool updateBusy;
     private long modelStorageBytes;
-    private bool previewBusy;
-    private CancellationTokenSource? previewCancellation;
-    private string previewText = "";
-    private bool skippedPreview;
-    private bool previewPaused;
     private readonly System.Windows.Threading.DispatcherTimer idleModelTimer = new() { Interval = TimeSpan.FromSeconds(15) };
 
     public MainWindow(string root)
@@ -53,7 +48,6 @@ public partial class MainWindow : Window
         recorder.StopRequested += () => _ = StopAndProcess();
         recorder.CancelRequested += () => CancelJob(this, new RoutedEventArgs());
         audio.LevelChanged += level => Dispatcher.InvokeAsync(() => recorder.UpdateLevel(level));
-        audio.PreviewChunk += (samples, id) => Dispatcher.InvokeAsync(() => PreviewAudio(samples, id));
         ThemeChoice.SelectedItem = ThemeChoice.Items.Cast<ComboBoxItem>().First(i => (string)i.Content == AppTheme.Preference);
         Microsoft.Win32.SystemEvents.UserPreferenceChanged += SystemAppearanceChanged;
         Width = Math.Min(Width, SystemParameters.WorkArea.Width - 32);
@@ -71,7 +65,6 @@ public partial class MainWindow : Window
         AutoEdit.IsChecked = library.Data.Preferences.AutoEdit;
         IncludeTimestamps.IsChecked = library.Data.Preferences.IncludeTimestamps;
         AutoCheckUpdates.IsChecked = library.Data.Preferences.AutoCheckUpdates;
-        LivePreview.IsChecked = library.Data.Preferences.LivePreview;
         PreferredWords.Text = library.Data.Preferences.PreferredWords;
         ModelIdleMinutes.SelectedItem = ModelIdleMinutes.Items.Cast<ComboBoxItem>().FirstOrDefault(i => (string)i.Tag == library.Data.Preferences.ModelIdleMinutes.ToString()) ?? ModelIdleMinutes.Items[2];
         idleModelTimer.Tick += async (_, _) =>
@@ -206,7 +199,7 @@ public partial class MainWindow : Window
         library.Save(library.Data with { Preferences = library.Data.Preferences with {
             Language = SpokenLanguage, ToggleRecording = ToggleMode.IsChecked == true,
             AutoEdit = AutoEdit.IsChecked == true, AutoCheckUpdates = AutoCheckUpdates.IsChecked == true,
-            IncludeTimestamps = IncludeTimestamps.IsChecked == true, LivePreview = LivePreview.IsChecked == true,
+            IncludeTimestamps = IncludeTimestamps.IsChecked == true,
             PreferredWords = PreferredWords.Text, ModelIdleMinutes = int.Parse((string)((ComboBoxItem)ModelIdleMinutes.SelectedItem).Tag) } });
         SyncDisplayedModel();
         UpdateReady();
@@ -224,7 +217,6 @@ public partial class MainWindow : Window
     }
     private void Finish()
     {
-        previewCancellation?.Cancel(); previewCancellation?.Dispose(); previewCancellation = null;
         speech.SetRecording(false);
         jobs.Finish(activeId);
         cancellation?.Dispose(); cancellation = null;
@@ -257,10 +249,7 @@ public partial class MainWindow : Window
         try
         {
             speech.SetRecording(true);
-            previewCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellation!.Token);
-            previewText = ""; skippedPreview = false; previewPaused = false;
-            audio.Start(recordingPath, MicrophoneChoice.SelectedIndex, dictation && options.Preferences.LivePreview, activeId);
-            recorder.SetPreview(dictation && options.Preferences.LivePreview ? "Listening… Draft text appears as you speak." : null);
+            audio.Start(recordingPath, MicrophoneChoice.SelectedIndex);
             recorder.Present(true);
             Status.Text = "Recording microphone… Press the shortcut again or Stop when finished.";
             tray.Text = "Yapper · Recording";
@@ -290,35 +279,7 @@ public partial class MainWindow : Window
     {
         if (finishing || recordingPath is null || options is null) return;
         finishing = true;
-        previewCancellation?.Cancel();
         await StopAndProcessCore();
-    }
-    private async void PreviewAudio(float[] samples, Guid id)
-    {
-        if (id != activeId || finishing || previewPaused || !audio.IsRecording || options is not { Dictation: true } job || previewCancellation is null) return;
-        if (previewBusy) { skippedPreview = true; return; }
-        var token = previewCancellation.Token;
-        if (token.IsCancellationRequested) return;
-        previewBusy = true;
-        var gap = skippedPreview; skippedPreview = false;
-        try
-        {
-            var result = await speech.Transcribe(samples, job.Model, job.Language, false, false, new Progress<(string, double)>(), token, job.Preferences.PreferredWords, preview: true);
-            // A preview slower than real time only competes with the final transcription; stop previews for this recording.
-            if (id == activeId && result.InferenceSeconds > samples.Length / 16000d) previewPaused = true;
-            if (id == activeId && !finishing && audio.IsRecording && !token.IsCancellationRequested)
-            {
-                var draft = result.Transcript.PlainText.Trim();
-                if (draft.Length > 0)
-                {
-                    previewText += (previewText.Length == 0 ? "" : gap ? " … " : " ") + draft;
-                    if (previewText.Length > 500) previewText = previewText[^500..];
-                    recorder.SetPreview(previewText);
-                }
-            }
-        }
-        catch (Exception error) { Debug.WriteLine("Live preview unavailable: " + error.GetType().Name); }
-        finally { previewBusy = false; }
     }
     private async Task StopAndProcessCore()
     {

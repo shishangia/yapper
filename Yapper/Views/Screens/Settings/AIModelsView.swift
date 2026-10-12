@@ -30,7 +30,7 @@ struct AIModelsView: View {
                 modelList
                 if !unusedFolders.isEmpty { unusedFilesRow }
             }
-            .padding(24)
+            .padding(PageLayout.padding)
         }
         .tint(Color.accentPrimary)
         .accessibilityIdentifier("aiModels")

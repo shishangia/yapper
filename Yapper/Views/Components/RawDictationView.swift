@@ -3,12 +3,12 @@ import SwiftUI
 struct RawDictationView: View {
     let item: HistoryItem
 
-    /// The recognized text before cleanup, only when cleanup actually changed it.
+    /// The recognized text before cleanup, trimmed, only when cleanup actually changed it.
     static func original(for item: HistoryItem) -> String? {
         guard item.conversation == nil, let raw = item.rawTranscription else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed != item.transcript.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
-        return raw
+        return trimmed
     }
 
     var body: some View {

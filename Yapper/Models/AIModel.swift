@@ -56,7 +56,7 @@ struct AIModel: Identifiable, Equatable {
         AIModel(
             name: "Whisper Large v3 Turbo",
             variant: "openai_whisper-large-v3-v20240930_turbo",
-            details: "OpenAI's four-layer Turbo model for faster multilingual dictation and conversations.",
+            details: "A fast, accurate choice for everyday dictation and conversations in many languages.",
             size: "1.6 GB",
             speed: 7.0,
             accuracy: 9.5,
@@ -66,7 +66,7 @@ struct AIModel: Identifiable, Equatable {
         AIModel(
             name: "Whisper Large v3",
             variant: "openai_whisper-large-v3",
-            details: "Full multilingual Whisper model for detailed transcription.",
+            details: "The full-size model for careful transcription in many languages, slower than Turbo.",
             size: "~3 GB",
             speed: 4.0,
             accuracy: 9.5,
@@ -76,7 +76,7 @@ struct AIModel: Identifiable, Equatable {
         AIModel(
             name: "Whisper Hinglish Turbo",
             variant: hinglishVariant,
-            details: "Hindi and English speech in natural Latin script. Tested locally on mixed Hinglish audio.",
+            details: "Writes mixed Hindi and English speech in Latin script, the way you would type it.",
             size: "1.6 GB",
             speed: 7.0,
             accuracy: 8.8,
@@ -92,7 +92,7 @@ struct AIModel: Identifiable, Equatable {
         AIModel(
             name: "Parakeet TDT v3",
             variant: ParakeetCatalog.v3Variant,
-            details: "NVIDIA speech recognition for 25 languages.",
+            details: "NVIDIA's model for 25 European languages, including English, and the lightest on memory.",
             size: "~2 GB",
             speed: 9.7,
             accuracy: 9.2,

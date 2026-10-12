@@ -23,6 +23,9 @@ struct HistoryItem: Identifiable, Codable, Hashable {
     var cleanupNote: String? = nil
 
     var displayText: String { conversation?.formattedText ?? transcript }
+    var previewText: String {
+        conversation?.previewText ?? transcript.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
 
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)

@@ -2,13 +2,12 @@ import SwiftUI
 
 struct DictationPerformanceSettings: View {
     @AppStorage(DictationPreferences.idleMinutesKey) private var idleMinutes = 5
-    @AppStorage(DictationPreferences.previewKey) private var livePreview = true
 
     var body: some View {
         SettingsSection {
             SettingsSectionHeader(
                 icon: "memorychip", title: "Dictation performance",
-                subtitle: "Live drafts and idle memory use")
+                subtitle: "Idle memory use")
 
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -28,24 +27,6 @@ struct DictationPerformanceSettings: View {
                         .onChange(of: idleMinutes) { TranscriptionManager.shared.scheduleIdleUnload() }
                     }
                     Text("Frees idle model memory. Your next recording reloads it; model files stay on disk.")
-                        .font(Typography.caption)
-                        .foregroundStyle(Color.textMuted)
-                }
-
-                Divider()
-
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text("Show live draft text while recording")
-                            .font(Typography.bodyMedium)
-                            .foregroundStyle(Color.textPrimary)
-                        Spacer()
-                        Toggle("Show live draft text while recording", isOn: $livePreview)
-                            .labelsHidden()
-                            .toggleStyle(.switch)
-                            .accessibilityIdentifier("liveDictationPreview")
-                    }
-                    Text("Drafts update every few seconds and can change. The complete recording produces the saved transcript.")
                         .font(Typography.caption)
                         .foregroundStyle(Color.textMuted)
                 }
@@ -127,27 +108,6 @@ struct CleanupSettings: View {
                         }
                         .padding(.top, 6)
                     }
-                }
-
-                Divider()
-
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "character.book.closed")
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color.textMuted)
-                        .padding(.top, 2)
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Custom replacements & snippets")
-                            .font(Typography.bodyMedium)
-                            .foregroundStyle(Color.textPrimary)
-                        Text("Word replacements and spoken snippets (say “my email” → your address) now live in the Dictionary tab in the sidebar. They apply on every model, always on.")
-                            .font(Typography.caption)
-                            .foregroundStyle(Color.textMuted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    Spacer(minLength: 0)
                 }
             }
         }

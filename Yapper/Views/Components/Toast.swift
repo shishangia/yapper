@@ -7,17 +7,17 @@ struct Toast: View {
 
     var body: some View {
         HStack(spacing: 8) {
+            // The capsule is dark in both themes, so the icon uses the light blue.
             Image(systemName: systemImage)
-                .foregroundStyle(Color.accentBlue)
+                .foregroundStyle(Color.candyBlue)
             Text(message)
                 .font(Typography.labelMedium)
                 .foregroundStyle(.white)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(Material.ultraThinMaterial)
-        .background(Color.black.opacity(0.8))
-        .clipShape(Capsule())
+        .background(Color.ink, in: Capsule())
+        .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
         .shadow(radius: 10)
         .padding(.bottom, 30)
         .transition(.move(edge: .bottom).combined(with: .opacity))

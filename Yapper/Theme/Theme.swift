@@ -72,6 +72,13 @@ struct ThemeProvider<Content: View>: View {
     }
 }
 
+// MARK: - Page Layout
+
+enum PageLayout {
+    /// Space around every page, so titles sit at the same place on each screen.
+    static let padding: CGFloat = 24
+}
+
 // MARK: - View Modifier
 
 extension View {

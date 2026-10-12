@@ -4,15 +4,7 @@ import CoreMedia
 import Foundation
 
 class AudioRecordingService: NSObject, ObservableObject {
-    // Draft previews use short disposable chunks; the full recording is authoritative.
-    static let shared = AudioRecordingService(generatesChunks: true)
-
-    // Chunk publisher: emits the URL of each completed ~4-second audio chunk while recording
-    struct PreviewChunk { let url: URL; let sessionID: UUID? }
-    let chunkPublisher = PassthroughSubject<PreviewChunk, Never>()
-    private var previewSession: UUID?
-    private var emitsPreview = false
-    private static let chunkDuration: TimeInterval = 4.0
+    static let shared = AudioRecordingService()  // Shared instance for settings/dashboard sync
 
     @Published var isRecording = false
     @Published var audioLevel: Float = 0.0
@@ -69,13 +61,6 @@ class AudioRecordingService: NSObject, ObservableObject {
     private var isStopping = false  // Flag to prevent appending during stop
     private var idleSessionStopWorkItem: DispatchWorkItem?
 
-    // MARK: - Chunking state
-    private var chunkAssetWriter: AVAssetWriter?
-    private var chunkAssetWriterInput: AVAssetWriterInput?
-    private var chunkIsSessionStarted = false
-    private var chunkStartTime: Date?
-    private var chunkFileURL: URL?
-    private var isRotatingChunk = false  // Prevents concurrent rotations
     private var shouldDiscardCurrentRecordingOutput = false
     private var smoothedAudioLevel: Float = 0.0
     private var smoothedAudioFrequency: Float = 0.0
@@ -137,24 +122,7 @@ class AudioRecordingService: NSObject, ObservableObject {
         smoothedAudioFrequency = 0.0
     }
 
-    private func resetChunkWriterState() {
-        chunkAssetWriter = nil
-        chunkAssetWriterInput = nil
-        chunkIsSessionStarted = false
-        chunkStartTime = nil
-        chunkFileURL = nil
-        isRotatingChunk = false
-    }
-
-    private let generatesChunks: Bool
-    var generatesStreamingChunks: Bool { generatesChunks }
-
-    override convenience init() {
-        self.init(generatesChunks: false)
-    }
-
-    init(generatesChunks: Bool) {
-        self.generatesChunks = generatesChunks
+    override init() {
         super.init()
         // Restore the persisted device before discovery completes; AVCaptureDevice(uniqueID:)
         // resolves it directly, and fetchAvailableDevices() falls back if it is gone.
@@ -285,15 +253,12 @@ class AudioRecordingService: NSObject, ObservableObject {
         }
     }
 
-    func startRecording(previewSession: UUID? = nil) {
+    func startRecording() {
         requestPermission()
 
         guard !isRecording else { return }
         // The default input can change without a connect event, e.g. in Sound settings.
         if !availableDevices.isEmpty { refreshSelection() }
-        let emits = generatesChunks && previewSession != nil && (UserDefaults.standard.object(forKey: DictationPreferences.previewKey) as? Bool ?? true)
-        // Read on audioQueue by the capture delegate and chunk writers; queued ahead of writer setup.
-        audioQueue.async { self.previewSession = previewSession; self.emitsPreview = emits }
         if captureSession == nil { setupSession() }
 
         // 1. Reset flags and stale writer state before any new samples arrive.
@@ -301,7 +266,6 @@ class AudioRecordingService: NSObject, ObservableObject {
         shouldDiscardCurrentRecordingOutput = false
         liveWaveSamples = []
         resetMainWriterState()
-        resetChunkWriterState()
         isRecording = true
         recordingStartTime = Date()
         // Hop onto audioQueue: idleSessionStopWorkItem is only ever touched there,
@@ -409,39 +373,9 @@ class AudioRecordingService: NSObject, ObservableObject {
 
         return await withCheckedContinuation { continuation in
             audioQueue.async {
-                // --- Finalize the last in-flight chunk ---
                 let finishGroup = DispatchGroup()
                 var finalizedRecordingURL: URL?
                 let discardOutput = self.shouldDiscardCurrentRecordingOutput
-                let previewID = self.previewSession
-
-                if let lastChunkInput = self.chunkAssetWriterInput,
-                    let lastChunkWriter = self.chunkAssetWriter,
-                    let lastChunkURL = self.chunkFileURL,
-                    self.chunkIsSessionStarted
-                {
-                    self.resetChunkWriterState()
-
-                    finishGroup.enter()
-                    lastChunkInput.markAsFinished()
-                    lastChunkWriter.finishWriting {
-                        self.audioQueue.async {
-                            if discardOutput {
-                                try? FileManager.default.removeItem(at: lastChunkURL)
-                            } else if let validChunkURL = self.validatedAudioFileURL(
-                                at: lastChunkURL,
-                                writer: lastChunkWriter,
-                                label: "Final chunk"
-                            ) {
-                                print("🔪 Final chunk saved: \(validChunkURL.lastPathComponent)")
-                                self.chunkPublisher.send(PreviewChunk(url: validChunkURL, sessionID: previewID))
-                            } else {
-                                try? FileManager.default.removeItem(at: lastChunkURL)
-                            }
-                            finishGroup.leave()
-                        }
-                    }
-                }
 
                 // --- Finalize main (full) recording ---
                 let writer = self.assetWriter
@@ -507,18 +441,6 @@ class AudioRecordingService: NSObject, ObservableObject {
         return recordingsDir
     }
 
-    private func getChunksDirectory() -> URL {
-        let chunksDir = AppEnvironment.applicationSupportDirectory
-            .appendingPathComponent("Chunks", isDirectory: true)
-
-        try? FileManager.default.createDirectory(
-            at: chunksDir,
-            withIntermediateDirectories: true
-        )
-
-        return chunksDir
-    }
-
     private func scheduleIdleSessionStop(delay: TimeInterval = 8) {
         cancelIdleSessionStop()
 
@@ -567,106 +489,6 @@ extension AudioRecordingService: AVCaptureAudioDataOutputSampleBufferDelegate {
             if input.isReadyForMoreMediaData {
                 guard !isStopping else { return }
                 input.append(sampleBuffer)
-            }
-        }
-
-        // --- Chunk writer (background segments) ---
-        if emitsPreview { appendToChunk(sampleBuffer: sampleBuffer, pts: pts) }
-    }
-
-    // MARK: - Chunk Writer Helpers (audioQueue)
-
-    private func appendToChunk(sampleBuffer: CMSampleBuffer, pts: CMTime) {
-        guard !isStopping else { return }
-
-        // Initialize first chunk on first buffer
-        if chunkAssetWriter == nil {
-            startNewChunkWriter(startingAt: pts)
-        }
-
-        guard let cw = chunkAssetWriter, let ci = chunkAssetWriterInput,
-            cw.status == .writing
-        else { return }
-
-        if !chunkIsSessionStarted {
-            cw.startSession(atSourceTime: pts)
-            chunkIsSessionStarted = true
-            chunkStartTime = Date()
-        }
-
-        if ci.isReadyForMoreMediaData {
-            guard !isStopping else { return }
-            ci.append(sampleBuffer)
-        }
-
-        // Rotate chunk after chunkDuration seconds
-        guard !isRotatingChunk,
-            let start = chunkStartTime,
-            Date().timeIntervalSince(start) >= Self.chunkDuration
-        else { return }
-
-        rotateChunk(nextStartPTS: pts)
-    }
-
-    private func startNewChunkWriter(startingAt pts: CMTime) {
-        let url = getChunksDirectory().appendingPathComponent(
-            "chunk-\(Date().timeIntervalSince1970).wav")
-        chunkFileURL = url
-
-        guard let cw = try? AVAssetWriter(outputURL: url, fileType: .wav) else { return }
-
-        let settings: [String: Any] = [
-            AVFormatIDKey: kAudioFormatLinearPCM,
-            AVSampleRateKey: 16000.0,
-            AVNumberOfChannelsKey: 1,
-            AVLinearPCMBitDepthKey: 16,
-            AVLinearPCMIsFloatKey: false,
-            AVLinearPCMIsBigEndianKey: false,
-            AVLinearPCMIsNonInterleaved: false,
-        ]
-        let ci = AVAssetWriterInput(mediaType: .audio, outputSettings: settings)
-        ci.expectsMediaDataInRealTime = true
-
-        if cw.canAdd(ci) { cw.add(ci) }
-        cw.startWriting()
-
-        chunkAssetWriter = cw
-        chunkAssetWriterInput = ci
-        chunkIsSessionStarted = false
-    }
-
-    private func rotateChunk(nextStartPTS: CMTime) {
-        isRotatingChunk = true
-
-        guard let oldWriter = chunkAssetWriter,
-            let oldInput = chunkAssetWriterInput,
-            let finishedURL = chunkFileURL
-        else {
-            isRotatingChunk = false
-            return
-        }
-
-        // Detach before finishing so new samples go to the fresh writer
-        chunkAssetWriter = nil
-        chunkAssetWriterInput = nil
-        chunkIsSessionStarted = false
-        chunkStartTime = nil
-        chunkFileURL = nil
-
-        // Spin up the next chunk immediately so no audio is lost
-        startNewChunkWriter(startingAt: nextStartPTS)
-        isRotatingChunk = false
-
-        // Finish the old writer asynchronously
-        let previewID = previewSession
-        oldInput.markAsFinished()
-        oldWriter.finishWriting { [weak self] in
-            guard let self = self else { return }
-            if self.shouldDiscardCurrentRecordingOutput {
-                try? FileManager.default.removeItem(at: finishedURL)
-            } else {
-                print("🔪 Chunk saved: \(finishedURL.lastPathComponent)")
-                self.chunkPublisher.send(PreviewChunk(url: finishedURL, sessionID: previewID))
             }
         }
     }

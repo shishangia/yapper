@@ -10,7 +10,6 @@ class TranscriptionManager {
     private(set) var activeKind: TranscriptionEngineKind = .whisper
     private(set) var warmingVariant: String?
     private(set) var warmupError: String?
-    private(set) var warmupStartedAt: Date?
     private var warmupID = UUID()
     private var warmupTask: Task<Void, Never>?
     private let selectedVariant: @MainActor () -> String
@@ -78,14 +77,12 @@ class TranscriptionManager {
         warmupID = id
         warmupError = nil
         warmingVariant = nil
-        warmupStartedAt = nil
         warmupTask = nil
         guard modelReady(variant) else { return nil }
         warmingVariant = variant
-        warmupStartedAt = Date()
         let task = Task {
             defer {
-                if warmupID == id { warmingVariant = nil; warmupTask = nil; warmupStartedAt = nil }
+                if warmupID == id { warmingVariant = nil; warmupTask = nil }
                 scheduleIdleUnload()
             }
             do {
@@ -117,18 +114,6 @@ class TranscriptionManager {
     func loadModel(variant: String) async throws {
         defer { scheduleIdleUnload() }
         try await gate.run { try await prepare(variant: variant) }
-    }
-
-    func preview(audioFile: URL, variant: String, language: String, isCurrent: () -> Bool) async throws -> String {
-        defer { scheduleIdleUnload() }
-        return try await gate.run {
-            guard isCurrent() else { throw CancellationError() }
-            try await prepare(variant: variant, shouldContinue: isCurrent)
-            guard isCurrent() else { throw CancellationError() }
-            // Whisper can echo its prompt on short or silent chunks, so drafts get no preferred words.
-            activeEngine.setPreferredWords([])
-            return try await activeEngine.transcribe(audioFile: audioFile, language: language)
-        }
     }
 
     func unloadWhileLocked(variant: String) async {
