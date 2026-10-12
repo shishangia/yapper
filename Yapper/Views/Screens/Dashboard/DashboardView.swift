@@ -171,7 +171,10 @@ struct StatsCard: View {
                 }
                 GridRow {
                     StatBlock(value: stats.todayCount.formatted(), label: "Transcriptions today")
-                    StatBlock(value: stats.weekWords.formatted(), label: "Words this week")
+                    // An empty week is already explained by the This week card.
+                    if stats.weekWords > 0 {
+                        StatBlock(value: stats.weekWords.formatted(), label: "Words this week")
+                    }
                 }
             }
         }
@@ -196,18 +199,12 @@ struct ActivityChartCard: View {
                 Text("This week")
                     .font(Typography.headlineLarge)
                     .foregroundStyle(Color.textPrimary)
-                Text(mostActiveDay.map { "Words per day · most on \($0)" } ?? "Words per day")
+                Text(mostActiveDay.map { "Words per day · most on \($0)" } ?? "Nothing dictated this week yet.")
                     .font(Typography.bodySmall)
                     .foregroundStyle(Color.textSecondary)
             }
 
             Spacer(minLength: 0)
-
-            if mostActiveDay == nil {
-                Text("Nothing dictated this week yet.")
-                    .font(Typography.bodySmall)
-                    .foregroundStyle(Color.textMuted)
-            }
 
             HStack(alignment: .bottom, spacing: 12) {
                 let maxWords = max(weeklyData.map(\.words).max() ?? 1, 1)
