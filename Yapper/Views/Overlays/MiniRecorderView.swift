@@ -410,7 +410,8 @@ struct MiniRecorderView: View {
                                 .font(Typography.pillControl)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 5)
-                                .background(Capsule().fill(Color.bgHover))
+                                .background(Capsule().fill(Color.btnSecondaryBg))
+                                .overlay(Capsule().strokeBorder(Color.border, lineWidth: 1))
                                 .contentShape(Capsule())
                         }
                         .buttonStyle(.plain)
