@@ -112,17 +112,10 @@ struct STButtonPrimary: ButtonStyle {
 struct STButtonSecondary: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.stSecondarySurface(isEnabled: isEnabled, isPressed: configuration.isPressed)
-    }
-}
-
-extension View {
-    /// The secondary button surface, also used by menu labels, which cannot take a button style.
-    func stSecondarySurface(isEnabled: Bool = true, isPressed: Bool = false) -> some View {
-        font(Typography.buttonLabel)
+        configuration.label.font(Typography.buttonLabel)
             .foregroundStyle(isEnabled ? Color.textPrimary : Color.textDisabled)
             .padding(.horizontal, 16).padding(.vertical, 9).frame(minHeight: 36)
-            .background(isPressed && isEnabled ? Color.btnSecondaryHover : Color.btnSecondaryBg)
+            .background(configuration.isPressed && isEnabled ? Color.btnSecondaryHover : Color.btnSecondaryBg)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.border, lineWidth: 1))
     }

@@ -292,10 +292,9 @@ struct ConversationTranscriptView: View {
                 Text("Speakers")
                 Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
             }
-            .stSecondarySurface()
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
+        .menuStyle(.button)
+        .buttonStyle(.stSecondary)
         .fixedSize()
         .accessibilityIdentifier("speakersMenu")
     }
