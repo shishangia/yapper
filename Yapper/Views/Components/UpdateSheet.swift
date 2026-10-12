@@ -11,152 +11,132 @@ struct UpdateSheet: View {
     let appName = "Yapper"
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            HStack(alignment: .top, spacing: 16) {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(spacing: 14) {
                 Image(nsImage: NSApplication.shared.applicationIconImage)
                     .resizable()
-                    .frame(width: 80, height: 80)
-                    .cornerRadius(16)
-                    .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 5)
+                    .frame(width: 56, height: 56)
+                    .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("A new version of \(appName) is available!")
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(appName) \(update.version) is available")
                         .font(Typography.headlineLarge)
-                        .foregroundStyle(.primary)
-
-                    Text(
-                        "\(appName) \(update.version) is now available. You currently have \(AppVersion.currentVersion)."
-                    )
-                    .font(Typography.bodyMedium)
-                    .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.textPrimary)
+                    Text("You have \(AppVersion.currentVersion).")
+                        .font(Typography.bodySmall)
+                        .foregroundStyle(Color.textSecondary)
                 }
             }
-            .padding(24)
 
-            // What's New
-            VStack(alignment: .leading, spacing: 16) {
-                Text("What's new in version \(update.version)")
-                    .font(Typography.headlineMedium)
-                    .foregroundStyle(.primary)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("What's new")
+                    .font(Typography.headlineSmall)
+                    .foregroundStyle(Color.textPrimary)
 
-                // Bounded + scrollable so a long changelog can never push the
-                // action buttons off the bottom of the screen.
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(update.releaseNotes, id: \.self) { note in
-                            HStack(alignment: .top, spacing: 8) {
-                                Text("•")
-                                    .font(Typography.bodyMedium)
-                                    .foregroundStyle(.primary)
-                                Text(note)
-                                    .font(Typography.bodyMedium)
-                                    .foregroundStyle(.primary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                // A short changelog takes only its own height; a long one scrolls
+                // so it can never push the buttons off screen.
+                ViewThatFits(in: .vertical) {
+                    releaseNotes
+                    ScrollView { releaseNotes }
                 }
                 .frame(maxHeight: 240)
             }
-            .padding(24)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .cornerRadius(12)
-            .padding(.horizontal, 24)
 
-            // Progress area (shown only while installing)
             if updateService.isInstalling {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text(updateService.installPhase)
                             .font(Typography.labelMedium)
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(Color.textPrimary)
                         Spacer()
                         Text("\(Int(updateService.installProgress * 100))%")
                             .font(Typography.bodySmall)
-                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                            .foregroundStyle(Color.textSecondary)
                     }
 
                     ProgressView(value: updateService.installProgress)
                         .progressViewStyle(.linear)
-                        .frame(maxWidth: .infinity)
+                        .tint(Color.accentPrimary)
 
                     Text(updateService.installStatus)
                         .font(Typography.bodySmall)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 20)
             }
 
-            // Error banner
             if let error = updateService.installError {
-                HStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+                Label {
                     Text(error)
                         .font(Typography.bodySmall)
-                        .foregroundStyle(.primary)
-                    Spacer()
+                        .foregroundStyle(Color.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(Color.accentWarning)
                 }
-                .padding(12)
-                .background(Color.orange.opacity(0.1))
-                .cornerRadius(8)
-                .padding(.horizontal, 24)
-                .padding(.top, 12)
             }
 
-            // Auto-update checkbox (hidden while installing)
             if !updateService.isInstalling {
-                HStack(spacing: 8) {
-                    Toggle(isOn: $autoUpdate) {
-                        Text("Check for updates automatically (ask before installing)")
-                            .font(Typography.bodySmall)
-                            .foregroundStyle(.secondary)
-                    }
-                    .toggleStyle(.checkbox)
+                Toggle(isOn: $autoUpdate) {
+                    Text("Check for updates automatically (ask before installing)")
+                        .font(Typography.bodySmall)
+                        .foregroundStyle(Color.textSecondary)
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 20)
+                .toggleStyle(.checkbox)
             }
 
-            // Action buttons
             HStack(spacing: 12) {
                 if updateService.isInstalling {
-                    // Show only a disabled cancel-style placeholder while work is in progress
                     Text("Update in progress…")
                         .font(Typography.bodySmall)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity)
+                        .foregroundStyle(Color.textSecondary)
                 } else {
                     Button("Skip this version") {
                         updateService.skipVersion(update.version)
                         if let close { close() } else { dismiss() }
                     }
-                    .buttonStyle(.stSecondary)
+                    .buttonStyle(.stGhost)
+
+                    Spacer()
 
                     Button("Remind me later") {
                         updateService.markReminderShown()
                         if let close { close() } else { dismiss() }
                     }
                     .buttonStyle(.stSecondary)
+                    .keyboardShortcut(.cancelAction)
 
                     Button("Download and install") {
                         updateService.installUpdate(url: update.downloadURL)
                     }
                     .buttonStyle(.stPrimary)
+                    .keyboardShortcut(.defaultAction)
                     .disabled(updateService.isInstalling)
                 }
             }
-            .padding(24)
         }
-        .frame(width: 600)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .padding(24)
+        .frame(width: 520, alignment: .leading)
+        .background(Color.bgApp)
         // Allow the sheet to grow for the progress area
         .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var releaseNotes: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(update.releaseNotes, id: \.self) { note in
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("•")
+                    Text(note)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .font(Typography.bodyMedium)
+                .foregroundStyle(Color.textPrimary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -164,5 +144,4 @@ struct UpdateSheet: View {
 
 #Preview {
     UpdateSheet(update: AppVersion.mockUpdate)
-        .frame(width: 600)
 }
