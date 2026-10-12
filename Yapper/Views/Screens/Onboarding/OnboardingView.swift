@@ -68,7 +68,7 @@ struct WelcomePage: View {
                 Text("Speak in any app and Yapper types it for you, right on this Mac.")
                     .font(Typography.bodyLarge)
                     .foregroundStyle(Color.textSecondary)
-                    .frame(maxWidth: 380)
+                    .frame(maxWidth: 480)
             }
             .multilineTextAlignment(.center)
             .padding(.top, 32)
@@ -331,7 +331,7 @@ struct GlobeKeyOptimizationPage: View {
                 .font(Typography.bodyLarge)
                 .foregroundStyle(Color.textSecondary)
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: 420)
+                .frame(maxWidth: 520)
                 .lineSpacing(4)
             }
 
