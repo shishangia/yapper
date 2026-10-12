@@ -66,11 +66,11 @@ struct DictionaryView: View {
         VStack(alignment: .leading, spacing: 12) {
             cardHeader(title: "Preferred words", help: "Names and terms Yapper should spell correctly.")
 
-            ThemedTextEditor(text: $preferredWords)
+            ThemedTextEditor(text: $preferredWords, placeholder: "One name or term per line")
                 .frame(minHeight: 110, maxHeight: 160)
                 .accessibilityLabel("Preferred words, one per line")
                 .accessibilityIdentifier("preferredWords")
-            Text("One per line, up to 50.")
+            Text("Up to 50 names or terms.")
                 .font(Typography.caption)
                 .foregroundStyle(Color.textMuted)
 
@@ -175,7 +175,6 @@ private struct DictionaryRuleCard: View {
     let onToggle: (Bool) -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
-    @State private var isHovered = false
 
     private var replacementDisplay: String {
         entry.replacement.isEmpty ? "(deleted)" : entry.replacement
@@ -212,15 +211,20 @@ private struct DictionaryRuleCard: View {
             }
             .opacity(entry.isEnabled ? 1 : 0.45)
 
-            // Actions (revealed on hover)
-            HStack(spacing: 4) {
-                if isHovered {
-                    IconButton(systemName: "pencil", action: onEdit)
-                    IconButton(systemName: "trash", action: onDelete)
+            HStack(spacing: 0) {
+                Button(action: onEdit) {
+                    Image(systemName: "pencil").frame(width: 16, height: 18)
                 }
+                .buttonStyle(.stGhost)
+                .help("Edit snippet")
+                .accessibilityLabel("Edit \(entry.trimmedTrigger)")
+                Button(action: onDelete) {
+                    Image(systemName: "trash").frame(width: 16, height: 18)
+                }
+                .buttonStyle(.stGhost)
+                .help("Delete snippet")
+                .accessibilityLabel("Delete \(entry.trimmedTrigger)")
             }
-            .frame(width: isHovered ? 56 : 0, alignment: .trailing)
-            .clipped()
 
             Toggle("", isOn: Binding(get: { entry.isEnabled }, set: onToggle))
                 .labelsHidden()
@@ -230,9 +234,6 @@ private struct DictionaryRuleCard: View {
         .padding(.vertical, 12)
         .contentShape(Rectangle())
         .onTapGesture(perform: onEdit)
-        .onHover { hovering in
-            withAnimation(.easeOut(duration: 0.12)) { isHovered = hovering }
-        }
     }
 }
 
@@ -246,25 +247,6 @@ private struct RuleChip: View {
             .padding(.vertical, 3)
             .background(Color.bgHover)
             .clipShape(Capsule())
-    }
-}
-
-private struct IconButton: View {
-    let systemName: String
-    let action: () -> Void
-    @State private var isHovered = false
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 12))
-                .foregroundStyle(isHovered ? Color.textPrimary : Color.textMuted)
-                .frame(width: 24, height: 24)
-                .background(isHovered ? Color.bgHover : Color.clear)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
     }
 }
 
@@ -314,7 +296,7 @@ private struct DictionaryEntryEditor: View {
                     subtitle: "The text to paste. Leave empty to remove the phrase."
                 ) {
                     TextField(
-                        "", text: $replacement, prompt: Text("john.doe@example.com"),
+                        "", text: $replacement, prompt: Text("Your email address"),
                         axis: .vertical
                     )
                     .textFieldStyle(.plain)
@@ -342,22 +324,12 @@ private struct DictionaryEntryEditor: View {
                 Spacer()
 
                 Button("Cancel") { dismiss() }
-                    .buttonStyle(.plain)
-                    .font(Typography.labelMedium)
-                    .foregroundStyle(Color.textSecondary)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.bgHover)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .buttonStyle(.stSecondary)
+                    .keyboardShortcut(.cancelAction)
 
                 Button("Save") { save() }
-                    .buttonStyle(.plain)
-                    .font(Typography.labelMedium)
-                    .foregroundStyle(Color.btnPrimaryFg)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 8)
-                    .background(isValid ? Color.btnPrimaryBg : Color.bgHover)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .buttonStyle(.stPrimary)
+                    .keyboardShortcut(.defaultAction)
                     .disabled(!isValid)
             }
         }
