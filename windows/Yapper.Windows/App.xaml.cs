@@ -25,9 +25,8 @@ public partial class App : System.Windows.Application
             window.Show();
             if (Environment.GetEnvironmentVariable("YAPPER_TEST_ROOT") is not null && Environment.GetEnvironmentVariable("YAPPER_RECORDER_TEST") is { } phase)
             {
-                var preview = new RecorderWindow();
-                if (phase == "recording") preview.SetPreview("A local live draft appears here as you speak.");
-                preview.Present(phase == "recording");
+                var recorder = new RecorderWindow();
+                recorder.Present(phase == "recording");
             }
         }
         catch (Exception error)

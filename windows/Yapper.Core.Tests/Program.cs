@@ -182,6 +182,7 @@ var tests = new (string Name, Action Run)[]
     }),
     ("corrupt library is not overwritten", () =>
     {
+        WithLibrary(root => { File.WriteAllText(Path.Combine(root, "library.json"), "{\"Preferences\":{\"LivePreview\":true,\"Language\":\"auto\"}}"); Equal("auto", new LibraryStore(root).Data.Preferences.Language); });
         WithLibrary(root => { var path = Path.Combine(root, "library.json"); File.WriteAllText(path, "broken"); Throws(() => new LibraryStore(root)); Equal("broken", File.ReadAllText(path)); });
     })
 };

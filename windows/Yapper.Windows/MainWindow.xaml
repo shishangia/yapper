@@ -103,9 +103,7 @@
               <ComboBox x:Name="ModelIdleMinutes" SelectionChanged="ChangePreferences" AutomationProperties.AutomationId="modelIdleMinutes" AutomationProperties.Name="Unload model after idle time">
                 <ComboBoxItem Content="Never" Tag="0"/><ComboBoxItem Content="2 minutes" Tag="2"/><ComboBoxItem Content="5 minutes" Tag="5"/><ComboBoxItem Content="10 minutes" Tag="10"/><ComboBoxItem Content="15 minutes" Tag="15"/>
               </ComboBox>
-              <TextBlock Text="Releases idle model memory. Your next recording reloads it; model files stay on disk." Style="{StaticResource Caption}" Margin="0,0,0,12"/>
-              <CheckBox x:Name="LivePreview" AutomationProperties.AutomationId="liveDictationPreview" Content="Show live draft text while recording" Checked="ChangePreferences" Unchecked="ChangePreferences"/>
-              <TextBlock Text="Drafts update every few seconds and may change. The complete recording produces the saved transcript." Style="{StaticResource Caption}"/>
+              <TextBlock Text="Releases idle model memory. Your next recording reloads it; model files stay on disk." Style="{StaticResource Caption}"/>
             </StackPanel>
           </Border>
           <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="Transcript cleanup" Style="{StaticResource SectionTitle}"/><CheckBox x:Name="AutoEdit" Content="Remove safe fillers, capitalize sentences, and format explicit paragraph, bullet, numbered-list, and scratch-that commands" Checked="ChangePreferences" Unchecked="ChangePreferences"/><TextBlock Text="Cleanup runs locally. Conversation transcripts are never changed by dictation cleanup or dictionary rules." Style="{StaticResource Caption}"/></StackPanel></Border>

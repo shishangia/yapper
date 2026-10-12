@@ -14,11 +14,10 @@ public sealed class AudioService : IDisposable
     public bool IsPlaying => player?.PlaybackState == PlaybackState.Playing;
     public event Action<Exception>? RecordingFailed;
     public event Action<float>? LevelChanged;
-    public event Action<float[], Guid>? PreviewChunk;
     private readonly object writerLock = new();
     public static string[] Inputs => Enumerable.Range(0, WaveIn.DeviceCount).Select(i => WaveIn.GetCapabilities(i).ProductName).ToArray();
 
-    public void Start(string path, int device, bool preview = false, Guid recordingId = default)
+    public void Start(string path, int device)
     {
         if (IsRecording) throw new InvalidOperationException("Recording is already active.");
         if (WaveIn.DeviceCount == 0) throw new InvalidOperationException("No microphone was found. Check Windows microphone privacy settings.");
@@ -27,7 +26,6 @@ public sealed class AudioService : IDisposable
         {
             writer = new WaveFileWriter(path, capture.WaveFormat);
             stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
-            var previewSamples = new List<float>(64000);
             capture.DataAvailable += (_, e) =>
             {
                 try
@@ -38,11 +36,6 @@ public sealed class AudioService : IDisposable
                     {
                         var sample = BitConverter.ToInt16(e.Buffer, index) / 32768f;
                         peak = Math.Max(peak, Math.Abs(sample));
-                        if (preview)
-                        {
-                            previewSamples.Add(sample);
-                            if (previewSamples.Count == 64000) { PreviewChunk?.Invoke(previewSamples.ToArray(), recordingId); previewSamples.Clear(); }
-                        }
                     }
                     LevelChanged?.Invoke(peak);
                 }

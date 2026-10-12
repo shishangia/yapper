@@ -20,7 +20,7 @@ public sealed record DictionaryRule(string Trigger, string Replacement, bool Ena
 public sealed record Preferences(string SelectedModel = "whisper-turbo", string Language = "hinglish", bool ToggleRecording = true,
     string Hotkey = "Control+Alt+Space", bool AutoEdit = true, string Theme = "System",
     bool AutoCheckUpdates = true, DateTimeOffset? LastUpdateCheck = null, bool IncludeTimestamps = false,
-    int ModelIdleMinutes = 5, bool LivePreview = true, string PreferredWords = "");
+    int ModelIdleMinutes = 5, string PreferredWords = "");
 public sealed record LibraryData
 {
     public int Version { get; init; } = 1;
