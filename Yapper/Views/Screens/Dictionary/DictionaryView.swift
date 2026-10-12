@@ -23,7 +23,7 @@ struct DictionaryView: View {
                 preferredWordsCard
                 snippetsCard
             }
-            .padding(24)
+            .padding(PageLayout.padding)
         }
         .onAppear(perform: loadRecentlyLearned)
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification).receive(on: RunLoop.main)) { _ in

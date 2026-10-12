@@ -121,8 +121,8 @@ struct TranscribeAudioView: View {
                 }
             }
             .frame(maxWidth: 980, alignment: .leading)
-            .frame(maxWidth: .infinity)
-            .padding(28)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(PageLayout.padding)
         }
         .foregroundStyle(Color.textPrimary)
         .fileImporter(isPresented: $showImporter, allowedContentTypes: [.audio, .movie]) { result in

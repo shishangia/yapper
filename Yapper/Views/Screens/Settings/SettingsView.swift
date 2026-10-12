@@ -25,8 +25,8 @@ struct SettingsView: View {
                     Spacer()
                 }
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 24)
+            .padding(.horizontal, PageLayout.padding)
+            .padding(.top, PageLayout.padding)
             .padding(.bottom, 16)
 
             // Tab content
@@ -331,7 +331,7 @@ struct GeneralSettingsTab: View {
                 }
 
             }
-            .padding(24)
+            .padding(PageLayout.padding)
         }
     }
 
@@ -422,7 +422,7 @@ struct AudioSettingsTab: View {
                     .padding(.top, 8)
                 }
             }
-            .padding(24)
+            .padding(PageLayout.padding)
         }
         .onAppear {
             audioRecorder.fetchAvailableDevices()
@@ -472,7 +472,7 @@ struct PermissionsSettingsTab: View {
                     }
                 }
             }
-            .padding(24)
+            .padding(PageLayout.padding)
         }
         .onAppear {
             checkPermissions()

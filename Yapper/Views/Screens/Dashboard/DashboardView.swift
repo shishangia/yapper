@@ -66,7 +66,7 @@ struct DashboardView: View {
 
                 recentTranscriptions
             }
-            .padding(24)
+            .padding(PageLayout.padding)
         }
         .onAppear { transcription.warmSelectedModel() }
         .onChange(of: selectedModel) { transcription.warmSelectedModel() }

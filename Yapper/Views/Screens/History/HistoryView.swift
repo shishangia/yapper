@@ -49,8 +49,8 @@ struct HistoryView: View {
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 20)
+                .padding(.horizontal, PageLayout.padding)
+                .padding(.top, PageLayout.padding)
             
                 
                 if historyService.items.isEmpty {
@@ -105,8 +105,8 @@ struct HistoryView: View {
                             )
                         }
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 24)
+                    .padding(.horizontal, PageLayout.padding)
+                    .padding(.bottom, PageLayout.padding)
                 }
             }
         }
