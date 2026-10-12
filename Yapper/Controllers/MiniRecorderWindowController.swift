@@ -207,7 +207,7 @@ class MiniRecorderWindowController: NSObject {
         // Fixed window, big enough for the largest phase. The pill morphs purely in
         // SwiftUI, centered inside. A window that never resizes means the animation
         // is smooth with no boundary clipping.
-        let fixedSize = NSSize(width: 520, height: 164)
+        let fixedSize = NSSize(width: 520, height: 84)
         let p = NSPanel(
             contentRect: NSRect(origin: .zero, size: fixedSize),
             styleMask: [.nonactivatingPanel, .fullSizeContentView, .borderless],

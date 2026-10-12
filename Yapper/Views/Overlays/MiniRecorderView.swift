@@ -287,7 +287,7 @@ struct MiniRecorderView: View {
         displayPhase == .idle ? 24 : 44
     }
 
-    private var pillCornerRadius: CGFloat { min(24, pillHeight / 2) }
+    private var pillCornerRadius: CGFloat { pillHeight / 2 }
 
     // MARK: - Phase content
 
