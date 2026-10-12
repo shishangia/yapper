@@ -74,6 +74,17 @@ enum ModelSelection {
         defaults.set(defaultLanguage, forKey: "transcriptionLanguage")
     }
 
+    /// The one name for each spoken-language choice, shared by Settings,
+    /// Transcribe audio and the recorder.
+    static func languageName(for code: String) -> String {
+        switch code {
+        case "auto": return "Detect automatically"
+        case defaultLanguage: return "Hinglish (Latin script)"
+        case "mixed": return "Hindi, Gujarati and English (experimental)"
+        default: return GeneralSettingsTab.whisperLanguages.first { $0.code == code }?.name ?? code
+        }
+    }
+
     static func selectedVariant(
         _ defaults: UserDefaults = .standard, language: String? = nil
     ) -> String {

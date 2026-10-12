@@ -35,13 +35,9 @@ struct TranscribeAudioView: View {
                         GridRow {
                             Text("Language").foregroundStyle(Color.textSecondary)
                             Picker("Spoken language", selection: $session.language) {
-                                Text("Detect automatically").tag("auto")
-                                Text("Hinglish · Latin script").tag("hinglish")
-                                Text("English").tag("en")
-                                Text("Hindi").tag("hi")
-                                Text("Gujarati").tag("gu")
-                                Text("Chinese").tag("zh")
-                                Text("Hindi, Gujarati & English (experimental)").tag("mixed")
+                                ForEach(["auto", "hinglish", "en", "hi", "gu", "zh", "mixed"], id: \.self) {
+                                    Text(ModelSelection.languageName(for: $0)).tag($0)
+                                }
                             }
                             .labelsHidden().accessibilityIdentifier("conversationLanguage")
                             .onChange(of: session.language) { session.selectLanguage(session.language) }

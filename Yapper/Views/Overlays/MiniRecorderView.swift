@@ -53,16 +53,16 @@ struct MiniRecorderView: View {
 
     private var currentLanguageLabel: String {
         if transcriptionLanguage == "auto" { return "Auto" }
-        return spokenLanguageDisplayName(for: transcriptionLanguage)
+        return ModelSelection.languageName(for: transcriptionLanguage)
     }
 
     private var spokenLanguageHelpText: String {
         if transcriptionLanguage == "auto" {
-            return "Spoken language hint: Auto-detect. Yapper will try to detect the language you are speaking."
+            return "Yapper detects the spoken language automatically."
         }
 
         return
-            "Spoken language hint: \(spokenLanguageDisplayName(for: transcriptionLanguage)). If this does not match the language you actually speak, the result may be inaccurate or come back in the wrong language."
+            "Spoken language hint: \(ModelSelection.languageName(for: transcriptionLanguage)). If this does not match the language you actually speak, the result may be inaccurate or come back in the wrong language."
     }
 
     private var currentInputDeviceName: String {
@@ -136,13 +136,13 @@ struct MiniRecorderView: View {
 
     private var languageControl: some View {
         Menu {
-            Button("Hinglish · Latin script") { setLanguage("hinglish") }
-            Button("Auto-detect") { setLanguage("auto") }
+            Button(ModelSelection.languageName(for: "hinglish")) { setLanguage("hinglish") }
+            Button(ModelSelection.languageName(for: "auto")) { setLanguage("auto") }
             if !quickLanguageCodes.isEmpty {
                 Divider()
                 ForEach(quickLanguageCodes, id: \.self) { code in
                     if code == "hinglish" {
-                        Button("Hinglish · Latin script") { setLanguage(code) }
+                        Button(ModelSelection.languageName(for: code)) { setLanguage(code) }
                     } else if let lang = GeneralSettingsTab.whisperLanguages.first(where: { $0.code == code }) {
                         Button(lang.name) { setLanguage(code) }
                     }
@@ -711,12 +711,6 @@ struct MiniRecorderView: View {
         } catch {
             return 0
         }
-    }
-
-    private func spokenLanguageDisplayName(for code: String) -> String {
-        if code == "hinglish" { return "Hinglish (Latin script)" }
-        if code == "auto" { return "Auto-detect" }
-        return GeneralSettingsTab.whisperLanguages.first(where: { $0.code == code })?.name ?? code
     }
 }
 

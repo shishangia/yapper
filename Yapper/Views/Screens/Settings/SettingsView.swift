@@ -238,8 +238,8 @@ struct GeneralSettingsTab: View {
                         Spacer()
                         // Recent languages sit above the full list; each tag appears once.
                         Picker("Speech language", selection: $transcriptionLanguage) {
-                            Text(displayName(for: "hinglish")).tag("hinglish")
-                            Text(displayName(for: "auto")).tag("auto")
+                            Text(ModelSelection.languageName(for: "hinglish")).tag("hinglish")
+                            Text(ModelSelection.languageName(for: "auto")).tag("auto")
                             if !recentLanguages.isEmpty {
                                 Divider()
                                 ForEach(recentLanguages, id: \.code) { Text($0.name).tag($0.code) }
@@ -260,7 +260,7 @@ struct GeneralSettingsTab: View {
                         .foregroundStyle(Color.textMuted)
                         .padding(.top, 4)
 
-                    Text("If this does not match the language you actually speak, the result can be inaccurate or even come back in the wrong language. Auto-detect is the safest default.")
+                    Text("If this does not match the language you actually speak, the result can be inaccurate or even come back in the wrong language. When unsure, choose Detect automatically.")
                         .font(Typography.captionSmall)
                         .foregroundStyle(Color.textMuted)
                         .padding(.top, 4)
@@ -333,12 +333,6 @@ struct GeneralSettingsTab: View {
             }
             .padding(24)
         }
-    }
-
-    private func displayName(for code: String) -> String {
-        if code == "hinglish" { return "Hinglish (Latin script)" }
-        if code == "auto" { return "Auto-detect" }
-        return Self.whisperLanguages.first(where: { $0.code == code })?.name ?? code
     }
 
     // All languages supported by Whisper, sorted alphabetically
