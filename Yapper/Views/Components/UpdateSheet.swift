@@ -97,7 +97,8 @@ struct UpdateSheet: View {
                         updateService.skipVersion(update.version)
                         if let close { close() } else { dismiss() }
                     }
-                    .buttonStyle(.stGhost)
+                    .buttonStyle(.stSecondary)
+                    .fixedSize()
 
                     Spacer()
 
@@ -107,18 +108,20 @@ struct UpdateSheet: View {
                     }
                     .buttonStyle(.stSecondary)
                     .keyboardShortcut(.cancelAction)
+                    .fixedSize()
 
                     Button("Download and install") {
                         updateService.installUpdate(url: update.downloadURL)
                     }
                     .buttonStyle(.stPrimary)
                     .keyboardShortcut(.defaultAction)
+                    .fixedSize()
                     .disabled(updateService.isInstalling)
                 }
             }
         }
         .padding(24)
-        .frame(width: 520, alignment: .leading)
+        .frame(width: 560, alignment: .leading)
         .background(Color.bgApp)
         // Allow the sheet to grow for the progress area
         .fixedSize(horizontal: false, vertical: true)
