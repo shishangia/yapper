@@ -121,9 +121,7 @@ struct GeneralSettingsTab: View {
             VStack(spacing: 16) {
                 // Appearance
                 SettingsSection {
-                    SettingsSectionHeader(
-                        icon: "paintpalette", title: "Appearance",
-                        subtitle: "Choose your preferred theme")
+                    SettingsSectionHeader(icon: "paintpalette", title: "Appearance")
 
                     HStack(spacing: 20) {
                         ForEach(AppTheme.allCases) { theme in
@@ -138,9 +136,7 @@ struct GeneralSettingsTab: View {
 
                 // Shortcuts
                 SettingsSection {
-                    SettingsSectionHeader(
-                        icon: "command", title: "Shortcuts", subtitle: "Configure recording hotkeys"
-                    )
+                    SettingsSectionHeader(icon: "command", title: "Shortcuts")
 
                     VStack(spacing: 16) {
                         HStack {
@@ -185,11 +181,9 @@ struct GeneralSettingsTab: View {
                     }
                 }
 
-                // General Behavior
+                // Menu bar and recorder
                 SettingsSection {
-                    SettingsSectionHeader(
-                        icon: "macwindow", title: "General", subtitle: "App behavior settings"
-                    )
+                    SettingsSectionHeader(icon: "menubar.rectangle", title: "Menu bar and recorder")
 
                     VStack(spacing: 16) {
                         HStack {
@@ -306,7 +300,7 @@ struct GeneralSettingsTab: View {
                                 }
                                 Text(
                                     updateService.isCheckingForUpdates
-                                        ? "Checking..." : "Check for Updates"
+                                        ? "Checking…" : "Check for updates"
                                 )
                                 .font(Typography.labelMedium)
                             }
@@ -322,7 +316,7 @@ struct GeneralSettingsTab: View {
                             Text(updateService.checkStatus).font(Typography.bodySmall).foregroundStyle(Color.textSecondary)
                         }
                         if let update = updateService.availableUpdate {
-                            Button("Download and Install \(update.version)") { updateService.installUpdate(url: update.downloadURL) }
+                            Button("Download and install \(update.version)") { updateService.installUpdate(url: update.downloadURL) }
                                 .buttonStyle(.stSecondary)
                                 .disabled(updateService.isInstalling)
                         }
@@ -386,8 +380,7 @@ struct AudioSettingsTab: View {
         ScrollView {
             VStack(spacing: 16) {
                 SettingsSection {
-                    SettingsSectionHeader(
-                        icon: "mic", title: "Input device", subtitle: "Select your microphone")
+                    SettingsSectionHeader(icon: "mic", title: "Input device")
 
                     VStack(spacing: 12) {
                         if audioRecorder.availableDevices.isEmpty {
@@ -454,9 +447,7 @@ struct PermissionsSettingsTab: View {
         ScrollView {
             VStack(spacing: 16) {
                 SettingsSection {
-                    SettingsSectionHeader(
-                        icon: "shield", title: "App permissions",
-                        subtitle: "Required for full functionality")
+                    SettingsSectionHeader(icon: "shield", title: "App permissions")
 
                     VStack(spacing: 10) {
                         SettingsPermissionItem(
@@ -522,7 +513,7 @@ struct PermissionsSettingsTab: View {
 struct SettingsSectionHeader: View {
     let icon: String
     let title: String
-    let subtitle: String
+    var subtitle: String? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -534,9 +525,11 @@ struct SettingsSectionHeader: View {
                 Text(title)
                     .font(Typography.labelLarge)
                     .foregroundStyle(Color.textPrimary)
-                Text(subtitle)
-                    .font(Typography.captionSmall)
-                    .foregroundStyle(Color.textMuted)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(Typography.captionSmall)
+                        .foregroundStyle(Color.textMuted)
+                }
             }
 
             Spacer()

@@ -109,27 +109,6 @@ struct CleanupSettings: View {
                         .padding(.top, 6)
                     }
                 }
-
-                Divider()
-
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "character.book.closed")
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color.textMuted)
-                        .padding(.top, 2)
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Custom replacements & snippets")
-                            .font(Typography.bodyMedium)
-                            .foregroundStyle(Color.textPrimary)
-                        Text("Word replacements and spoken snippets (say “my email” → your address) now live in the Dictionary tab in the sidebar. They apply on every model, always on.")
-                            .font(Typography.caption)
-                            .foregroundStyle(Color.textMuted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    Spacer(minLength: 0)
-                }
             }
         }
     }
