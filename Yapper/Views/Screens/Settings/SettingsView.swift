@@ -370,6 +370,10 @@ struct GeneralSettingsTab: View {
 struct AudioSettingsTab: View {
     @StateObject private var audioRecorder = AudioRecordingService.shared
 
+    private var currentDeviceName: String? {
+        audioRecorder.availableDevices.first { $0.uniqueID == audioRecorder.selectedDeviceId }?.localizedName
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
@@ -385,9 +389,11 @@ struct AudioSettingsTab: View {
                         } else {
                             // Automatic follows the system input, except that an open MacBook
                             // keeps its built-in mic when AirPods would drop to call quality.
+                            // Only the device in use is marked Active; Automatic names it instead.
                             DeviceRow(
                                 name: "Automatic (recommended)",
-                                isActive: audioRecorder.isAutomaticSelection,
+                                subtitle: audioRecorder.isAutomaticSelection ? currentDeviceName.map { "Using \($0)" } : nil,
+                                isActive: false,
                                 isSelected: audioRecorder.isAutomaticSelection
                             )
                             .onTapGesture { audioRecorder.useAutomaticInput() }

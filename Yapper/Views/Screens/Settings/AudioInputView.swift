@@ -92,6 +92,7 @@ struct AudioInputView: View {
 
 struct DeviceRow: View {
     let name: String
+    var subtitle: String? = nil
     let isActive: Bool
     let isSelected: Bool
     
@@ -101,9 +102,16 @@ struct DeviceRow: View {
                 .foregroundStyle(isSelected ? Color.accentPrimary : Color.textMuted)
                 .font(.title3)
             
-            Text(name)
-                .font(Typography.bodyMedium)
-                .foregroundStyle(Color.textPrimary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name)
+                    .font(Typography.bodyMedium)
+                    .foregroundStyle(Color.textPrimary)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(Typography.caption)
+                        .foregroundStyle(Color.textSecondary)
+                }
+            }
             
             Spacer()
             
