@@ -229,7 +229,7 @@ struct HistoryCard: View {
                     // Content
                     VStack(alignment: .leading, spacing: 8) {
                         // Transcript preview
-                        Text(item.displayText)
+                        Text(item.previewText)
                             .font(Typography.bodyMedium)
                             .foregroundStyle(Color.textPrimary)
                             .lineLimit(2)

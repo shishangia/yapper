@@ -284,7 +284,7 @@ struct RecentTranscriptionRow: View {
             // Main content
             VStack(alignment: .leading, spacing: 8) {
                 // Transcript - multiple lines
-                Text(item.displayText.isEmpty ? "Empty transcription" : item.displayText)
+                Text(item.previewText.isEmpty ? "Empty transcription" : item.previewText)
                     .font(Typography.bodyMedium)
                     .foregroundStyle(Color.textPrimary)
                     .lineLimit(3)

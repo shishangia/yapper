@@ -20,6 +20,8 @@ struct ConversationTranscript: Codable, Equatable, Sendable {
     var timestampsVisible: Bool? = nil
 
     var plainText: String { segments.map(\.text).joined() }
+    /// One line of spoken words for list rows: no timestamps, labels, or review marks.
+    var previewText: String { plainText.split(whereSeparator: \.isWhitespace).joined(separator: " ") }
     var speakerIDs: [String] {
         (segments.compactMap(\.speakerID) + speakerNames.keys.sorted()).reduce(into: []) { ids, id in
             if !ids.contains(id) { ids.append(id) }

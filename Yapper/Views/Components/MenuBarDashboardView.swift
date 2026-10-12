@@ -96,7 +96,7 @@ private struct MenuBarTranscriptRow: View {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "text.bubble").foregroundStyle(Color.accentPrimary)
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(item.displayText.isEmpty ? "Empty transcription" : item.displayText)
+                    Text(item.previewText.isEmpty ? "Empty transcription" : item.previewText)
                         .font(Typography.bodySmall).lineLimit(2)
                         .multilineTextAlignment(.leading)
                     HStack {

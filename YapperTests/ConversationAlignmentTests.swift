@@ -123,6 +123,19 @@ final class ConversationAlignmentTests: XCTestCase {
         XCTAssertEqual(transcript.plainText, segments.map(\.text).joined())
     }
 
+    func testPreviewTextIsOneLineWithoutTimestampsOrReviewMarks() {
+        let transcript = ConversationTranscript(segments: [
+            .init(id: 0, start: 0, end: 1, text: " Hello\n\n", speakerID: "1"),
+            .init(id: 1, start: 9, end: 10, text: " there", speakerID: nil),
+        ], speakerNames: ["1": "Alice"], speakerDetectionRequested: true)
+        XCTAssertTrue(transcript.formattedText.contains("[00:"))
+        XCTAssertTrue(transcript.formattedText.contains("†"))
+        XCTAssertEqual(transcript.previewText, "Hello there")
+        let item = HistoryItem(id: UUID(), date: Date(), transcript: "First line\n\n  second", duration: 1,
+            audioFileURL: nil, modelUsed: nil, transcriptionTime: nil)
+        XCTAssertEqual(item.previewText, "First line second")
+    }
+
     func testSpeechChunksPreserveRegionsWithinAudioBounds() {
         let ranges = ConversationAlignment.speechChunks([0..<10, 12..<20, 18..<35, 40..<100], sampleCount: 55, maxSamples: 20)
         XCTAssertEqual(ranges, [0..<20, 20..<35, 40..<55])
