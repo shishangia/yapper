@@ -119,18 +119,6 @@ class TranscriptionManager {
         try await gate.run { try await prepare(variant: variant) }
     }
 
-    func preview(audioFile: URL, variant: String, language: String, isCurrent: () -> Bool) async throws -> String {
-        defer { scheduleIdleUnload() }
-        return try await gate.run {
-            guard isCurrent() else { throw CancellationError() }
-            try await prepare(variant: variant, shouldContinue: isCurrent)
-            guard isCurrent() else { throw CancellationError() }
-            // Whisper can echo its prompt on short or silent chunks, so drafts get no preferred words.
-            activeEngine.setPreferredWords([])
-            return try await activeEngine.transcribe(audioFile: audioFile, language: language)
-        }
-    }
-
     func unloadWhileLocked(variant: String) async {
         if currentModelVariant == variant { await activeEngine.unload() }
     }

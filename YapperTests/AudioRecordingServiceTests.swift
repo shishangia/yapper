@@ -19,7 +19,6 @@ final class AudioRecordingServiceTests: XCTestCase {
         XCTAssertNotNil(service)
         XCTAssertFalse(service.isRecording)
         XCTAssertEqual(service.audioLevel, 0.0)
-        XCTAssertFalse(service.generatesStreamingChunks)
     }
     
     func testAutomaticInputPrefersBuiltInMicOverBluetoothWhenLidIsOpen() {

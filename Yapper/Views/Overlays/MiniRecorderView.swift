@@ -7,8 +7,6 @@ struct MiniRecorderView: View {
     @ObservedObject private var audioRecorder = AudioRecordingService.shared
     private var transcription: TranscriptionManager { TranscriptionManager.shared }
     let job: RecorderJob
-    @State private var preview = LiveDictationPreview()
-    @AppStorage(DictationPreferences.previewKey) private var livePreview = true
     private var isListening: Bool { job.isBusy && job.phase == .recording }
     private var isProcessing: Bool { job.isBusy && job.phase != .recording }
     @State private var statusMessage = "Transcribing..."
@@ -281,23 +279,15 @@ struct MiniRecorderView: View {
         case .warming: return 200
         case .processing: return statusMessage.count > 28 ? 490 : 210  // long notices use the feedback width
         case .feedback: return 490
-        case .recording: return livePreview ? 480 : expanded ? 460 : 250
+        case .recording: return expanded ? 460 : 250
         }
     }
 
     private var pillHeight: CGFloat {
-        displayPhase == .idle ? 24 : displayPhase == .recording && livePreview ? 128 : 44
+        displayPhase == .idle ? 24 : 44
     }
 
     private var pillCornerRadius: CGFloat { min(24, pillHeight / 2) }
-
-    private var draftText: String {
-        #if DEBUG
-        if ProcessInfo.processInfo.environment["YAPPER_RECORDER_PREVIEW"] == "recording",
-           let sample = ProcessInfo.processInfo.environment["YAPPER_PREVIEW_TEXT"] { return sample }
-        #endif
-        return preview.text.isEmpty ? "Listening… Draft text appears as you speak." : preview.text
-    }
 
     // MARK: - Phase content
 
@@ -423,25 +413,7 @@ struct MiniRecorderView: View {
                 .foregroundStyle(Color.textPrimary)
                 .accessibilityIdentifier("pasteFeedback")
             case .recording:
-                VStack(alignment: .leading, spacing: 6) {
-                    recordingContent.frame(height: livePreview ? 28 : 36)
-                    if livePreview {
-                        ScrollViewReader { proxy in
-                            ScrollView(.vertical) {
-                                Text(draftText)
-                                    .font(Typography.bodyMedium).foregroundStyle(Color.textPrimary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .accessibilityIdentifier("liveDraftText")
-                                    .id("draftText")
-                            }
-                            .scrollIndicators(.hidden)
-                            .onAppear { proxy.scrollTo("draftText", anchor: .bottom) }
-                            .onChange(of: draftText) { proxy.scrollTo("draftText", anchor: .bottom) }
-                        }.frame(height: 48).allowsHitTesting(false)
-                        Text("Live draft · final text may change").font(Typography.caption).foregroundStyle(Color.textSecondary)
-                    }
-                }.padding(livePreview ? 12 : 0)
+                recordingContent
             case .idle:
                 idleContent
             }
@@ -458,7 +430,6 @@ struct MiniRecorderView: View {
             y: displayPhase == .idle ? 3 : 5)
         .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.92), value: displayPhase)
         .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.92), value: expanded)
-        .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.92), value: livePreview)
         .onHover { hovering in
             guard displayPhase == .recording else { return }
             expanded = hovering
@@ -479,10 +450,6 @@ struct MiniRecorderView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .preferredColorScheme(appTheme.colorScheme)
-        .onReceive(audioRecorder.chunkPublisher.receive(on: DispatchQueue.main)) { chunk in
-            guard livePreview, isListening, let snapshot = job.snapshot, preview.captureID == chunk.sessionID else { try? FileManager.default.removeItem(at: chunk.url); return }
-            preview.accept(chunk.url, snapshot: snapshot)
-        }
         .onReceive(NotificationCenter.default.publisher(for: .recordingStartRequested)) { _ in
             startRecording()
         }
@@ -511,7 +478,6 @@ struct MiniRecorderView: View {
             }
         }
         .onDisappear {
-            preview.stop()
             if let globalEscapeMonitor = globalEscapeMonitor {
                 NSEvent.removeMonitor(globalEscapeMonitor)
             }
@@ -613,7 +579,6 @@ struct MiniRecorderView: View {
 
     private func cancelRecording() {
         guard let snapshot = job.snapshot else { return }
-        preview.stop()
         let wasRecording = isListening
         job.cancel()
         onCancel?()
@@ -649,8 +614,7 @@ struct MiniRecorderView: View {
             guard job.canCommit(snapshot.id) else { finish(snapshot); return }
             guard authorized else { showError("Allow microphone access in System Settings", for: snapshot); return }
             guard job.transition(snapshot.id, from: .preparing, to: .recording) else { return }
-            let captureID = preview.begin(snapshot.id)
-            audioRecorder.startRecording(previewSession: captureID)
+            audioRecorder.startRecording()
         }
     }
 
@@ -661,15 +625,13 @@ struct MiniRecorderView: View {
             return
         }
         guard job.transition(snapshot.id, from: .recording, to: .switchingInput) else { return }
-        preview.stop()
         statusMessage = "Switching input..."
         Task {
             _ = await audioRecorder.stopRecording(discardOutput: true)
             guard job.canCommit(snapshot.id) else { finish(snapshot); return }
             audioRecorder.selectedDeviceId = deviceId
             guard job.transition(snapshot.id, from: .switchingInput, to: .recording) else { return }
-            let captureID = preview.begin(snapshot.id)
-            audioRecorder.startRecording(previewSession: captureID)
+            audioRecorder.startRecording()
         }
     }
 
@@ -681,7 +643,6 @@ struct MiniRecorderView: View {
             return
         }
         guard job.transition(snapshot.id, from: .recording, to: .stopping) else { return }
-        preview.stop()
         statusMessage = "Finishing recording..."
         Task {
             guard let url = await audioRecorder.stopRecording() else { finish(snapshot); return }
@@ -703,7 +664,6 @@ struct MiniRecorderView: View {
         guard job.snapshot?.id == snapshot.id else { return }
         transcription.endRecording(snapshot.id)
         job.finish(snapshot.id)
-        preview.stop()
         onCancel?()
     }
 
