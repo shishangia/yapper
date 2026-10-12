@@ -302,7 +302,9 @@ struct ConversationTranscriptView: View {
 
     private func readingText(_ block: ConversationReadingBlock, markUncertainty: Bool) -> AttributedString {
         block.segments.reduce(into: AttributedString()) { output, segment in
-            var text = AttributedString(segment.text)
+            // Recognized words carry a leading space; a block starts at its first word.
+            var text = AttributedString(output.characters.isEmpty
+                ? String(segment.text.drop(while: \.isWhitespace)) : segment.text)
             if markUncertainty && segment.speakerID == nil {
                 text.underlineStyle = .single
             }
