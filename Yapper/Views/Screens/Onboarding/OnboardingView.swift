@@ -60,89 +60,30 @@ struct WelcomePage: View {
                 .shadow(color: Color.black.opacity(0.08), radius: 20, x: 0, y: 8)
 
             VStack(spacing: 14) {
-                Text("Welcome to")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Color.textSecondary)
-                    .textCase(.uppercase)
-                    .tracking(2.5)
-
                 Text("Yapper")
                     .font(.system(size: 48, weight: .regular, design: .rounded))
                     .foregroundStyle(Color.textPrimary)
                     .tracking(-0.5)
 
-                HStack(spacing: 0) {
-                    Text("Voice to text, powered by AI.")
-                        .font(.system(size: 16, weight: .regular))
-                        .foregroundStyle(Color.textSecondary)
-
-                    Text(" Private. Fast. Offline.")
-                        .font(.system(size: 16, weight: .regular, design: .rounded))
-                        .italic()
-                        .foregroundStyle(Color.textSecondary)
-                }
+                Text("Speak in any app and Yapper types it for you, right on this Mac.")
+                    .font(Typography.bodyLarge)
+                    .foregroundStyle(Color.textSecondary)
+                    .frame(maxWidth: 380)
             }
             .multilineTextAlignment(.center)
             .padding(.top, 32)
 
-            HStack(spacing: 20) {
-                FeatureCard(
-                    icon: "lock.shield.fill", title: "Private",
-                    description: "Your audio never leaves your device")
-                FeatureCard(
-                    icon: "bolt.fill", title: "Fast", description: "Optimized for Apple Silicon")
-                FeatureCard(
-                    icon: "keyboard.fill", title: "Universal", description: "Works in any app")
-            }
-            .padding(.top, 48)
-
             Spacer()
 
-            GetStartedButton(action: action)
-                .padding(.bottom, 48)
+            Button(action: action) {
+                Text("Get started").frame(minWidth: 128)
+            }
+            .buttonStyle(.stPrimary)
+            .keyboardShortcut(.defaultAction)
+            .padding(.bottom, 48)
         }
         .padding(.horizontal, 60)
         .padding(.vertical, 40)
-    }
-}
-
-struct GetStartedButton: View {
-    let action: () -> Void
-    @State private var isHovered = false
-    @State private var isPressed = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
-                Text("Get started")
-                    .font(.system(size: 15, weight: .medium))
-                Image(systemName: "arrow.right")
-                    .font(.system(size: 12, weight: .medium))
-                    .offset(x: isHovered ? 3 : 0)
-            }
-            .foregroundStyle(Color.bgApp)
-            .frame(width: 160, height: 44)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.textPrimary)
-            )
-            .shadow(
-                color: Color.black.opacity(isHovered ? 0.2 : 0.1), radius: isHovered ? 12 : 6, x: 0,
-                y: isHovered ? 6 : 3
-            )
-            .scaleEffect(isPressed ? 0.97 : 1.0)
-        }
-        .buttonStyle(.plain)
-        .animation(.easeOut(duration: 0.15), value: isHovered)
-        .animation(.easeOut(duration: 0.1), value: isPressed)
-        .onHover { hovering in
-            isHovered = hovering
-        }
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in isPressed = true }
-                .onEnded { _ in isPressed = false }
-        )
     }
 }
 
@@ -157,18 +98,12 @@ struct PermissionsPage: View {
             Spacer()
 
             VStack(spacing: 16) {
-                Text("QUICK SETUP")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.textSecondary)
-                    .textCase(.uppercase)
-                    .tracking(2)
-
                 Text("Permissions")
                     .font(.system(size: 40, weight: .regular, design: .rounded))
                     .foregroundStyle(Color.textPrimary)
 
                 Text("Enable recording and auto-paste, or continue without permissions to import audio files.")
-                    .font(.system(size: 15, weight: .regular))
+                    .font(Typography.bodyLarge)
                     .foregroundStyle(Color.textSecondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 380)
@@ -309,84 +244,6 @@ struct PermissionsPage: View {
     }
 }
 
-struct FeatureCard: View {
-    let icon: String
-    let title: String
-    let description: String
-    @State private var isHovered = false
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Spacer()
-
-            // Icon with subtle background
-            ZStack {
-                Circle()
-                    .fill(Color.textPrimary.opacity(0.05))
-                    .frame(width: 52, height: 52)
-
-                Image(systemName: icon)
-                    .font(.system(size: 22, weight: .medium))
-                    .foregroundStyle(Color.textPrimary)
-            }
-
-            Spacer()
-                .frame(height: 20)
-
-            // Title in serif
-            Text(title)
-                .font(.system(size: 16, weight: .medium, design: .rounded))
-                .foregroundStyle(Color.textPrimary)
-
-            Spacer()
-                .frame(height: 6)
-
-            // Description
-            Text(description)
-                .font(.system(size: 12, weight: .regular))
-                .foregroundStyle(Color.textSecondary)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Spacer()
-        }
-        .frame(width: 160, height: 165)
-        .padding(.horizontal, 16)
-        .background(
-            ZStack {
-                // Base fill - always light for "floating card" effect
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(Color.bgCard)
-
-                // Subtle inner border for depth
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(
-                        LinearGradient(
-                            colors: [
-                                Color.bgCard.opacity(0.8),
-                                Color.textSecondary.opacity(0.03),
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        ),
-                        lineWidth: 1
-                    )
-            }
-        )
-        .shadow(color: Color.black.opacity(0.03), radius: 1, x: 0, y: 1)
-        .shadow(
-            color: Color.black.opacity(isHovered ? 0.12 : 0.06), radius: isHovered ? 20 : 12, x: 0,
-            y: isHovered ? 10 : 6
-        )
-        .scaleEffect(isHovered ? 1.03 : 1.0)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isHovered)
-        .onHover { hovering in
-            isHovered = hovering
-        }
-    }
-}
-
 struct OnboardingPermissionRow: View {
     let icon: String
     let title: String
@@ -400,7 +257,7 @@ struct OnboardingPermissionRow: View {
             // Clean icon
             Image(systemName: isGranted ? "checkmark.circle.fill" : icon)
                 .font(.system(size: 24, weight: .regular))
-                .foregroundStyle(isGranted ? Color.green : Color.textPrimary.opacity(0.7))
+                .foregroundStyle(isGranted ? Color.accentSuccess : Color.textPrimary.opacity(0.7))
                 .frame(width: 40)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -418,20 +275,10 @@ struct OnboardingPermissionRow: View {
             if isGranted {
                 Image(systemName: "checkmark")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.green)
+                    .foregroundStyle(Color.accentSuccess)
             } else {
-                Button(action: action) {
-                    Text("Allow")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(Color.bgApp)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(Color.textPrimary)
-                        )
-                }
-                .buttonStyle(.plain)
+                Button("Allow", action: action)
+                    .buttonStyle(.stSecondary)
             }
         }
         .padding(.horizontal, 20)
@@ -454,42 +301,14 @@ struct OnboardingPermissionRow: View {
 struct ContinueButton: View {
     let isEnabled: Bool
     let action: () -> Void
-    @State private var isHovered = false
-    @State private var isPressed = false
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
-                Text("Continue")
-                    .font(.system(size: 15, weight: .medium))
-                Image(systemName: isEnabled ? "arrow.right" : "lock.fill")
-                    .font(.system(size: isEnabled ? 12 : 10, weight: .medium))
-                    .offset(x: (isHovered && isEnabled) ? 3 : 0)
-            }
-            .foregroundStyle(Color.bgApp)
-            .frame(width: 160, height: 44)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(isEnabled ? Color.textPrimary : Color.textSecondary.opacity(0.3))
-            )
-            .shadow(
-                color: isEnabled ? Color.black.opacity(isHovered ? 0.2 : 0.1) : Color.clear,
-                radius: isHovered ? 12 : 6, x: 0, y: isHovered ? 6 : 3
-            )
-            .scaleEffect(isPressed ? 0.97 : 1.0)
+            Text("Continue").frame(minWidth: 128)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.stPrimary)
+        .keyboardShortcut(.defaultAction)
         .disabled(!isEnabled)
-        .animation(.easeOut(duration: 0.15), value: isHovered)
-        .animation(.easeOut(duration: 0.1), value: isPressed)
-        .onHover { hovering in
-            if isEnabled { isHovered = hovering }
-        }
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in if isEnabled { isPressed = true } }
-                .onEnded { _ in isPressed = false }
-        )
     }
 }
 
@@ -501,43 +320,24 @@ struct GlobeKeyOptimizationPage: View {
             Spacer()
 
             VStack(spacing: 16) {
-                Text("OPTIMIZE WORKFLOW")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.textSecondary)
-                    .textCase(.uppercase)
-                    .tracking(2)
-
                 Text("The Globe key")
                     .font(.system(size: 40, weight: .regular, design: .rounded))
                     .foregroundStyle(Color.textPrimary)
 
-                Text(
-                    "By default, macOS uses the \u{1F310} key to show the Emoji Picker, which interrupts Yapper.\n\nPlease open Keyboard settings and change **\"Press \u{1F310} key to\"** to **\"Do Nothing\"**."
-                )
-                .font(.system(size: 15, weight: .regular))
+                VStack(spacing: 12) {
+                    Text("macOS uses the Globe key to open the emoji picker, which interrupts Yapper.")
+                    Text("Open Keyboard settings and set “Press \(Image(systemName: "globe")) key to” to “Do Nothing”.")
+                }
+                .font(Typography.bodyLarge)
                 .foregroundStyle(Color.textSecondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
                 .lineSpacing(4)
             }
 
-            VStack(spacing: 12) {
-                Button(action: openKeyboardSettings) {
-                    HStack {
-                        Image(systemName: "switch.2")
-                        Text("Open Keyboard settings")
-                    }
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Color.bgApp)
-                    .frame(width: 260, height: 44)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(Color.textPrimary)
-                    )
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.top, 40)
+            Button("Open Keyboard settings", systemImage: "switch.2", action: openKeyboardSettings)
+                .buttonStyle(.stSecondary)
+                .padding(.top, 40)
 
             Spacer()
 
