@@ -228,12 +228,14 @@ struct HistoryCard: View {
                     
                     // Content
                     VStack(alignment: .leading, spacing: 8) {
-                        // Transcript preview
-                        Text(item.previewText)
-                            .font(Typography.bodyMedium)
-                            .foregroundStyle(Color.textPrimary)
-                            .lineLimit(2)
-                            .lineSpacing(4)
+                        // Transcript preview; the expanded card shows the full text below.
+                        if !isExpanded {
+                            Text(item.previewText)
+                                .font(Typography.bodyMedium)
+                                .foregroundStyle(Color.textPrimary)
+                                .lineLimit(2)
+                                .lineSpacing(4)
+                        }
                         
                         // Metadata
                         HStack(spacing: 12) {
