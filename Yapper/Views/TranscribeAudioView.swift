@@ -9,6 +9,7 @@ struct TranscribeAudioView: View {
     @State private var showImporter = false
     @State private var isDropTargeted = false
     @State private var importError: String?
+    @State private var showCopySuccess = false
 
     private var result: HistoryItem? { history.items.first { $0.id == session.resultID } }
 
@@ -110,8 +111,13 @@ struct TranscribeAudioView: View {
                                     .font(Typography.caption).foregroundStyle(Color.textSecondary)
                             }
                             Spacer()
-                            Button("Copy transcript", systemImage: "doc.on.doc") {
+                            Button(showCopySuccess ? "Copied" : "Copy transcript",
+                                   systemImage: showCopySuccess ? "checkmark" : "doc.on.doc") {
                                 ClipboardService.shared.copy(text: result.displayText)
+                                withAnimation { showCopySuccess = true }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                    withAnimation { showCopySuccess = false }
+                                }
                             }
                             .buttonStyle(.stSecondary).accessibilityIdentifier("copyConversation")
                         }

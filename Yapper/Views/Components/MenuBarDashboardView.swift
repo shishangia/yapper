@@ -87,10 +87,15 @@ struct MenuBarDashboardView: View {
 private struct MenuBarTranscriptRow: View {
     let item: HistoryItem
     @State private var hovered = false
+    @State private var showCopySuccess = false
 
     var body: some View {
         Button {
             ClipboardService.shared.copy(text: item.displayText)
+            withAnimation { showCopySuccess = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                withAnimation { showCopySuccess = false }
+            }
         } label: {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "text.bubble").foregroundStyle(Color.accentPrimary)
@@ -101,8 +106,12 @@ private struct MenuBarTranscriptRow: View {
                     HStack {
                         Text(item.date, format: .relative(presentation: .named))
                         Spacer()
-                        Text("\(item.transcript.split(whereSeparator: \.isWhitespace).count) words")
-                        Image(systemName: "doc.on.doc")
+                        if showCopySuccess {
+                            Label("Copied", systemImage: "checkmark").foregroundStyle(Color.accentSuccess)
+                        } else {
+                            Text("\(item.transcript.split(whereSeparator: \.isWhitespace).count) words")
+                            Image(systemName: "doc.on.doc")
+                        }
                     }
                     .font(Typography.captionSmall).foregroundStyle(Color.textSecondary)
                 }
